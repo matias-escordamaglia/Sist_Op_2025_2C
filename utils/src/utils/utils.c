@@ -302,6 +302,29 @@ t_config* iniciar_config(t_log* logger, char* modulo)
 	return nuevo_config;
 }
 
+t_log_level obtener_log_level_config(t_config* config) {
+
+	t_log_level log_level;
+
+	char* log_level_str = config_get_string_value(config, "LOG_LEVEL");
+
+	if (strcmp(log_level_str, "TRACE") == 0) {
+		log_level = LOG_LEVEL_TRACE;
+	} else if (strcmp(log_level_str, "DEBUG") == 0) {
+		log_level = LOG_LEVEL_DEBUG;
+	} else if (strcmp(log_level_str, "INFO") == 0) {
+		log_level = LOG_LEVEL_INFO;
+	} else if (strcmp(log_level_str, "WARNING") == 0) {
+		log_level = LOG_LEVEL_WARNING;
+	} else if (strcmp(log_level_str, "ERROR") == 0) {
+		log_level = LOG_LEVEL_ERROR;
+	} else {
+		log_level = LOG_LEVEL_INFO;  // Por Defecto
+	}
+
+	return log_level;	
+}
+
 // ------------------------------------------------------------------------------------------
 // --------------------------FUNCIONES GLOBALES EXTRAS---------------------------------------
 // ------------------------------------------------------------------------------------------

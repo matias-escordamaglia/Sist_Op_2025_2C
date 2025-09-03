@@ -54,6 +54,12 @@ t_paquete* crear_paquete(void);
 uint32_t handshake(int conexion, uint32_t envio, t_log* logger, char *modulo);
 uint32_t handshake_silencioso(int conexion, uint32_t envio, t_log* logger, char *modulo);
 t_config* iniciar_config(t_log* logger, char* modulo);
+/** 
+* @brief Obtiene un LOG_LEVEL de un archivo de config
+* @param config Archivo de configuración que debe tener el Módulo/Hilo
+* @return t_log_level
+*/
+t_log_level obtener_log_level_config(t_config* config);
 t_list* recibir_paquete(int socket_cliente, t_log* logger);
 
 void enviar_mensaje(char* mensaje, int socket_cliente);
