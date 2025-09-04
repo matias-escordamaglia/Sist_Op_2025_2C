@@ -21,6 +21,9 @@
 // ----------NO ELIMINAR LAS SIGUIENTES COSAS, ESTAN RELACIONADAS CON CONEXIONES-------------
 // ------------------------------------------------------------------------------------------
 
+#define HANDSHAKE_WORKER_MASTER 1
+#define HANDSHAKE_QUERY_MASTER 2
+
 typedef enum
 {
 	MENSAJE,
