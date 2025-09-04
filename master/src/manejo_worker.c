@@ -34,7 +34,7 @@ void* manejar_worker(void* arg) {
                     return NULL;
                 }
         
-                void* buffer = list_get(lista, 0);
+                //void* buffer = list_get(lista, 0);
                 
                 //Realizar cosas en caso que llegue un paquete
 

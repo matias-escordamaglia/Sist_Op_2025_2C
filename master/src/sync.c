@@ -1,8 +1,9 @@
 #include "sync.h"
 
+
 t_master master_state;
 
-void iniciar_master_state(t_log logger, t_config config) {
+void iniciar_master_state(t_log* logger, t_config* config) {
     master_state.logger = logger;
     master_state.config = config;
 }

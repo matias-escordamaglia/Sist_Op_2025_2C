@@ -19,9 +19,8 @@ typedef struct {
     int tipo_cliente;
 } t_conexion_identificada;
 
-t_master master_state;
 
-void iniciar_master_state(t_log logger, t_config config);
+void iniciar_master_state(t_log* logger, t_config* config);
 t_log* get_logger();
 t_config* get_config();
 
