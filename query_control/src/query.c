@@ -38,10 +38,13 @@ int main(int argc, char** argv)
         exit(EXIT_FAILURE);
     }
     
-	handshake(conexion, 1, logger, "QUERY");
+	handshake(conexion, HANDSHAKE_QUERY_MASTER, logger, "QUERY");
 
     //Enviar prioridad y query a master
 
+	/*
+	Posiblemente lo siguiente no deba ser un while, debe revisarse
+	*/
 	while (1) {
 		int cod_op = recibir_operacion(conexion, logger);
 		if (cod_op == -1) {
