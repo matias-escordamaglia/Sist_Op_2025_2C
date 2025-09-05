@@ -31,7 +31,7 @@ int main(int argc, char** argv)
 	ip_master = config_get_string_value(config, "IP_MASTER");
 	puerto_master = config_get_string_value(config, "PUERTO_MASTER");
 
-    conexion_storage = crear_conexion(ip_master, puerto_master, logger);
+    conexion_storage = crear_conexion(ip_storage, puerto_storage, logger);
 
     if (conexion_storage == -1) {
         log_error(logger, "No se pudo establecer conexión con el MASTER. Abortando.");
@@ -40,7 +40,8 @@ int main(int argc, char** argv)
     }
     
 
-    handshake_con_identificador_worker(conexion_storage, 1, id_worker, logger, "WORKER");
+    //handshake_con_identificador_worker(conexion_storage, 1, id_worker, logger, "STORAGE");
+    handshake(conexion_storage, 1, logger, "STORAGE");
 	
 
     //Recién luego de que se conecta con storage se debe conectar con master 
