@@ -1,0 +1,95 @@
+#include "manejo-worker.h"
+
+t_log* logger_worker;
+
+void pasar_logger_a_manejo_worker(t_log* l) {
+    logger_worker = l;
+} 
+
+
+void* manejar_cliente_worker(void* arg) {
+    int server_fd = (*(int*)arg);
+    free(arg);
+
+    while (1) {
+        int cliente_fd = esperar_cliente(server_fd, logger_worker);
+        if (cliente_fd == -1) {
+            log_error(logger_worker, "Error al aceptar cliente worker");
+            continue;
+        }
+
+        pthread_t hilo_worker;
+        int* fd_copia = malloc(sizeof(int));
+        *fd_copia = cliente_fd;
+        pthread_create(&hilo_worker, NULL, atender_conexion_worker, fd_copia);
+        pthread_detach(hilo_worker);
+    }
+
+    return NULL;
+}
+
+void* atender_conexion_worker(void* arg) {
+    int cliente_fd = *((int*)arg);
+    free(arg);
+
+    uint32_t id_worker;
+    uint32_t respuesta;
+
+    // Handshake inicial: debe ser 1
+    int bytes = recv(cliente_fd, &respuesta, sizeof(uint32_t), MSG_WAITALL);
+    if (bytes <= 0 || respuesta != 1) {
+        log_error(logger_worker, "[WORKER] Error en handshake con WORKER. FD: %d", cliente_fd);
+        t_estado_handshake error = HANDSHAKE_FALLO;
+        send(cliente_fd, &error, sizeof(t_estado_handshake), 0);
+        close(cliente_fd);
+        return NULL;
+    }
+
+    t_estado_handshake ok = HANDSHAKE_OK;
+    send(cliente_fd, &ok, sizeof(t_estado_handshake), 0);
+
+
+    if (recv(cliente_fd, &id_worker, sizeof(uint32_t), MSG_WAITALL) <= 0) {
+        log_error(logger_worker, "[WORKER] No se pudo recibir el ID del WORKER (FD %d)", cliente_fd);
+        close(cliente_fd);
+        return NULL;
+    }
+
+    
+
+    // Bucle principal
+    while (1) {
+        int cod_op = recibir_operacion(cliente_fd, logger_worker);
+        if (cod_op == -1) {
+            log_warning(logger_worker, "[WORKER] WORKER %u se desconectó (FD %d)", id_worker, cliente_fd);
+            break;
+        }
+
+        switch (cod_op) {
+            case PAQUETE:
+                log_info(logger_worker, "[WORKER] Se recibe paquete desde WORKER %u", id_worker);
+
+                t_list* lista = recibir_paquete(cliente_fd, logger_worker);
+                if (lista == NULL || list_size(lista) == 0) {
+                    log_error(logger_worker, "[WORKER] Error al recibir el paquete o paquete vacío");
+                    return NULL;
+                }
+
+                //void* buffer = list_get(lista, 0);
+
+                //Insertar Lógica de caso recepción de paquete
+
+                list_destroy_and_destroy_elements(lista, free);
+
+                break;
+
+            default:
+                log_warning(logger_worker, "[WORKER] Código desconocido desde WORKER %u", id_worker);
+                break;
+        }
+    }
+
+
+    close(cliente_fd);
+    return NULL;
+}

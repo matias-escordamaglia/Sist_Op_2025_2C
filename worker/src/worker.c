@@ -39,7 +39,8 @@ int main(int argc, char** argv)
         exit(EXIT_FAILURE);
     }
     
-	handshake(conexion_storage, 1, logger, "WORKER");
+
+    handshake_con_identificador_worker(conexion_storage, 1, id_worker, logger, "WORKER");
 	
 
     //Recién luego de que se conecta con storage se debe conectar con master 
@@ -54,9 +55,13 @@ int main(int argc, char** argv)
     
 	handshake(conexion_master, HANDSHAKE_WORKER_MASTER, logger, "WORKER");
 
-    
-	pthread_create(&hilo_storage, NULL, manejar_storage, &conexion_storage);
-	pthread_create(&hilo_master, NULL, manejar_master, &conexion_master);
+    int* server_fd_copia_storage = malloc(sizeof(int));
+    *server_fd_copia_storage = conexion_storage;
+	pthread_create(&hilo_storage, NULL, manejar_storage, server_fd_copia_storage);
+	
+    int* server_fd_copia_master = malloc(sizeof(int));
+    *server_fd_copia_master = conexion_master;
+    pthread_create(&hilo_master, NULL, manejar_master, server_fd_copia_master);
 
 	/*
 	Lo siguiente debe ajustarse para cada modulo
@@ -169,6 +174,30 @@ void* manejar_master(void* arg) {
 
     close(conexion);
     return NULL;
+}
+
+void handshake_con_identificador_worker(int socket, int valor ,uint32_t id_worker, t_log* logger, char* nombre_modulo) {
+    if (handshake(socket, valor, logger, nombre_modulo) == (uint32_t)-1) {
+        log_error(logger, "Handshake fallido con %s", nombre_modulo);
+        exit(EXIT_FAILURE);
+    }
+
+    t_estado_handshake estado_handshake;
+
+    send(socket, &id_worker, sizeof(uint32_t), 0);
+
+    if (recv(socket, &estado_handshake, sizeof(t_estado_handshake), MSG_WAITALL) <= 0) {
+        log_error(logger, "No se recibió respuesta de %s tras enviar el ID de WORKER", nombre_modulo);
+        exit(EXIT_FAILURE);
+    }
+        
+
+    if (estado_handshake == HANDSHAKE_OK) {
+        log_info(logger, "WORKER %u registrado correctamente en %s", id_worker, nombre_modulo);
+    } else {
+        log_error(logger, "WORKER %u ya estaba registrado en %s. Abortando...", id_worker, nombre_modulo);
+        exit(EXIT_FAILURE);
+    }
 }
 
 void terminar_programa(int conexion1, int conexion2, t_log* logger, t_config* config) {

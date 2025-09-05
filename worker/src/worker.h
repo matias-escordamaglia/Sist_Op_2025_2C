@@ -28,9 +28,11 @@ t_log_level log_level;
 
 t_log* logger;
 t_config* config;
+t_log_level log_level;
 
 void* manejar_storage(void* arg);
 void* manejar_master(void* arg);
+void handshake_con_identificador_worker(int socket, int valor, uint32_t id_cpu, t_log* logger, char* nombre_modulo);
 void terminar_programa(int conexion1, int conexion2, t_log* logger, t_config* config);
 
 #endif /* WORKER_H_ */

@@ -6,6 +6,9 @@
         "manejo_worker.h": "c",
         "system_error": "c",
         "limits": "c",
-        "cstddef": "c"
+        "cstddef": "c",
+        "atomic": "c",
+        "cstdint": "c",
+        "random": "c"
     }
 }

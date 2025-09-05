@@ -10,8 +10,12 @@ int server_fd_general;
 
 int main(int argc, char** argv) {
     
-    t_log* logger  = log_create("master.log", "master", 1, LOG_LEVEL_DEBUG);
-    t_config* config = iniciar_config(logger, "master.config");
+
+    config = iniciar_config(logger, "master.config");
+
+	log_level = obtener_log_level_config(config);
+
+	logger = log_create("master.log", "master", true, log_level);
 
     iniciar_master_state(logger, config);
     

@@ -17,6 +17,9 @@
 #include "manejo_query.h"
 #include "manejo_worker.h"
 
+t_log* logger;
+t_config* config;
+t_log_level log_level;
 
 void* manejar_conexiones_entrantes(void* arg);
 
