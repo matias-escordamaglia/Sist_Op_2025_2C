@@ -1,0 +1,14 @@
+{
+    "C_Cpp.errorSquiggles": "disabled",
+    "files.associations": {
+        "stdint.h": "c",
+        "manejo_query.h": "c",
+        "manejo_worker.h": "c",
+        "system_error": "c",
+        "limits": "c",
+        "cstddef": "c",
+        "atomic": "c",
+        "cstdint": "c",
+        "random": "c"
+    }
+}
