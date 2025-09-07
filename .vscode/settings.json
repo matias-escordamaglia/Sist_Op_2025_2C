@@ -9,6 +9,14 @@
         "cstddef": "c",
         "atomic": "c",
         "cstdint": "c",
-        "random": "c"
+        "random": "c",
+        "functional": "c",
+        "string": "c",
+        "new": "c",
+        "ostream": "c",
+        "typeinfo": "c",
+        "worker_conexion.h": "c",
+        "queue.h": "c",
+        "utils.h": "c"
     }
 }

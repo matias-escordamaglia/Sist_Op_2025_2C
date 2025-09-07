@@ -8,7 +8,7 @@ void* manejar_query(void* arg) {
     log_info(get_logger(), "## Master - QUERY conectado  - FD del socket: %d", cliente_fd);
     
     // Enviar confirmación de handshake
-    uint32_t confirmacion = 0; // OK
+    uint32_t confirmacion = HANDSHAKE_OK;
     send(cliente_fd, &confirmacion, sizeof(uint32_t), 0);
     
 

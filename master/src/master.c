@@ -20,6 +20,7 @@ int main(int argc, char** argv) {
     iniciar_master_state(logger, config);
     
     iniciar_semaforos();
+    iniciar_worker_manager();
 
     
     char* puerto_escucha = config_get_string_value(get_config(), "PUERTO_ESCUCHA");

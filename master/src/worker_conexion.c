@@ -1,16 +1,45 @@
-#include "manejo_worker.h"
+#include "worker_conexion.h"
+
+uint32_t id_worker;
 
 void* manejar_worker(void* arg) {
     t_conexion_identificada* conexion = (t_conexion_identificada*)arg;
     int cliente_fd = conexion->socket_fd;
     free(conexion);
+
+    
     
     log_info(get_logger(), "Master - WORKER conectado - FD del socket: %d", cliente_fd);
     
     // Enviar confirmación de handshake
-    uint32_t confirmacion = 0; // OK
+    uint32_t confirmacion = HANDSHAKE_OK;
     send(cliente_fd, &confirmacion, sizeof(uint32_t), 0);
     
+
+    if (recv(cliente_fd, &id_worker, sizeof(uint32_t), MSG_WAITALL) <= 0) {
+        log_error(get_logger(), "[WORK_CONEXION] No se pudo recibir el ID del WORKER (FD %d)", cliente_fd);
+        close(cliente_fd);
+        return NULL;
+    }
+
+    // Validar si ya existe
+    t_worker_conectado* existente = obtener_worker_por_id_uso_externo(id_worker);
+    if (existente != NULL && existente->worker_conectado) {
+        log_error(get_logger(), "[WORK_CONEXION] ID de WORKER %u ya está registrado", id_worker);
+        t_estado_handshake ya_registrado = HANDSHAKE_FALLO;
+        send(cliente_fd, &ya_registrado, sizeof(t_estado_handshake), 0);
+        close(cliente_fd);
+        return NULL;
+    }
+
+    // Registrar y confirmar OK
+    registrar_worker(id_worker, cliente_fd);
+    log_info(get_logger(), "[WORK_CONEXION] WORKER %u registrado con FD %d", id_worker, cliente_fd);
+
+    t_estado_handshake registrado = HANDSHAKE_OK;
+    send(cliente_fd, &registrado, sizeof(t_estado_handshake), 0);
+
+
 
     while (1) {
         int cod_op = recibir_operacion(cliente_fd, get_logger());
