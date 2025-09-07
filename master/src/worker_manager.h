@@ -4,6 +4,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <pthread.h>
+#include <stdint.h>
 #include <commons/log.h>
 #include <commons/config.h>
 #include <commons/collections/queue.h>
@@ -18,6 +20,9 @@ typedef struct {
 
 
 void iniciar_worker_manager(); 
+
+void registrar_worker(uint32_t id_worker, int cliente_fd);
+t_worker_conectado* obtener_worker_por_id_uso_externo(uint32_t id_worker);
 
 
 #endif /* WORKER_MANAGER_H_ */
