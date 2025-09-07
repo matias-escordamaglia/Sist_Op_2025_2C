@@ -54,7 +54,7 @@ int main(int argc, char** argv)
         exit(EXIT_FAILURE);
     }
     
-	handshake(conexion_master, HANDSHAKE_WORKER_MASTER, logger, "WORKER");
+    handshake_con_identificador_worker(conexion_master, 1, id_worker, logger, "MASTER");
 
     int* server_fd_copia_storage = malloc(sizeof(int));
     *server_fd_copia_storage = conexion_storage;
@@ -131,11 +131,6 @@ void* manejar_master(void* arg) {
     free(arg);
     
     log_info(logger, " Worker - MASTER conectado  - FD del socket: %d", conexion);
-    
-    // Enviar confirmación de handshake
-    uint32_t confirmacion = 0; // OK
-    send(conexion, &confirmacion, sizeof(uint32_t), 0);
-    
 
     while (1) {
         int cod_op = recibir_operacion(conexion, logger);

@@ -1,5 +1,5 @@
-#ifndef WORKER_H_
-#define WORKER_H_
+#ifndef WORKER_CONEXION_H_
+#define WORKER_CONEXION_H_
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -13,9 +13,10 @@
 
 #include "./utils/utils.h"
 #include "sync.h"
+#include "worker_manager.h"
 
 
 void* manejar_worker(void* arg);
 
 
-#endif /* WORKER_H_ */
+#endif /* WORKER_CONEXION_H_ */
