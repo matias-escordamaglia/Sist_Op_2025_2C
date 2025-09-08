@@ -302,6 +302,18 @@ t_config* iniciar_config(t_log* logger, char* modulo)
 	return nuevo_config;
 }
 
+t_config* iniciar_config_vieja(t_log* logger, char* modulo)
+{
+	t_config* nuevo_config = config_create(modulo);
+    
+	if (nuevo_config == NULL) {
+        log_error(logger, "No se pudo leer el archivo de configuración.");
+        abort();
+    }
+
+	return nuevo_config;
+}
+
 t_log_level obtener_log_level_config(t_config* config) {
 
 	t_log_level log_level;
