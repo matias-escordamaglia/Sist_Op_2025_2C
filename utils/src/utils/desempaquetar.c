@@ -56,3 +56,17 @@ t_prueba_conexion* desempaquetar_prueba_conexionV2(void* stream) {
 
     return recepcion_prueba;
 }
+
+t_pedido_query_master* desempaquetar_pedido_query_master(void* stream) {
+    int offset = 0;
+    t_pedido_query_master* recepcion_pedido = malloc(sizeof(t_pedido_query_master));
+
+    memcpy(&(recepcion_pedido->tipo), stream + offset, sizeof(t_tipo_mensaje_query));
+    offset += sizeof(t_tipo_mensaje_query);
+
+    recepcion_pedido->prioridad = extraer_uint32(stream, &offset);
+
+    recepcion_pedido->path_query = extraer_string(stream, &offset);
+
+    return recepcion_pedido;
+}

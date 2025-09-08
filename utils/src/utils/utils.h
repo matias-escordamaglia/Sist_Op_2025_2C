@@ -73,6 +73,7 @@ void enviar_paquete(t_paquete* paquete, int socket_cliente);
 void liberar_conexion(int socket_cliente);
 void eliminar_paquete(t_paquete* paquete);
 void* recibir_buffer(int* size, int socket_cliente);
+void* recibir_buffer_con_logger(int* size, int socket_cliente, t_log* logger);
 void crear_buffer(t_paquete* paquete);
 
 
@@ -85,6 +86,11 @@ typedef enum {
     ERROR,
 } t_resultado_operacion_default;
 
+typedef enum {
+    QUERY_NUEVA_CONEXION,
+    QUERY_DESCONEXION
+} t_tipo_mensaje_query;
+
 
 // ------------------------------------------------------------------------------------------
 // -- Structs --
@@ -96,6 +102,14 @@ typedef struct {
     uint32_t numeroB;
     char* string;
 }t_prueba_conexion;
+
+
+typedef struct 
+{
+    t_tipo_mensaje_query tipo;
+    uint32_t prioridad;
+    char* path_query;
+}t_pedido_query_master;
 
 
 // ------------------------------------------------------------------------------------------
