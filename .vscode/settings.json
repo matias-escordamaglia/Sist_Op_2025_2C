@@ -17,6 +17,7 @@
         "typeinfo": "c",
         "worker_conexion.h": "c",
         "queue.h": "c",
-        "utils.h": "c"
+        "utils.h": "c",
+        "desempaquetar.h": "c"
     }
 }

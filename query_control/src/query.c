@@ -48,9 +48,9 @@ int main(int argc, char** argv)
 
 	t_paquete* paquete = empaquetar_pedido_query_master(pedido_inicial);
 
-	enviar_paquete(paquete);
+	enviar_paquete(paquete, conexion);
 
-	log_info(get_logger(), "Pedido enviado. Path: %s - Prioridad: %d", pedido_inicial->path_query, pedido_inicial->prioridad);
+	log_info(logger, "Pedido enviado. Path: %s - Prioridad: %d", pedido_inicial->path_query, pedido_inicial->prioridad);
 
 	free(pedido_inicial);
 
