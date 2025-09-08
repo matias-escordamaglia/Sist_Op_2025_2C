@@ -185,6 +185,26 @@ void* recibir_buffer(int* size, int socket_cliente)
 	return buffer;
 }
 
+void* recibir_buffer_con_logger(int* size, int socket_cliente, t_log* logger)
+{
+	void * buffer;
+
+	if (recv(socket_cliente, size, sizeof(int), MSG_WAITALL) <= 0) {
+        return NULL;
+	}
+
+    buffer = malloc(*size);
+
+    if (recv(socket_cliente, buffer, *size, MSG_WAITALL) <= 0) {
+        free(buffer);
+        return NULL;
+    }
+
+	log_info(logger, "DEBUG: Tamaño recibido: %d bytes", *size);
+
+	return buffer;
+}
+
 void recibir_mensaje(int socket_cliente, t_log* logger)
 {
     int size;

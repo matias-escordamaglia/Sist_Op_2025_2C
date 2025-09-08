@@ -73,6 +73,7 @@ void enviar_paquete(t_paquete* paquete, int socket_cliente);
 void liberar_conexion(int socket_cliente);
 void eliminar_paquete(t_paquete* paquete);
 void* recibir_buffer(int* size, int socket_cliente);
+void* recibir_buffer_con_logger(int* size, int socket_cliente, t_log* logger);
 void crear_buffer(t_paquete* paquete);
 
 
