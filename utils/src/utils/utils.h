@@ -57,6 +57,7 @@ t_paquete* crear_paquete(void);
 uint32_t handshake(int conexion, uint32_t envio, t_log* logger, char *modulo);
 uint32_t handshake_silencioso(int conexion, uint32_t envio, t_log* logger, char *modulo);
 t_config* iniciar_config(t_log* logger, char* modulo);
+t_config* iniciar_config_vieja(t_log* logger, char* modulo); //funcion del tp pasado
 /** 
 * @brief Obtiene un LOG_LEVEL de un archivo de config
 * @param config Archivo de configuración que debe tener el Módulo/Hilo

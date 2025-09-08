@@ -1,6 +1,7 @@
 #include "manejo-worker.h"
 
 t_log* logger_worker;
+t_config* blockconfig = NULL;
 
 void pasar_logger_a_manejo_worker(t_log* l) {
     logger_worker = l;
@@ -54,6 +55,17 @@ void* atender_conexion_worker(void* arg) {
         close(cliente_fd);
         return NULL;
     }
+
+    t_estado_handshake registrado = HANDSHAKE_OK;
+    send(cliente_fd, &registrado, sizeof(t_estado_handshake), 0);
+    
+    
+    blockconfig = iniciar_config_vieja(logger_worker, "superblock.config");
+    char* blockSizeChar = config_get_string_value(blockconfig, "BLOCK_SIZE");
+    int block_size = atoi(blockSizeChar); 
+
+    log_info(logger_worker, "Enviando block_size=%d", block_size);
+    send(cliente_fd, &block_size, sizeof(int), 0);
 
     
 

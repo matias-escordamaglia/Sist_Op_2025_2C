@@ -3,6 +3,7 @@
 
 char* archivo_config;
 uint32_t id_worker;
+int block_size;
 
 pthread_t hilo_master;
 pthread_t hilo_storage;
@@ -34,17 +35,14 @@ int main(int argc, char** argv)
     conexion_storage = crear_conexion(ip_storage, puerto_storage, logger);
 
     if (conexion_storage == -1) {
-        log_error(logger, "No se pudo establecer conexión con el MASTER. Abortando.");
+        log_error(logger, "No se pudo establecer conexión con STORAGE. Abortando.");
         terminar_programa(conexion_storage, -99, logger, config);
         exit(EXIT_FAILURE);
     }
     
 
-    //handshake_con_identificador_worker(conexion_storage, 1, id_worker, logger, "STORAGE");
-    handshake(conexion_storage, 1, logger, "STORAGE");
-	
-
-    //Recién luego de que se conecta con storage se debe conectar con master 
+    handshake_con_identificador_worker(conexion_storage, 1, id_worker, logger, "STORAGE");
+    recv(conexion_storage, &block_size, sizeof(int), MSG_WAITALL);
 
 	conexion_master = crear_conexion(ip_master, puerto_master, logger);
 
@@ -80,11 +78,6 @@ void* manejar_storage(void* arg) {
     free(arg);
     
     log_info(logger, " Worker - STORAGE conectado  - FD del socket: %d", conexion);
-    
-    // Enviar confirmación de handshake
-    uint32_t confirmacion = 0; // OK
-    send(conexion, &confirmacion, sizeof(uint32_t), 0);
-    
 
     while (1) {	
         int cod_op = recibir_operacion(conexion, logger);
