@@ -41,6 +41,18 @@ int main(int argc, char** argv)
 	handshake(conexion, HANDSHAKE_QUERY_MASTER, logger, "QUERY");
 
     //Enviar prioridad y query a master
+	t_pedido_query_master* pedido_inicial = malloc(sizeof(t_pedido_query_master));
+	pedido_inicial->tipo = QUERY_NUEVA_CONEXION;
+	pedido_inicial->prioridad = prioridad;
+	pedido_inicial->path_query = archivo_query;
+
+	t_paquete* paquete = empaquetar_pedido_query_master(pedido_inicial);
+
+	enviar_paquete(paquete);
+
+	log_info(get_logger(), "Pedido enviado. Path: %s - Prioridad: %d", pedido_inicial->path_query, pedido_inicial->prioridad);
+
+	free(pedido_inicial);
 
 	/*
 	Posiblemente lo siguiente no deba ser un while, debe revisarse

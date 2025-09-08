@@ -85,6 +85,11 @@ typedef enum {
     ERROR,
 } t_resultado_operacion_default;
 
+typedef enum {
+    QUERY_NUEVA_CONEXION,
+    QUERY_DESCONEXION
+} t_tipo_mensaje_query;
+
 
 // ------------------------------------------------------------------------------------------
 // -- Structs --
@@ -96,6 +101,14 @@ typedef struct {
     uint32_t numeroB;
     char* string;
 }t_prueba_conexion;
+
+
+typedef struct 
+{
+    t_tipo_mensaje_query tipo;
+    uint32_t prioridad;
+    char* path_query;
+}t_pedido_query_master;
 
 
 // ------------------------------------------------------------------------------------------

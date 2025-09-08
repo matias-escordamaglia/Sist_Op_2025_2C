@@ -32,7 +32,19 @@ t_paquete* empaquetar_para_prueba_conexion(t_prueba_conexion* prueba) {
 
     insertar_string_a_paquete(paquete, prueba->string);
 
-    //agregar_variable_a_paquete(paquete, &(prueba->motivo), sizeof(t_motivo_prueba));
+    //insertar_variable_a_paquete(paquete, &(prueba->motivo), sizeof(t_motivo_prueba));
+
+    return paquete;
+}
+
+t_paquete* empaquetar_pedido_query_master(t_pedido_query_master* pedido) {
+    t_paquete* paquete = crear_paquete();
+    
+    insertar_variable_a_paquete(paquete, &(pedido->tipo), sizeof(t_tipo_mensaje_query));
+
+    insertar_uint32_a_paquete(paquete, pedido->prioridad);
+
+    insertar_string_a_paquete(paquete, pedido->path_query);
 
     return paquete;
 }
