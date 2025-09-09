@@ -12,6 +12,8 @@
 #include <commons/config.h>
 
 #include "./utils/utils.h"
+#include "./utils/empaquetar.h"
+#include "./utils/desempaquetar.h"
 #include "sync.h"
 
 void* manejar_query(void* arg);

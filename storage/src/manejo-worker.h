@@ -11,7 +11,7 @@
 #include <commons/config.h>
 #include "./utils/utils.h"
 
-t_log* logger_worker;
+extern t_config* blockconfig;
 
 void pasar_logger_a_manejo_worker(t_log* l);
 void* manejar_cliente_worker(void* arg);

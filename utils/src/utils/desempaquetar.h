@@ -13,4 +13,6 @@ char* extraer_string(void* stream, int* offset);
 t_prueba_conexion* desempaquetar_prueba_conexionV1(void* stream);
 t_prueba_conexion* desempaquetar_prueba_conexionV2(void* stream);
 
+t_pedido_query_master* desempaquetar_pedido_query_master(void* stream);
+
 #endif /* UTILS_DESEMPAQUETAR_H_  */

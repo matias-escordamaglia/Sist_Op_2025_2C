@@ -1,5 +1,7 @@
 #include "manejo-worker.h"
 
+t_log* logger_worker;
+t_config* blockconfig = NULL;
 
 void pasar_logger_a_manejo_worker(t_log* l) {
     logger_worker = l;
@@ -52,6 +54,17 @@ void* atender_conexion_worker(void* arg) {
     }
     //incluir en le hs el envio de datos .config a worker
 
+    t_estado_handshake registrado = HANDSHAKE_OK;
+    send(cliente_fd, &registrado, sizeof(t_estado_handshake), 0);
+    
+    
+    blockconfig = iniciar_config_vieja(logger_worker, "superblock.config");
+    char* blockSizeChar = config_get_string_value(blockconfig, "BLOCK_SIZE");
+    int block_size = atoi(blockSizeChar); 
+
+    log_info(logger_worker, "Enviando block_size=%d", block_size);
+    send(cliente_fd, &block_size, sizeof(int), 0);
+
     
 
     // Bucle principal
@@ -65,12 +78,10 @@ void* atender_conexion_worker(void* arg) {
         switch (cod_op) {
             case PAQUETE:
                 int size; 
-                void* buffer = recibir_buffer(&size, cliente_fd)
+                void* bufferr = recibir_buffer(&size, cliente_fd);
                 log_info(logger_worker, "[WORKER] Se recibe paquete desde WORKER %u", id_worker);
                 
                 //Insertar Lógica de caso recepción de paquete
-
-                list_destroy_and_destroy_elements(lista, free);
 
                 break;
 
