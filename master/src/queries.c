@@ -4,7 +4,7 @@ t_list* lista_queries;
 
 static uint32_t contador_qid = 0;
 
-t_query* crear_query(const char* query_path, uint32_t prioridad) {
+t_query* crear_query(char* query_path, uint32_t prioridad) {
 
     if (lista_queries == NULL)
         lista_queries = list_create();

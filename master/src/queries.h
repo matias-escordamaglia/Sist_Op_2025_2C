@@ -32,7 +32,7 @@ typedef struct {
 } t_query;
 
 
-t_query* crear_query(const char* query_path, uint32_t prioridad);
+t_query* crear_query(char* query_path, uint32_t prioridad);
 uint32_t establecer_siguiente_valor_qid();
 
 
