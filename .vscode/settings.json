@@ -18,6 +18,7 @@
         "worker_conexion.h": "c",
         "queue.h": "c",
         "utils.h": "c",
-        "desempaquetar.h": "c"
+        "desempaquetar.h": "c",
+        "string.h": "c"
     }
 }
