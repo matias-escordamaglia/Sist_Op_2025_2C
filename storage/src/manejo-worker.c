@@ -1,12 +1,9 @@
 #include "manejo-worker.h"
 
-t_log* logger_worker;
 
 void pasar_logger_a_manejo_worker(t_log* l) {
     logger_worker = l;
 } 
-
-
 void* manejar_cliente_worker(void* arg) {
     int server_fd = (*(int*)arg);
     free(arg);
@@ -27,7 +24,6 @@ void* manejar_cliente_worker(void* arg) {
 
     return NULL;
 }
-
 void* atender_conexion_worker(void* arg) {
     int cliente_fd = *((int*)arg);
     free(arg);
@@ -54,6 +50,7 @@ void* atender_conexion_worker(void* arg) {
         close(cliente_fd);
         return NULL;
     }
+    //incluir en le hs el envio de datos .config a worker
 
     
 
@@ -67,16 +64,10 @@ void* atender_conexion_worker(void* arg) {
 
         switch (cod_op) {
             case PAQUETE:
+                int size; 
+                void* buffer = recibir_buffer(&size, cliente_fd)
                 log_info(logger_worker, "[WORKER] Se recibe paquete desde WORKER %u", id_worker);
-
-                t_list* lista = recibir_paquete(cliente_fd, logger_worker);
-                if (lista == NULL || list_size(lista) == 0) {
-                    log_error(logger_worker, "[WORKER] Error al recibir el paquete o paquete vacío");
-                    return NULL;
-                }
-
-                //void* buffer = list_get(lista, 0);
-
+                
                 //Insertar Lógica de caso recepción de paquete
 
                 list_destroy_and_destroy_elements(lista, free);

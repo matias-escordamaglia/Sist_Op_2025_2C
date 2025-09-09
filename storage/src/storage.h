@@ -10,13 +10,20 @@
 #include <commons/log.h>
 #include <commons/config.h>
 #include "./utils/utils.h"
+#include "utils-storage.h"
 
 #include "manejo-worker.h"
 
-
+//configs
+char* PUERTO_ESCUCHA; 
+bool FRESH_START;
+char* PUNTO_MONTAJE;
+int RETARDO_OPERACION;
+int RETARDO_ACCESO_BLOQUE; 
 
 
 t_log_level log_level;
+void extraer_storage_config(t_config* config);
 
 
 

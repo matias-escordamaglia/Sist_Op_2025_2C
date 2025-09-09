@@ -11,6 +11,8 @@
 #include <commons/config.h>
 #include "./utils/utils.h"
 
+t_log* logger_worker;
+
 void pasar_logger_a_manejo_worker(t_log* l);
 void* manejar_cliente_worker(void* arg);
 void* atender_conexion_worker(void* arg);
