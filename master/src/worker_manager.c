@@ -24,7 +24,7 @@ void registrar_worker(uint32_t id_worker, int cliente_fd) {
     list_add(workers_conectados, worker);
 
     pthread_mutex_unlock(&mutex_workers_conectados);
- }
+}
 
 t_worker_conectado* obtener_worker_por_id_uso_externo(uint32_t id_worker) {
     pthread_mutex_lock(&mutex_workers_conectados);
@@ -40,3 +40,47 @@ t_worker_conectado* obtener_worker_por_id_uso_externo(uint32_t id_worker) {
     return encontrado;
 }
 
+t_worker_conectado* obtener_worker_por_id_uso_interno(uint32_t id_worker) {
+    
+    t_worker_conectado* encontrado = NULL;
+    for (int i = 0; i < list_size(workers_conectados); i++) {
+        t_worker_conectado* worker = list_get(workers_conectados, i);
+        if (worker->id_worker == id_worker) {
+            encontrado = worker;
+            break;
+        }
+    }
+    
+    return encontrado;
+}
+
+t_worker_conectado* obtener_worker_libre() {
+    pthread_mutex_lock(&mutex_workers_conectados);
+    t_worker_conectado* encontrado = NULL;
+    for (int i = 0; i < list_size(workers_conectados); i++) {
+        t_worker_conectado* worker = list_get(workers_conectados, i);
+        if (worker->qid_actual == QID_NULO) {
+            encontrado = worker;
+            break;
+        }
+    }
+    pthread_mutex_unlock(&mutex_workers_conectados);
+    return encontrado;
+}
+
+
+void establecer_worker_desalojado(uint32_t id_worker) {
+    pthread_mutex_lock(&mutex_workers_conectados);
+    t_worker_conectado* worker  = obtener_worker_por_id_uso_interno(id_worker);
+    worker->qid_actual = QID_NULO;
+    pthread_mutex_unlock(&mutex_workers_conectados);
+}
+
+void remover_cpu(t_worker_conectado* worker) {
+    
+    pthread_mutex_lock(&mutex_workers_conectados);
+    list_remove_element(workers_conectados, worker);
+    pthread_mutex_unlock(&mutex_workers_conectados);
+
+    free(worker);
+}
