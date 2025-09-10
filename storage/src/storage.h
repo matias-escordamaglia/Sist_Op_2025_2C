@@ -40,9 +40,11 @@ char* add_seg_ruta(char *, char *);
 int existe_directorio(const char *);
 int borrar_directorio(const char *);
 void inicializar_super_block_config();
-void inicializar_dir_phys_block(char* );
+void inicializar_dir_physic_block(char* );
 void inicializar_bitmap(const char* );
 void crear_bloque(const char* , size_t );
+void inicializar_dir_logic_block( char* );
+
 
 
 

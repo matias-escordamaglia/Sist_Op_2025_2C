@@ -11,7 +11,8 @@ pthread_t hilo_manejo_worker;
 int main(int argc, char **argv)
 {
 
-    config = iniciar_config(logger, "storage.config");
+    //config = iniciar_config(logger, "storage.config");
+    config = config_create("storage.config"); 
     extraer_storage_config(config);
 
     log_level = obtener_log_level_config(config);
@@ -38,13 +39,13 @@ int main(int argc, char **argv)
     return EXIT_SUCCESS;
 }
 
-void extraer_storage_config(t_config *config)
+void extraer_storage_config(t_config* config_st)
 {
-    PUERTO_ESCUCHA = config_get_string_value(config, "PUERTO_ESCUCHA");
-    PUNTO_MONTAJE = config_get_string_value(config, "PUNTO_MONTAJE");
-    RETARDO_OPERACION = config_get_int_value(config, "RETARDO_OPERACION");
-    RETARDO_ACCESO_BLOQUE = config_get_int_value(config, "RETARDO_ACCESO_BLOQUE");
-    char *fresh_star = config_get_string_value(config, "FRESH_START");
+    PUERTO_ESCUCHA = config_get_string_value(config_st, "PUERTO_ESCUCHA");
+    PUNTO_MONTAJE = config_get_string_value(config_st, "PUNTO_MONTAJE");
+    RETARDO_OPERACION = config_get_int_value(config_st, "RETARDO_OPERACION");
+    RETARDO_ACCESO_BLOQUE = config_get_int_value(config_st, "RETARDO_ACCESO_BLOQUE");
+    char *fresh_star = config_get_string_value(config_st, "FRESH_START");
     if (strcmp(fresh_star, "TRUE") == 0)
     {
         FRESH_START = true;
@@ -63,6 +64,7 @@ void iniciar_estructuras(){
         char* ruta_block_hash = add_seg_ruta(PUNTO_MONTAJE, "/blocks_hash_index.config"); 
         char* ruta_f_block = add_seg_ruta(PUNTO_MONTAJE, "/physical_blocks");
         char* ruta_files = add_seg_ruta(PUNTO_MONTAJE, "/files");
+    
 
         if(existe_archivo(ruta_bitmap)){
             if (remove(ruta_bitmap) == 0) {
@@ -98,8 +100,10 @@ void iniciar_estructuras(){
         }
         log_info(logger, "Inicializando estructuras nuevas...");
         inicializar_super_block_config();
-        inicializar_dir_phys_block(ruta_f_block){
+        inicializar_dir_physic_block(ruta_f_block); 
         inicializar_bitmap(ruta_bitmap);
+        inicializar_dir_logic_block(ruta_files); 
+
 
 
 
@@ -209,20 +213,32 @@ int borrar_directorio(const char *path) {
     return 0; // éxito
 }
 void inicializar_super_block_config(){
-    char *ruta_sp_block_config = add_seg_ruta(PUNTO_MONTAJE, "/superblock.config");
-    sp_block_config = config_create(ruta_sp_block_config);
+    sp_block_config = config_create("superblock.config");
     BLOCK_SIZE = config_get_int_value(sp_block_config, "BLOCK_SIZE");
     FS_SIZE = config_get_int_value(sp_block_config, "FS_SIZE");
+    log_info(logger, "Archivo superblock.config extraido exitosamente");
+
 }
 void inicializar_bitmap(const char* ruta){
     FILE* f = fopen("bitmap.bin", "w+r"); 
 
 
 }
-void inicializar_dir_phys_block( char* ruta){
+void inicializar_dir_physic_block( char* ruta){
+    ///home/utnso/tp-2025-2c-SegFaulteadores-Seriales/storage
+    //log_info(logger, "ruta fs; %s", "/home/utnso/storage/physical_blocks");
     if (mkdir(ruta, 0777) == -1) {
         log_info(logger, "ERROR: Directorio %s no creado", ruta); 
-    } else {
+        if (errno == EEXIST) {
+            log_info(logger, "Directorio %s ya existe", ruta);
+        } else {
+            log_error(logger, "No se pudo crear el directorio %s. Error: %s", ruta, strerror(errno));
+            free(ruta);
+            exit(EXIT_FAILURE);
+        }
+        }
+    
+    else {
         log_info(logger, "Directorio %s creado correctamente", ruta); 
     }
     int cant_bloques = (FS_SIZE / BLOCK_SIZE); 
@@ -244,7 +260,6 @@ void inicializar_dir_phys_block( char* ruta){
             log_info(logger, "Se crearon %d bloques exitosamente", cant_bloques);
     }
 }
-
 void crear_bloque(const char* ruta, size_t block_size) {
     FILE *f = fopen(ruta, "wb");
     if (!f) { perror("fopen"); exit(1); }
@@ -253,4 +268,102 @@ void crear_bloque(const char* ruta, size_t block_size) {
     fwrite(buffer, 1, block_size, f);
     free(buffer);
     fclose(f);
+}
+void inicializar_dir_logic_block( char* ruta){
+
+    if (mkdir(ruta, 0777) == -1) {
+        if (errno == EEXIST) {
+            log_info(logger, "Directorio %s ya existe", ruta);
+        } else {
+            log_error(logger, "No se pudo crear el Directorio %s. Error: %s", ruta, strerror(errno));
+            free(ruta);
+            exit(EXIT_FAILURE);
+        }
+    }  
+    else {
+        log_info(logger, "Directorio %s creado correctamente", ruta); 
+    }
+
+
+    char* ruta_initial_file = add_seg_ruta(ruta,"/initial_file"); 
+    if (mkdir(ruta_initial_file, 0777) == -1) {
+        if (errno == EEXIST) {
+            log_info(logger, "File %s ya existe", ruta_initial_file);
+        } else {
+            log_error(logger, "No se pudo crear el File %s. Error: %s", ruta_initial_file, strerror(errno));
+            free(ruta_initial_file);
+            exit(EXIT_FAILURE);
+        }
+    }  
+    else {
+        log_info(logger, "File %s creado correctamente", ruta_initial_file); 
+    }
+
+     char* ruta_tag_BASE = add_seg_ruta(ruta_initial_file    ,"/BASE"); 
+    if (mkdir(ruta_tag_BASE, 0777) == -1) {
+        if (errno == EEXIST) {
+            log_info(logger, "Tag %s ya existe", ruta_tag_BASE);
+        } else {
+            log_error(logger, "No se pudo crear el Tag %s. Error: %s", ruta_tag_BASE, strerror(errno));
+            free(ruta_tag_BASE);
+            exit(EXIT_FAILURE);
+        }
+    }  
+    else {
+        log_info(logger, "Tag %s creado correctamente", ruta_tag_BASE); 
+    }
+
+
+//metadata
+    log_info(logger, "Creando metadata.config...");
+
+    char* ruta_absoluta_metadata = add_seg_ruta(ruta_tag_BASE,"/metadata.config"); 
+    FILE* f = fopen(ruta_absoluta_metadata, "w");
+        if (!f) {
+            log_error(logger, "Error al crear metadata.config");
+            exit(EXIT_FAILURE);
+        }
+    fprintf(f, "TAMAÑO=0\n");
+    fprintf(f, "ESTADO=WORK_IN_PROGRESS\n");
+    fprintf(f, "BLOCKS=[0]\n");
+    //////////a implementar bitmap////
+    log_info(logger, "Metadata %s creado exitosamente",ruta_absoluta_metadata );
+    fclose(f);
+
+
+//logical block-> hard_links
+    char* ruta_absoluta_dir_log_block = add_seg_ruta(ruta_tag_BASE,"/logical_blocks"); 
+     if (mkdir(ruta_absoluta_dir_log_block, 0777) == -1) {
+        if (errno == EEXIST) {
+            log_info(logger, "Directorio %s ya existe", ruta_absoluta_dir_log_block);
+        } else {
+            log_error(logger, "No se pudo crear el Directorio %s. Error: %s", ruta_absoluta_dir_log_block, strerror(errno));
+            free(ruta_absoluta_dir_log_block);
+            exit(EXIT_FAILURE);
+        }
+    }  
+    else {
+        log_info(logger, "Directorio %s creado correctamente", ruta_absoluta_dir_log_block); 
+    }
+
+    free(ruta_initial_file);
+    free(ruta_tag_BASE);
+    free(ruta_absoluta_metadata);
+    free(ruta_absoluta_dir_log_block);
+}
+
+void crear_metadata_config(char* ruta){
+    char* ruta_absoluta_metadata = add_seg_ruta(ruta,"/metadata.config"); 
+    FILE* f = fopen(ruta_absoluta_metadata, "w");
+         if (!f) {
+        perror("Error al crear metadata.config");
+        exit(EXIT_FAILURE);
+    }
+
+
+}
+
+void finalizar_FS(){
+    config_destroy(config);
+    log_destroy(logger); 
 }
