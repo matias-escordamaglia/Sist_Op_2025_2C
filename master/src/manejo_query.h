@@ -1,5 +1,5 @@
-#ifndef QUERY_H_
-#define QUERY_H_
+#ifndef MANEJO_QUERY_H_
+#define MANEJO_QUERY_H_
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -15,9 +15,10 @@
 #include "./utils/empaquetar.h"
 #include "./utils/desempaquetar.h"
 #include "sync.h"
+#include "queries.h"
 
 void* manejar_query(void* arg);
 
 
 
-#endif /* QUERY_H_ */
+#endif /* MANEJO_QUERY_H_ */

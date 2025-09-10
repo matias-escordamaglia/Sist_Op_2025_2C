@@ -13,7 +13,6 @@ t_query* crear_query(char* query_path, uint32_t prioridad) {
 	query->query_id = establecer_siguiente_valor_qid();
     query->prioridad = prioridad;
 	query->program_count = 0;
-	query->estado = READY;
     query->query_path = string_duplicate(query_path);
 
     list_add(lista_queries, query);

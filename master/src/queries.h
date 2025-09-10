@@ -15,21 +15,8 @@
 
 #include "./utils/utils.h"
 #include "sync.h"
+#include "planificacion.h"
 
-typedef enum {
-    READY,
-    EXEC,
-	EXIT
-} estado_query;
-
-
-typedef struct {
-    uint32_t query_id;
-    uint32_t prioridad;
-    uint32_t program_count;
-    char* query_path;
-    estado_query estado;
-} t_query;
 
 
 t_query* crear_query(char* query_path, uint32_t prioridad);
