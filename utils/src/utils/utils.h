@@ -129,7 +129,7 @@ typedef struct
 {
     t_motivo_pedido_master_worker motivo;
     uint32_t query_id;
-    uint32_t prioridad;
+    uint32_t program_counter;
     char* query_path;
 }t_pedido_master_worker;
 

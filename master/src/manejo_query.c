@@ -54,7 +54,7 @@ void* manejar_query(void* arg) {
                 free(pedido);
                 free(buffer);  
                 
-                crear_query(path_query, prioridad);
+                crear_nuevo_query(path_query, prioridad);
 
                 break;
                 

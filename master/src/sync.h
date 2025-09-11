@@ -4,6 +4,7 @@
 #include <pthread.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <semaphore.h>
 #include <commons/log.h>
 #include <commons/config.h>
@@ -40,6 +41,10 @@ typedef struct {
 extern sem_t* cant_queries_en_ready;
 extern sem_t* cant_queries_en_exec;
 extern sem_t* cant_queries_en_exit;
+
+extern sem_t* cant_workers_libres;
+
+extern sem_t* sem_envio_query_pendiente;
 
 void iniciar_master_state(t_log* logger, t_config* config);
 t_log* get_logger();
