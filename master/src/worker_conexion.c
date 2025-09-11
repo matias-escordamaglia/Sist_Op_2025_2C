@@ -155,6 +155,9 @@ void* tratar_siguientes_queries_a_enviar(void* _) {
         pedido->program_counter = pc_pedido;
         pedido->query_path = path;
 
+        //TODO no hardcodear
+        pedido->motivo = PEDIDO_QUERY;
+
 
         if (enviar_siguiente_query(worker, pedido)) {
             log_info(get_logger(), "[DEBUG] Query (ID: %u) enviado a Worker (ID: %u)", pedido->query_id, worker->id_worker);
