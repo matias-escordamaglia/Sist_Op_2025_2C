@@ -89,7 +89,7 @@ t_pedido_master_worker* desempaquetar_pedido_master_worker(void* stream) {
 
     recepcion_pedido->query_id = extraer_uint32(stream, &offset);
 
-    recepcion_pedido->prioridad = extraer_uint32(stream, &offset);
+    recepcion_pedido->program_counter = extraer_uint32(stream, &offset);
 
     recepcion_pedido->query_path = extraer_string(stream, &offset);
 

@@ -10,8 +10,8 @@
 #include <commons/config.h>
 
 
-#define LOCK(mtx) pthread_mutex_lock(&(mtx))
-#define UNLOCK(mtx) pthread_mutex_unlock(&(mtx))
+#define LOCK(mtx) pthread_mutex_lock(mtx)
+#define UNLOCK(mtx) pthread_mutex_unlock(mtx)
 
 typedef struct {
     t_log* logger;

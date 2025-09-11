@@ -60,7 +60,7 @@ t_paquete* empaquetar_pedido_master_worker(t_pedido_master_worker* pedido) {
 
     insertar_uint32_a_paquete(paquete, pedido->query_id);
 
-    insertar_uint32_a_paquete(paquete, pedido->prioridad);
+    insertar_uint32_a_paquete(paquete, pedido->program_counter);
 
     insertar_string_a_paquete(paquete, pedido->query_path);
 

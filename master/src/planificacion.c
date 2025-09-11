@@ -9,17 +9,17 @@ pthread_mutex_t mutex_cola_exec = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_cola_exit = PTHREAD_MUTEX_INITIALIZER;
 
 void inicializar_listas_planificacion() {
-    if (cola_ready = NULL)
+    if (cola_ready == NULL)
     {
         cola_ready = list_create();
     }
 
-    if (cola_exec = NULL)
+    if (cola_exec == NULL)
     {
         cola_exec = list_create();
     }
     
-    if (cola_exit = NULL)
+    if (cola_exit == NULL)
     {
         cola_exit = list_create();
     }
@@ -34,15 +34,15 @@ uint64_t timestamp_actual_en_milisegundos() {
 void crear_nuevo_query(char* query_path, uint32_t prioridad) {
     t_query* nuevo_query = crear_query(query_path, prioridad);
 
-    
-    inicializar_temporizador_pcb(nuevo_query);
+    // TODO hilo con temporizador para aging posiblemente
+    //inicializar_temporizador_query(nuevo_query);
     t_elemento_cola* nuevo_elemento = crear_nuevo_elemento(nuevo_query);
 
-    LOCK(mutex_cola_ready);
+    LOCK(&mutex_cola_ready);
         list_add(cola_ready, nuevo_elemento);
         log_info(get_logger(), "Se crea nuevo Query con ID (%d) - Estado: READY", nuevo_query->query_id);
         sem_post(cant_queries_en_ready);
-    UNLOCK(mutex_cola_ready);
+    UNLOCK(&mutex_cola_ready);
 }
 
 t_elemento_cola* crear_nuevo_elemento(t_query* query) {
@@ -105,7 +105,7 @@ void *iniciador_planificacion() {
         planificar_por_prioridades();
     } else 
     {
-        log_error(get_logger(), "ERROR al querer establecer un algoritmo de planificación.")
+        log_error(get_logger(), "ERROR al querer establecer un algoritmo de planificación.");
     }
     return (void *)1;
 }
@@ -118,15 +118,15 @@ void planificar_por_fifo() {
 
         t_elemento_cola* mas_antiguo;
 
-        LOCK(mutex_cola_ready);
+        LOCK(&mutex_cola_ready);
         mas_antiguo = obtener_mas_antiguo(cola_ready);
         if (mas_antiguo == NULL) {
-            UNLOCK(mutex_cola_ready);
+            UNLOCK(&mutex_cola_ready);
             continue;
         }
 
         list_remove_element(cola_ready, mas_antiguo);
-        UNLOCK(mutex_cola_ready);
+        UNLOCK(&mutex_cola_ready);
 
         //TODO enviar algún worker libre;
     }

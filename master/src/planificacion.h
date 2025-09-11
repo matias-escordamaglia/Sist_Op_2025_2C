@@ -7,6 +7,7 @@
 #include <pthread.h>
 #include <unistd.h>
 #include <signal.h>
+#include <sys/time.h>
 #include <commons/log.h>
 #include <commons/string.h>
 #include <commons/config.h>
