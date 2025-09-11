@@ -17,6 +17,7 @@
 #include "./utils/desempaquetar.h"
 #include "sync.h"
 #include "queries.h"
+#include "worker_conexion.h"
 
 typedef struct 
 {

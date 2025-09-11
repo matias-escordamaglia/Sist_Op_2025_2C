@@ -57,17 +57,22 @@ void* manejar_worker(void* arg) {
                 
             case PAQUETE:
 
-                t_list* lista = recibir_paquete(cliente_fd, get_logger());
-                if (lista == NULL || list_size(lista) == 0) {
-                    log_error(get_logger(), "[WORKER] Error al recibir el paquete o paquete vacío");
+                int size;
+                void* buffer = recibir_buffer(&size, cliente_fd);
+                if (buffer == NULL) {
+                    log_error(get_logger(), "[QUERY] Error al recibir el buffer");
                     return NULL;
                 }
-        
-                //void* buffer = list_get(lista, 0);
                 
-                //Realizar cosas en caso que llegue un paquete
+                t_aviso_worker_master* aviso = desempaquetar_aviso_worker_master(buffer);
+                
+                if (!aviso) {
+                    log_error(get_logger(), "Error al desempaquetar aviso de WORKER");
+                    free(buffer);
+                    break;
+                }
 
-                list_destroy_and_destroy_elements(lista, free);
+                /*Hacer algo con el aviso*/
                 
                 break;
                 
@@ -88,7 +93,7 @@ void* manejar_worker(void* arg) {
 
 t_queue* cola_envio_queries;
 
-void agregar_siguiente_proceso_a_enviar(t_query* query, t_worker_conectado* worker_libre) {
+void agregar_siguiente_query_a_enviar(t_query* query, t_worker_conectado* worker_libre) {
 
     t_siguiente_pedido* nuevo_pedido = malloc(sizeof(t_siguiente_pedido));
 
@@ -111,13 +116,13 @@ void agregar_siguiente_proceso_a_enviar(t_query* query, t_worker_conectado* work
 
 bool enviar_siguiente_query(t_worker_conectado* worker, t_pedido_master_worker* sig_pedido) {
     if (!worker || !worker->worker_conectado) {
-        log_error(get_logger(), "[MANAGER] No se puede enviar el query: worker nula o no conectada.");
+        log_error(get_logger(), "[CONEXION] No se puede enviar el query: worker nula o no conectada.");
         return false;
     }
 
     t_paquete* paquete = empaquetar_pedido_master_worker(sig_pedido);
     if (!paquete) {
-        log_error(get_logger(), "[MANAGER] No se pudo empaquetar el siguiente query");
+        log_error(get_logger(), "[CONEXION] No se pudo empaquetar el siguiente query");
         return false;
     }
 
@@ -125,7 +130,7 @@ bool enviar_siguiente_query(t_worker_conectado* worker, t_pedido_master_worker* 
 
     worker->qid_actual = sig_pedido->query_id;
 
-    log_info(get_logger(), "[MANAGER] Enviado QID %u con PC %u a Worker %u (FD %d)", 
+    log_info(get_logger(), "[CONEXION] Enviado QID %u con PC %u a Worker %u (FD %d)", 
              sig_pedido->query_id, sig_pedido->program_counter, worker->id_worker, worker->fd_worker);
 
     return true;

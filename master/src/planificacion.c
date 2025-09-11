@@ -34,7 +34,7 @@ uint64_t timestamp_actual_en_milisegundos() {
 void crear_nuevo_query(char* query_path, uint32_t prioridad) {
     t_query* nuevo_query = crear_query(query_path, prioridad);
 
-    // TODO hilo con temporizador para aging posiblemente
+    // TODO REPETIDO 1 hilo con temporizador para aging posiblemente
     //inicializar_temporizador_query(nuevo_query);
     t_elemento_cola* nuevo_elemento = crear_nuevo_elemento(nuevo_query);
 
@@ -49,7 +49,7 @@ t_elemento_cola* crear_nuevo_elemento(t_query* query) {
     t_elemento_cola* nuevo_elemento = malloc(sizeof(t_elemento_cola));
 
     nuevo_elemento->query=query;
-    //TODO : Aquí seguro vaya un temporizador u algún hilo para lo de aging si es que está activo
+    //TODO REPETIDO 1: Aquí seguro vaya un temporizador u algún hilo para lo de aging si es que está activo
     nuevo_elemento->tiempo_llegada=timestamp_actual_en_milisegundos();
 
     return nuevo_elemento;
@@ -128,8 +128,14 @@ void planificar_por_fifo() {
         list_remove_element(cola_ready, mas_antiguo);
         UNLOCK(&mutex_cola_ready);
 
-        //TODO enviar algún worker libre;
-    }
+        // TODO Arreglar esto para cuando no haya workers libres/se deba desalojar
+        t_worker_conectado* worker_libre = obtener_worker_libre();
+        agregar_siguiente_query_a_enviar(mas_antiguo->query, worker_libre);
+        
+        LOCK(&mutex_cola_exec);
+        list_add(cola_exec, mas_antiguo);
+        UNLOCK(&mutex_cola_exit);
+    }   
 }
 
 
