@@ -10,6 +10,15 @@ uint32_t extraer_uint32(void* stream, int* desplazamiento) {
     return value;
 }
 
+int extraer_int(void* stream, int* desplazamiento) {
+    uint32_t value;
+   
+    memcpy(&value, (char*)stream + *desplazamiento, sizeof(int));
+    *desplazamiento += sizeof(int);
+
+    return value;
+}
+
 char* extraer_string(void* stream, int* offset) {
     uint32_t longitud = extraer_uint32(stream, offset);
     char* string = malloc(longitud);
@@ -69,4 +78,32 @@ t_pedido_query_master* desempaquetar_pedido_query_master(void* stream) {
     recepcion_pedido->path_query = extraer_string(stream, &offset);
 
     return recepcion_pedido;
+}
+
+t_pedido_master_worker* desempaquetar_pedido_master_worker(void* stream) {
+    int offset = 0;
+    t_pedido_master_worker* recepcion_pedido = malloc(sizeof(t_pedido_master_worker));
+
+    memcpy(&(recepcion_pedido->motivo), stream + offset, sizeof(t_motivo_pedido_master_worker));
+    offset += sizeof(t_motivo_pedido_master_worker);
+
+    recepcion_pedido->query_id = extraer_uint32(stream, &offset);
+
+    recepcion_pedido->program_counter = extraer_uint32(stream, &offset);
+
+    recepcion_pedido->query_path = extraer_string(stream, &offset);
+
+    return recepcion_pedido;
+}
+
+t_aviso_worker_master* desempaquetar_aviso_worker_master(void* stream) {
+    int offset = 0;
+    t_aviso_worker_master* recepcion_aviso = malloc(sizeof(t_aviso_worker_master));
+
+    memcpy(&(recepcion_aviso->tipo_aviso), stream + offset, sizeof(t_tipo_aviso_worker_master));
+    offset += sizeof(t_tipo_aviso_worker_master);
+
+    recepcion_aviso->argumento = extraer_string(stream, &offset);
+
+    return recepcion_aviso;
 }

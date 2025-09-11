@@ -17,6 +17,11 @@ int main(int argc, char** argv)
 	archivo_query = argv[2];
     prioridad = atoi(argv[3]);
 
+	if (prioridad < 0) {
+		printf("La prioridad debe ser un valor mayor o igual a 0\n");
+		return EXIT_FAILURE;
+	}
+
 	config = iniciar_config(logger, archivo_config);
 
 	log_level = obtener_log_level_config(config);

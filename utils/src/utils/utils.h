@@ -92,6 +92,19 @@ typedef enum {
 } t_tipo_mensaje_query;
 
 
+typedef enum {
+    PEDIDO_QUERY,
+    INTERRUPCION
+} t_motivo_pedido_master_worker;
+
+typedef enum {
+    FINALIZACION_QUERY,
+    NUEVA_LECTURA,
+    DEVOLUCION_X_INTERRUPCION,
+    DESCONEXION
+} t_tipo_aviso_worker_master;
+
+
 // ------------------------------------------------------------------------------------------
 // -- Structs --
 // ------------------------------------------------------------------------------------------
@@ -110,6 +123,20 @@ typedef struct
     uint32_t prioridad;
     char* path_query;
 }t_pedido_query_master;
+
+
+typedef struct
+{
+    t_motivo_pedido_master_worker motivo;
+    uint32_t query_id;
+    uint32_t program_counter;
+    char* query_path;
+}t_pedido_master_worker;
+
+typedef struct {
+    t_tipo_aviso_worker_master tipo_aviso;
+    char* argumento;
+}t_aviso_worker_master;
 
 
 // ------------------------------------------------------------------------------------------
