@@ -50,12 +50,12 @@ void* manejar_query(void* arg) {
 
                 log_info(get_logger(), "Nuevo pedido de Query. Path: %s - Prioridad: %d - Tipo: %d", path_query, prioridad, tipo);
 
+                crear_nuevo_query(path_query, prioridad);
+
                 free(pedido->path_query);
                 free(pedido);
                 free(buffer);  
                 
-                crear_nuevo_query(path_query, prioridad);
-
                 break;
                 
             default:

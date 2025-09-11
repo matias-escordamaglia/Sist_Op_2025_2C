@@ -89,7 +89,7 @@ t_elemento_cola* obtener_mas_antiguo(t_list* cola) {
 }
 
 //TODO anañadirlo en master.c con algún hilo
-void *iniciador_planificacion() {
+void *main_planificacion() {
     //Iniciar semaforos corto plazo -> iniciar_sem_cp();
 
     inicializar_listas_planificacion();

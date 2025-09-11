@@ -137,7 +137,6 @@ bool enviar_siguiente_query(t_worker_conectado* worker, t_pedido_master_worker* 
 }
 
 
-//TODO levantar esto en un hilo en master.c
 void* tratar_siguientes_queries_a_enviar(void* _) {
     cola_envio_queries = queue_create();
 
