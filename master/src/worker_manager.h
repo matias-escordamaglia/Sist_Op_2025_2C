@@ -39,9 +39,5 @@ t_worker_conectado* obtener_worker_libre();
 void establecer_worker_desalojado(uint32_t id_worker);
 void remover_cpu(t_worker_conectado* worker);
 
-void agregar_siguiente_proceso_a_enviar(t_query* query, t_worker_conectado* worker_libre);
-bool enviar_siguiente_query(t_worker_conectado* worker, t_pedido_master_worker* sig_pedido);
-void* tratar_siguientes_queries_a_enviar(void* _);
-
 
 #endif /* WORKER_MANAGER_H_ */
