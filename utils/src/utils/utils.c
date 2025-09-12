@@ -185,6 +185,26 @@ void* recibir_buffer(int* size, int socket_cliente)
 	return buffer;
 }
 
+void* recibir_buffer_con_logger(int* size, int socket_cliente, t_log* logger)
+{
+	void * buffer;
+
+	if (recv(socket_cliente, size, sizeof(int), MSG_WAITALL) <= 0) {
+        return NULL;
+	}
+
+    buffer = malloc(*size);
+
+    if (recv(socket_cliente, buffer, *size, MSG_WAITALL) <= 0) {
+        free(buffer);
+        return NULL;
+    }
+
+	log_info(logger, "DEBUG: Tamaño recibido: %d bytes", *size);
+
+	return buffer;
+}
+
 void recibir_mensaje(int socket_cliente, t_log* logger)
 {
     int size;
@@ -302,6 +322,18 @@ t_config* iniciar_config(t_log* logger, char* modulo)
 	return nuevo_config;
 }
 
+t_config* iniciar_config_vieja(t_log* logger, char* modulo)
+{
+	t_config* nuevo_config = config_create(modulo);
+    
+	if (nuevo_config == NULL) {
+        log_error(logger, "No se pudo leer el archivo de configuración.");
+        abort();
+    }
+
+	return nuevo_config;
+}
+
 t_log_level obtener_log_level_config(t_config* config) {
 
 	t_log_level log_level;
@@ -342,7 +374,7 @@ Que haga pedidos de cosas para ingresar en la prueba de conexion
 void establecer_datos_para_prueba_conexion() {
 	char respuesta[10];
 	bool continua_el_while = true;
-	bool realizar_prueba;
+	//bool realizar_prueba;
 
     while (continua_el_while) {
         
@@ -354,10 +386,10 @@ void establecer_datos_para_prueba_conexion() {
         respuesta[strcspn(respuesta, "\n")] = 0;
 
         if (strcasecmp(respuesta, "Si") == 0) {
-            realizar_prueba = true;
+            //realizar_prueba = true;
 			continua_el_while = false;
         } else if (strcasecmp(respuesta, "No") == 0) {
-            realizar_prueba = false;
+            //realizar_prueba = false;
 			continua_el_while = false;
         } else {
             printf("Respuesta inválida. Por favor, escriba 'Si' o 'No'.\n");

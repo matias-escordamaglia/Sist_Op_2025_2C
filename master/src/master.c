@@ -1,7 +1,8 @@
 #include "master.h"
 
 
-
+pthread_t hilo_planificacion;
+pthread_t hilo_pedidos_a_enviar_worker;
 pthread_t hilo_principal;
 
 
@@ -20,6 +21,13 @@ int main(int argc, char** argv) {
     iniciar_master_state(logger, config);
     
     iniciar_semaforos();
+    iniciar_worker_manager();
+
+    pthread_create(&hilo_pedidos_a_enviar_worker, NULL, tratar_siguientes_queries_a_enviar, NULL);
+    pthread_detach(hilo_pedidos_a_enviar_worker);
+    
+    pthread_create(&hilo_planificacion, NULL, main_planificacion, NULL);
+    pthread_detach(hilo_planificacion);
 
     
     char* puerto_escucha = config_get_string_value(get_config(), "PUERTO_ESCUCHA");

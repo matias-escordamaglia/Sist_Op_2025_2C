@@ -17,6 +17,11 @@ int main(int argc, char** argv)
 	archivo_query = argv[2];
     prioridad = atoi(argv[3]);
 
+	if (prioridad < 0) {
+		printf("La prioridad debe ser un valor mayor o igual a 0\n");
+		return EXIT_FAILURE;
+	}
+
 	config = iniciar_config(logger, archivo_config);
 
 	log_level = obtener_log_level_config(config);
@@ -41,6 +46,18 @@ int main(int argc, char** argv)
 	handshake(conexion, HANDSHAKE_QUERY_MASTER, logger, "QUERY");
 
     //Enviar prioridad y query a master
+	t_pedido_query_master* pedido_inicial = malloc(sizeof(t_pedido_query_master));
+	pedido_inicial->tipo = QUERY_NUEVA_CONEXION;
+	pedido_inicial->prioridad = prioridad;
+	pedido_inicial->path_query = archivo_query;
+
+	t_paquete* paquete = empaquetar_pedido_query_master(pedido_inicial);
+
+	enviar_paquete(paquete, conexion);
+
+	log_info(logger, "Pedido enviado. Path: %s - Prioridad: %d", pedido_inicial->path_query, pedido_inicial->prioridad);
+
+	free(pedido_inicial);
 
 	/*
 	Posiblemente lo siguiente no deba ser un while, debe revisarse

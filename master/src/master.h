@@ -15,7 +15,8 @@
 #include "sync.h"
 
 #include "manejo_query.h"
-#include "manejo_worker.h"
+#include "worker_conexion.h"
+#include "worker_manager.h"
 
 t_log* logger;
 t_config* config;

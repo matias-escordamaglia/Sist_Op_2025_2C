@@ -8,7 +8,7 @@ void* manejar_query(void* arg) {
     log_info(get_logger(), "## Master - QUERY conectado  - FD del socket: %d", cliente_fd);
     
     // Enviar confirmación de handshake
-    uint32_t confirmacion = 0; // OK
+    uint32_t confirmacion = HANDSHAKE_OK;
     send(cliente_fd, &confirmacion, sizeof(uint32_t), 0);
     
 
@@ -28,17 +28,33 @@ void* manejar_query(void* arg) {
                 
             case PAQUETE:
 
-                t_list* lista = recibir_paquete(cliente_fd, get_logger());
-                if (lista == NULL || list_size(lista) == 0) {
-                    log_error(get_logger(), "[QUERY] Error al recibir el paquete o paquete vacío");
+                int size;
+                void* buffer = recibir_buffer(&size, cliente_fd);
+                if (buffer == NULL) {
+                    log_error(get_logger(), "[QUERY] Error al recibir el buffer");
                     return NULL;
                 }
-        
-                //void* buffer = list_get(lista, 0);
                 
-                //Realizar cosas en caso que llegue un paquete
+				t_pedido_query_master* pedido = desempaquetar_pedido_query_master(buffer);
+                
+                if (!pedido) {
+					log_error(get_logger(), "Error al desempaquetar pedido de QUERY");
+                    free(buffer);
+					break;
+				}
 
-                list_destroy_and_destroy_elements(lista, free);
+
+                char* path_query = pedido->path_query;
+                uint32_t prioridad = pedido->prioridad;
+                t_tipo_mensaje_query tipo = pedido->tipo;
+
+                log_info(get_logger(), "Nuevo pedido de Query. Path: %s - Prioridad: %d - Tipo: %d", path_query, prioridad, tipo);
+
+                crear_nuevo_query(path_query, prioridad);
+
+                free(pedido->path_query);
+                free(pedido);
+                free(buffer);  
                 
                 break;
                 

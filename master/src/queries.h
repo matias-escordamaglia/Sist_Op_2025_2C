@@ -1,10 +1,12 @@
-#ifndef WORKER_H_
-#define WORKER_H_
+#ifndef QUERIES_H_
+#define QUERIES_H_
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <stdbool.h>
 #include <pthread.h>
+#include <string.h>
 #include <unistd.h>
 #include <signal.h>
 #include <commons/log.h>
@@ -13,9 +15,13 @@
 
 #include "./utils/utils.h"
 #include "sync.h"
+#include "planificacion.h"
 
 
-void* manejar_worker(void* arg);
+
+t_query* crear_query(char* query_path, uint32_t prioridad);
+uint32_t establecer_siguiente_valor_qid();
 
 
-#endif /* WORKER_H_ */
+
+#endif /* QUERIES_H_ */

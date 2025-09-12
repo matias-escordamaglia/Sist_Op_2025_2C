@@ -3,6 +3,7 @@
 
 char* archivo_config;
 uint32_t id_worker;
+int block_size;
 
 pthread_t hilo_master;
 pthread_t hilo_storage;
@@ -31,19 +32,17 @@ int main(int argc, char** argv)
 	ip_master = config_get_string_value(config, "IP_MASTER");
 	puerto_master = config_get_string_value(config, "PUERTO_MASTER");
 
-    conexion_storage = crear_conexion(ip_master, puerto_master, logger);
+    conexion_storage = crear_conexion(ip_storage, puerto_storage, logger);
 
     if (conexion_storage == -1) {
-        log_error(logger, "No se pudo establecer conexión con el MASTER. Abortando.");
+        log_error(logger, "No se pudo establecer conexión con STORAGE. Abortando.");
         terminar_programa(conexion_storage, -99, logger, config);
         exit(EXIT_FAILURE);
     }
     
 
-    handshake_con_identificador_worker(conexion_storage, 1, id_worker, logger, "WORKER");
-	
-
-    //Recién luego de que se conecta con storage se debe conectar con master 
+    handshake_con_identificador_worker(conexion_storage, 1, id_worker, logger, "STORAGE");
+    recv(conexion_storage, &block_size, sizeof(int), MSG_WAITALL);
 
 	conexion_master = crear_conexion(ip_master, puerto_master, logger);
 
@@ -53,7 +52,7 @@ int main(int argc, char** argv)
         exit(EXIT_FAILURE);
     }
     
-	handshake(conexion_master, HANDSHAKE_WORKER_MASTER, logger, "WORKER");
+    handshake_con_identificador_worker(conexion_master, 1, id_worker, logger, "MASTER");
 
     int* server_fd_copia_storage = malloc(sizeof(int));
     *server_fd_copia_storage = conexion_storage;
@@ -79,11 +78,6 @@ void* manejar_storage(void* arg) {
     free(arg);
     
     log_info(logger, " Worker - STORAGE conectado  - FD del socket: %d", conexion);
-    
-    // Enviar confirmación de handshake
-    uint32_t confirmacion = 0; // OK
-    send(conexion, &confirmacion, sizeof(uint32_t), 0);
-    
 
     while (1) {	
         int cod_op = recibir_operacion(conexion, logger);
@@ -101,20 +95,16 @@ void* manejar_storage(void* arg) {
                 
             case PAQUETE:
 
-                t_list* lista = recibir_paquete(conexion, logger);
-                if (lista == NULL || list_size(lista) == 0) {
-                    log_error(logger, "[STORAGE] Error al recibir el paquete o paquete vacío");
+                int size;
+                void* buffer = recibir_buffer(&size, conexion);
+                if (buffer == NULL) {
+                    log_error(logger, "Error al recibir el buffer de STORAGE");
                     return NULL;
                 }
-        
-                //void* buffer = list_get(lista, 0);
                 
-                //Realizar cosas en caso que llegue un paquete
 
-                list_destroy_and_destroy_elements(lista, free);
-                
                 break;
-                
+
             default:
                 log_warning(logger, "Código de operación desconocido de QUERY: %d", cod_op);
                 break;
@@ -130,11 +120,6 @@ void* manejar_master(void* arg) {
     free(arg);
     
     log_info(logger, " Worker - MASTER conectado  - FD del socket: %d", conexion);
-    
-    // Enviar confirmación de handshake
-    uint32_t confirmacion = 0; // OK
-    send(conexion, &confirmacion, sizeof(uint32_t), 0);
-    
 
     while (1) {
         int cod_op = recibir_operacion(conexion, logger);
@@ -152,18 +137,41 @@ void* manejar_master(void* arg) {
                 
             case PAQUETE:
 
-                t_list* lista = recibir_paquete(conexion, logger);
-                if (lista == NULL || list_size(lista) == 0) {
-                    log_error(logger, "[MASTER] Error al recibir el paquete o paquete vacío");
+                int size;
+                void* buffer = recibir_buffer(&size, conexion);
+                if (buffer == NULL) {
+                    log_error(logger, "Error al recibir el buffer de MASTER");
                     return NULL;
                 }
-        
-                //void* buffer = list_get(lista, 0);
                 
-                //Realizar cosas en caso que llegue un paquete
+                t_pedido_master_worker* pedido = desempaquetar_pedido_master_worker(buffer);
+                
+                if (!pedido) {
+                    log_error(logger, "Error al desempaquetar pedido de MASTER");
+                    free(buffer);
+                    break;
+                }
 
-                list_destroy_and_destroy_elements(lista, free);
-                
+                t_motivo_pedido_master_worker motivo = pedido->motivo;
+                char* path_query = pedido->query_path;
+                uint32_t pc = pedido->program_counter;
+                uint32_t qid = pedido->query_id;
+
+                log_info(logger, "Nuevo pedido de Query. Query ID: %d - Path: %s - Program Count: %d - Motivo: %d " 
+                                            , qid, path_query, pc, motivo);
+
+                char* mensaje  = " holis"; 
+                t_tipo_aviso_worker_master tipo_aviso = NUEVA_LECTURA;
+                t_paquete* paquete_resp = crear_paquete();
+    
+                insertar_variable_a_paquete(paquete_resp, &(tipo_aviso), sizeof(t_tipo_aviso_worker_master));
+                insertar_string_a_paquete(paquete_resp, mensaje);
+                enviar_paquete(paquete_resp,conexion);
+
+                free(pedido->query_path);
+                free(pedido);
+                free(buffer); 
+
                 break;
                 
             default:
