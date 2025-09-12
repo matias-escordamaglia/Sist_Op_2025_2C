@@ -3,6 +3,10 @@
 uint32_t id_worker;
 
 void* manejar_worker(void* arg) {
+
+    uint32_t id_worker;
+
+
     t_conexion_identificada* conexion = (t_conexion_identificada*)arg;
     int cliente_fd = conexion->socket_fd;
     free(conexion);
@@ -72,8 +76,9 @@ void* manejar_worker(void* arg) {
                     break;
                 }
 
-                /*Hacer algo con el aviso*/
                 
+                log_info(get_logger(), "Mensaje: %s, Motivo: %d", aviso->argumento, aviso->tipo_aviso);
+
                 break;
                 
             default:
