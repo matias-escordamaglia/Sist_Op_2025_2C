@@ -76,3 +76,7 @@ t_paquete* empaquetar_aviso_worker_master(t_aviso_worker_master* aviso) {
 
     return paquete;
 }
+
+int enviar_instruccion_a_storage(int conexion_storage, char* tag, int tamanio, int operacion){
+ 
+}    

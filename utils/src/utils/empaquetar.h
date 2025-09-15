@@ -13,6 +13,8 @@ void insertar_string_a_paquete(t_paquete* paquete, char* string);
 void insertar_uint32_a_paquete(t_paquete* paquete, uint32_t valor);
 void insertar_int_a_paquete(t_paquete* paquete, int valor);
 
+int enviar_instruccion_a_storage(int conexion_storage, char* tag, int tamanio, int operacion);
+
 t_paquete* empaquetar_para_prueba_conexion(t_prueba_conexion* prueba);
 t_paquete* empaquetar_pedido_query_master(t_pedido_query_master* pedido);
 t_paquete* empaquetar_pedido_master_worker(t_pedido_master_worker* pedido);

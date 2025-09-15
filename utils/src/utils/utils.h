@@ -35,6 +35,18 @@ typedef enum {
     HANDSHAKE_FALLO
 } t_estado_handshake;
 
+typedef enum {
+    CREATE,
+    TRUNCATE,
+    WRITE,
+    READ,
+    TAG,
+    COMMIT,
+    FLUSH,
+    DELETE,
+    END
+} Operation;
+
 typedef struct
 {
 	int size;

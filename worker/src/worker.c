@@ -151,6 +151,8 @@ void* manejar_master(void* arg) {
                     free(buffer);
                     break;
                 }
+                
+                envioAQueryInterpreter(pedido);
 
                 t_motivo_pedido_master_worker motivo = pedido->motivo;
                 char* path_query = pedido->query_path;
