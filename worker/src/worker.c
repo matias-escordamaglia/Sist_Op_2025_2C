@@ -95,20 +95,16 @@ void* manejar_storage(void* arg) {
                 
             case PAQUETE:
 
-                t_list* lista = recibir_paquete(conexion, logger);
-                if (lista == NULL || list_size(lista) == 0) {
-                    log_error(logger, "[STORAGE] Error al recibir el paquete o paquete vacío");
+                int size;
+                void* buffer = recibir_buffer(&size, conexion);
+                if (buffer == NULL) {
+                    log_error(logger, "Error al recibir el buffer de STORAGE");
                     return NULL;
                 }
-        
-                //void* buffer = list_get(lista, 0);
                 
-                //Realizar cosas en caso que llegue un paquete
 
-                list_destroy_and_destroy_elements(lista, free);
-                
                 break;
-                
+
             default:
                 log_warning(logger, "Código de operación desconocido de QUERY: %d", cod_op);
                 break;
@@ -141,18 +137,43 @@ void* manejar_master(void* arg) {
                 
             case PAQUETE:
 
-                t_list* lista = recibir_paquete(conexion, logger);
-                if (lista == NULL || list_size(lista) == 0) {
-                    log_error(logger, "[MASTER] Error al recibir el paquete o paquete vacío");
+                int size;
+                void* buffer = recibir_buffer(&size, conexion);
+                if (buffer == NULL) {
+                    log_error(logger, "Error al recibir el buffer de MASTER");
                     return NULL;
                 }
-        
-                //void* buffer = list_get(lista, 0);
                 
-                //Realizar cosas en caso que llegue un paquete
+                t_pedido_master_worker* pedido = desempaquetar_pedido_master_worker(buffer);
+                
+                if (!pedido) {
+                    log_error(logger, "Error al desempaquetar pedido de MASTER");
+                    free(buffer);
+                    break;
+                }
+                
+                envioAQueryInterpreter(pedido);
 
-                list_destroy_and_destroy_elements(lista, free);
-                
+                t_motivo_pedido_master_worker motivo = pedido->motivo;
+                char* path_query = pedido->query_path;
+                uint32_t pc = pedido->program_counter;
+                uint32_t qid = pedido->query_id;
+
+                log_info(logger, "Nuevo pedido de Query. Query ID: %d - Path: %s - Program Count: %d - Motivo: %d " 
+                                            , qid, path_query, pc, motivo);
+
+                char* mensaje  = " holis"; 
+                t_tipo_aviso_worker_master tipo_aviso = NUEVA_LECTURA;
+                t_paquete* paquete_resp = crear_paquete();
+    
+                insertar_variable_a_paquete(paquete_resp, &(tipo_aviso), sizeof(t_tipo_aviso_worker_master));
+                insertar_string_a_paquete(paquete_resp, mensaje);
+                enviar_paquete(paquete_resp,conexion);
+
+                free(pedido->query_path);
+                free(pedido);
+                free(buffer); 
+
                 break;
                 
             default:

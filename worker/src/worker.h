@@ -11,12 +11,13 @@
 #include <commons/string.h>
 #include <commons/config.h>
 #include <readline/readline.h>
-
+#include "queryInterpreter.h"
 #include "./utils/utils.h"
 #include "./utils/empaquetar.h"
 #include "./utils/desempaquetar.h"
+#include "utilsWorker.h"
 
-int conexion_storage;
+// int ;
 char* ip_storage;
 char* puerto_storage;
 

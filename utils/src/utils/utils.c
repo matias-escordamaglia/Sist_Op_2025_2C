@@ -374,7 +374,7 @@ Que haga pedidos de cosas para ingresar en la prueba de conexion
 void establecer_datos_para_prueba_conexion() {
 	char respuesta[10];
 	bool continua_el_while = true;
-	bool realizar_prueba;
+	//bool realizar_prueba;
 
     while (continua_el_while) {
         
@@ -386,10 +386,10 @@ void establecer_datos_para_prueba_conexion() {
         respuesta[strcspn(respuesta, "\n")] = 0;
 
         if (strcasecmp(respuesta, "Si") == 0) {
-            realizar_prueba = true;
+            //realizar_prueba = true;
 			continua_el_while = false;
         } else if (strcasecmp(respuesta, "No") == 0) {
-            realizar_prueba = false;
+            //realizar_prueba = false;
 			continua_el_while = false;
         } else {
             printf("Respuesta inválida. Por favor, escriba 'Si' o 'No'.\n");
