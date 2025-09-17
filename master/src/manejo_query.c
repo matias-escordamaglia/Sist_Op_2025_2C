@@ -46,9 +46,8 @@ void* manejar_query(void* arg) {
 
                 char* path_query = pedido->path_query;
                 uint32_t prioridad = pedido->prioridad;
-                t_tipo_mensaje_query tipo = pedido->tipo;
 
-                log_info(get_logger(), "Nuevo pedido de Query. Path: %s - Prioridad: %d - Tipo: %d", path_query, prioridad, tipo);
+                log_info(get_logger(), "Nuevo pedido de Query. Path: %s - Prioridad: %d", path_query, prioridad);
 
                 crear_nuevo_query(path_query, prioridad);
 

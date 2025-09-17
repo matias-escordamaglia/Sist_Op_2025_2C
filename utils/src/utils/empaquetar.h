@@ -17,6 +17,7 @@ int enviar_instruccion_a_storage(int conexion_storage, char* tag, int tamanio, i
 
 t_paquete* empaquetar_para_prueba_conexion(t_prueba_conexion* prueba);
 t_paquete* empaquetar_pedido_query_master(t_pedido_query_master* pedido);
+t_paquete* empaquetar_aviso_master_query(t_aviso_master_query* aviso);
 t_paquete* empaquetar_pedido_master_worker(t_pedido_master_worker* pedido);
 t_paquete* empaquetar_aviso_worker_master(t_aviso_worker_master* aviso);
 
