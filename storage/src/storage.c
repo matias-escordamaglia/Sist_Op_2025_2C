@@ -254,7 +254,7 @@ void inicializar_dir_physic_block( char* ruta){
         snprintf(ruta_block, sizeof(ruta_block), "/block%04d.dat", i);
         char* ruta_final = add_seg_ruta(ruta, ruta_block);
         crear_bloque(ruta_final, BLOCK_SIZE); 
-        log_info(logger,"Bloque %s  fué creado exitosamente",ruta_block);
+        //log_info(logger,"Bloque %s  fué creado exitosamente",ruta_block);
         free(ruta_final); 
         if(i == cant_bloques - 1)
             log_info(logger, "Se crearon %d bloques exitosamente", cant_bloques);
