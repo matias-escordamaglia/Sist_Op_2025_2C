@@ -12,10 +12,14 @@
 #include <dirent.h>
 #include <sys/stat.h>
 #include <errno.h>
+#include <fcntl.h>
+#include <sys/mman.h>
+
 
 #include <commons/log.h>
 #include <commons/config.h>
 #include "./utils/utils.h"
+#include <commons/bitarray.h>
 
 #include "manejo-worker.h"
 
@@ -28,6 +32,9 @@ int RETARDO_ACCESO_BLOQUE;
 
 int BLOCK_SIZE; 
 int FS_SIZE; 
+
+// bitarray
+ t_bitarray* BA_bitmap; 
 
 
 t_log_level log_level;

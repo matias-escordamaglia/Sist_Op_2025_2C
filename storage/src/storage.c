@@ -112,10 +112,14 @@ void iniciar_estructuras(){
     {
 
         //cargar estructuras existentes
-        //cargar_bitmap();
-        return 0; 
-    
+        //cargar_bitmap();    
     }
+}
+void finalizar_FS(){
+    config_destroy(config);
+    log_destroy(logger); 
+    bitarray_destroy ( BA_bitmap);
+
 }
 bool existe_archivo(char *path){
     FILE *f = fopen(path, "r");
@@ -220,8 +224,30 @@ void inicializar_super_block_config(){
 
 }
 void inicializar_bitmap(const char* ruta){
-    FILE* f = fopen("bitmap.bin", "w+r"); 
-
+    //ya que vamos a usar mmap menor utilizamos file descriptors 
+    int tam_bitmap = ((FS_SIZE / BLOCK_SIZE + 7)/8) ; 
+    int fd = open( ruta, O_RDWR | O_CREAT, 0666); 
+    if (fd == -1) {
+        log_error(logger, "error abriendo %s: %s", ruta, strerror(errno));
+        exit(1);
+    }
+    if (ftruncate(fd, tam_bitmap) == -1) {
+        log_error(logger, "error truncado %s: %s", ruta, strerror(errno)); 
+        close(fd);
+        exit(1);
+    }
+    log_info(logger, "Archivo bitmap.bin creado exitosamente"); 
+    
+    log_info(logger, "mapeando bitmap.bin..."); 
+    char* mmap_BM = mmap(NULL,tam_bitmap,PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0); 
+        if (mmap_BM == MAP_FAILED) {
+        log_error(logger, "error mapeo %s: %s", ruta, strerror(errno)); 
+             exit(1); 
+        }
+    memset(mmap_BM, 0, tam_bitmap);
+    BA_bitmap = bitarray_create_with_mode(mmap_BM,tam_bitmap,MSB_FIRST); 
+    log_info(logger, "BITMAP Creado exitosamente"); 
+    close(fd); 
 
 }
 void inicializar_dir_physic_block( char* ruta){
@@ -326,7 +352,9 @@ void inicializar_dir_logic_block( char* ruta){
     fprintf(f, "TAMAÑO=0\n");
     fprintf(f, "ESTADO=WORK_IN_PROGRESS\n");
     fprintf(f, "BLOCKS=[0]\n");
-    //////////a implementar bitmap////
+    //bitmap marca espacio ocupado
+    bitarray_set_bit(BA_bitmap,0); 
+
     log_info(logger, "Metadata %s creado exitosamente",ruta_absoluta_metadata );
     fclose(f);
 
@@ -359,11 +387,4 @@ void crear_metadata_config(char* ruta){
         perror("Error al crear metadata.config");
         exit(EXIT_FAILURE);
     }
-
-
-}
-
-void finalizar_FS(){
-    config_destroy(config);
-    log_destroy(logger); 
 }
