@@ -17,7 +17,6 @@ int main(int argc, char **argv)
 
     log_level = obtener_log_level_config(config);
     logger = log_create("storage.log", "STORAGE", true, log_level);
-    pasar_logger_a_manejo_worker(logger);
 
     iniciar_estructuras();
 
@@ -100,17 +99,16 @@ void iniciar_estructuras(){
         }
         log_info(logger, "Inicializando estructuras nuevas...");
         inicializar_super_block_config();
+        inicializar_blocks_hash(ruta_block_hash);
         inicializar_dir_physic_block(ruta_f_block); 
         inicializar_bitmap(ruta_bitmap);
-        inicializar_dir_logic_block(ruta_files); 
-
-
-
+        inicializar_dir_logic_block(ruta_files);
+        log_info(logger, "TODAS LAS ESTRUCTURAS ESTA LISTAS");
+ 
 
     }
     else
     {
-
         //cargar estructuras existentes
         //cargar_bitmap();    
     }
@@ -221,6 +219,8 @@ void inicializar_super_block_config(){
     BLOCK_SIZE = config_get_int_value(sp_block_config, "BLOCK_SIZE");
     FS_SIZE = config_get_int_value(sp_block_config, "FS_SIZE");
     log_info(logger, "Archivo superblock.config extraido exitosamente");
+    pasar_log_config_a_manejo_worker(logger,sp_block_config);
+
 
 }
 void inicializar_bitmap(const char* ruta){
@@ -289,7 +289,7 @@ void inicializar_dir_physic_block( char* ruta){
 void crear_bloque(const char* ruta, size_t block_size) {
     FILE *f = fopen(ruta, "wb");
     if (!f) { perror("fopen"); exit(1); }
-    // Rellenar con ceros para asegurar tamaño fijo
+// Rellenar con ceros para asegurar tamaño fijo
     char *buffer = calloc(1, block_size);
     fwrite(buffer, 1, block_size, f);
     free(buffer);
@@ -352,7 +352,7 @@ void inicializar_dir_logic_block( char* ruta){
     fprintf(f, "TAMAÑO=0\n");
     fprintf(f, "ESTADO=WORK_IN_PROGRESS\n");
     fprintf(f, "BLOCKS=[0]\n");
-    //bitmap marca espacio ocupado
+//bitmap marca espacio ocupado
     bitarray_set_bit(BA_bitmap,0); 
 
     log_info(logger, "Metadata %s creado exitosamente",ruta_absoluta_metadata );
@@ -373,11 +373,25 @@ void inicializar_dir_logic_block( char* ruta){
     else {
         log_info(logger, "Directorio %s creado correctamente", ruta_absoluta_dir_log_block); 
     }
+// dentro de esta carpeta creamos el hard link del B. Físico 0.
+    char* ruta_F_block_Base = add_seg_ruta(PUNTO_MONTAJE, "/physical_blocks/block0000.dat");
+    char* ruta_L_block_Base = add_seg_ruta(ruta_absoluta_dir_log_block, "/000000.dat");
+//creación de hard link 
+    if (link(ruta_F_block_Base, ruta_L_block_Base) == -1) {
+    log_error(logger, "No se pudo crear Hard Link BASE. Error: %s", strerror(errno));
+    exit(EXIT_FAILURE);
+    }
+    log_info(logger, "Hard link BASE creado");
+
+
 
     free(ruta_initial_file);
     free(ruta_tag_BASE);
     free(ruta_absoluta_metadata);
     free(ruta_absoluta_dir_log_block);
+    free(ruta_F_block_Base);
+    free(ruta_L_block_Base);
+
 }
 
 void crear_metadata_config(char* ruta){
@@ -388,3 +402,26 @@ void crear_metadata_config(char* ruta){
         exit(EXIT_FAILURE);
     }
 }
+void inicializar_blocks_hash(char* ruta){
+    //aca solo creamos el archivo y lo seteamos
+    FILE* f = fopen(ruta,"wb");
+    if (!f) { perror("Error creando blocks_hash_index"); exit(1); }
+    //rellenamos con valores seteados
+    int cant_bloques = (FS_SIZE/BLOCK_SIZE); 
+    for(int i=0;i<cant_bloques;i++){
+        fprintf(f, "=%d\n", i);  // vacío = bloque libre
+    }
+    log_info(logger,"Block_hash.config creado correctamente");
+    //para la manipulacion de datos usaremos t_config* 
+    config_hash = config_create(ruta);
+    fclose(f);
+
+}
+int busqueda_block_asociado_hash(char* hash){
+    if(config_has_property(config,hash)){ //checkea si existe el hash
+        int bloque = config_get_int_value(config,hash); //devuelve el n° de bloque
+        return bloque; 
+    }
+    return -1; 
+}
+

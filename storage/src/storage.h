@@ -30,6 +30,9 @@ char* PUNTO_MONTAJE;
 int RETARDO_OPERACION;
 int RETARDO_ACCESO_BLOQUE; 
 
+//hash config
+t_config* config_hash; 
+
 int BLOCK_SIZE; 
 int FS_SIZE; 
 
@@ -51,6 +54,8 @@ void inicializar_dir_physic_block(char* );
 void inicializar_bitmap(const char* );
 void crear_bloque(const char* , size_t );
 void inicializar_dir_logic_block( char* );
+void inicializar_blocks_hash(char* );
+
 
 
 

@@ -3,7 +3,8 @@
 t_log* logger_worker;
 t_config* blockconfig = NULL;
 
-void pasar_logger_a_manejo_worker(t_log* l) {
+void pasar_log_config_a_manejo_worker(t_log* l, t_config* c) {
+    blockconfig = c; 
     logger_worker = l;
 } 
 void* manejar_cliente_worker(void* arg) {
@@ -56,9 +57,9 @@ void* atender_conexion_worker(void* arg) {
 
     t_estado_handshake registrado = HANDSHAKE_OK;
     send(cliente_fd, &registrado, sizeof(t_estado_handshake), 0);
+    log_info(logger_worker, "Worker ID: %u se conectó", id_worker); 
     
     
-    blockconfig = iniciar_config_vieja(logger_worker, "superblock.config");
     char* blockSizeChar = config_get_string_value(blockconfig, "BLOCK_SIZE");
     int block_size = atoi(blockSizeChar); 
 
