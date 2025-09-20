@@ -100,9 +100,9 @@ void iniciar_estructuras(){
         }
         log_info(logger, "Inicializando estructuras nuevas...");
         inicializar_super_block_config();
-        inicializar_dir_physic_block(ruta_f_block); 
-        inicializar_bitmap(ruta_bitmap);
-        inicializar_dir_logic_block(ruta_files); 
+        //inicializar_dir_physic_block(ruta_f_block); 
+        //inicializar_bitmap(ruta_bitmap);
+        //inicializar_dir_logic_block(ruta_files); 
 
 
 
