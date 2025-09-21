@@ -105,9 +105,10 @@ typedef enum MotivoMasterWorker{
 } t_motivo_pedido_master_worker;
 
 typedef enum TipoAvisoMasterWorker{
-    FINALIZACION_QUERY,
-    NUEVA_LECTURA,
-    DEVOLUCION_X_INTERRUPCION
+    FINALIZACION_QUERY, // cuando ejecuto un "END"
+    NUEVA_LECTURA, //lo mando al ejecutar un "READ"
+    DEVOLUCION_X_INTERRUPCION // tengo que devoler esto, cuando master me mande en "MotivoMasterWorker"
+    // : INTERRUPCION , entonces devuelvo "DEVOLUCION_X_INTERRUPCION".
 } t_tipo_aviso_worker_master;
 
 typedef enum TipoAvisoMasterQuery{
@@ -153,9 +154,21 @@ typedef struct
 
 typedef struct {
     t_tipo_aviso_worker_master tipo_aviso;
-    char* argumento;
+    char* argumento; // en caso de nueva lectura, envio el "nombre_file:tag contenidoDeLaLectura
+    // (todo en un mismo char*)"
 }t_aviso_worker_master;
 
+
+typedef struct {
+    char** instrucciones;   // array de líneas (una instrucción por línea)
+    size_t cant;            // cantidad de instrucciones
+} t_programa;
+
+typedef struct {
+    Operation op;           // CREATE
+    char* nombre_archivo;
+    char* tag;
+} t_create;
 
 // ------------------------------------------------------------------------------------------
 // -- Funciones --

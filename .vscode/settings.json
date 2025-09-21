@@ -23,6 +23,7 @@
         "config.h": "c",
         "log.h": "c",
         "empaquetar.h": "c",
-        "utilsworker.h": "c"
+        "utilsworker.h": "c",
+        "dictionary.h": "c"
     }
 }
