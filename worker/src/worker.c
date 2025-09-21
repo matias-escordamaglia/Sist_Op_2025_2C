@@ -39,6 +39,8 @@ int main(int argc, char** argv)
         terminar_programa(conexion_storage, -99, logger, config);
         exit(EXIT_FAILURE);
     }
+    char* base = config_get_string_value(config, "PATH_SCRIPTS");
+    cargar_scripts(base, logger);
     
 
     handshake_con_identificador_worker(conexion_storage, 1, id_worker, logger, "STORAGE");
@@ -71,6 +73,30 @@ int main(int argc, char** argv)
 
 
     return 0;
+}
+
+void cargar_scripts(const char* path_base, t_log* logger){
+    DIR* dir = opendir(path_base);
+    if (!dir) {log_error(logger, "No se pudo abrir %s", path_base); return; }
+    if (!diccionario_programas) diccionario_programas = dictionary_create();
+
+    struct dirent* e;
+    char ruta[4096];
+    while ((e = readdir(dir)) != NULL){
+        if (e->d_type != DT_REG) continue;
+
+        if (snprintf(ruta, sizeof(ruta), "%s/%s", path_base, e->d_name) >= (int)sizeof(ruta)){
+            log_error(logger, "Ruta demasiado larga: %s/%s", path_base, e->d_name);
+            continue;
+        }
+
+        t_programa* prog = leer_y_partir(ruta);
+        if (!prog){ log_error(logger, "No se pudo leer %s", ruta); continue; }
+
+        dictionary_put(diccionario_programas, strdup(e->d_name), prog);
+        log_info(logger, "Script registrado: %s (instrucciones=%zu)", e->d_name, prog->cant);
+    }
+    closedir(dir);
 }
 
 void* manejar_storage(void* arg) {
@@ -221,5 +247,40 @@ void terminar_programa(int conexion1, int conexion2, t_log* logger, t_config* co
 	if(conexion2 != -99 ) {
 		close(conexion2);
 	}
-	
+}
+
+void rstrip(char* s){
+    size_t n = strlen(s);
+    while (n && (s[n-1]=='\n'||s[n-1]=='\r'||s[n-1]==' '||s[n-1]=='\t')) s[--n]='\0';
+}
+
+bool vacia_o_coment(const char* s){
+    while (*s==' '||*s=='\t') s++;
+    return (*s=='\0' || *s=='#' || (*s=='/' && *(s+1)=='/'));
+}
+
+t_programa* leer_y_partir(const char* path){
+    FILE* f = fopen(path, "rb");
+    if (!f) return NULL;
+
+    t_programa* p = calloc(1, sizeof(*p));
+    if (!p){ fclose(f); return NULL; }
+
+    char* line = NULL; size_t cap = 0; ssize_t n;
+    while ((n = getline(&line, &cap, f)) != -1){
+        (void)n;
+        rstrip(line);
+        if (vacia_o_coment(line)) continue;
+
+        char* dup = strdup(line);
+        if (!dup){ fclose(f); free(line); return p; } // dejamos lo cargado hasta ahora
+
+        char** nuevo = realloc(p->instrucciones, (p->cant+1)*sizeof(char*));
+        if (!nuevo){ free(dup); fclose(f); free(line); return p; }
+        p->instrucciones = nuevo;
+        p->instrucciones[p->cant++] = dup;
+    }
+    free(line);
+    fclose(f);
+    return p;
 }
