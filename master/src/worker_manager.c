@@ -70,6 +70,15 @@ t_worker_conectado* obtener_worker_libre() {
     return encontrado;
 }
 
+uint32_t get_worker_qid(uint32_t id_worker) {
+    
+    LOCK(&mutex_workers_conectados);
+    t_worker_conectado* worker = obtener_worker_por_id_uso_interno(id_worker);
+    UNLOCK(&mutex_workers_conectados);
+
+    return worker->qid_actual;
+}
+
 
 void establecer_worker_desalojado(uint32_t id_worker) {
     LOCK(&mutex_workers_conectados);

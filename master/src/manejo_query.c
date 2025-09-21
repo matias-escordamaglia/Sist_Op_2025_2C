@@ -66,3 +66,81 @@ void* manejar_query(void* arg) {
     close(cliente_fd);
     return NULL;
 }
+
+
+
+bool mandar_lectura_a_query_con_id(char* string_crudo, uint32_t id_query) {
+
+    
+    char* file_tag;
+    char* lectura;
+
+    if (separar_string(string_crudo, &file_tag, &lectura)) {
+        printf("FILE:TAG: %s\n", file_tag);
+        printf("Lectura: %s\n", lectura);
+       
+    } else {
+        printf("Error al separar el string\n");
+        return false;
+    }
+
+    t_aviso_master_query* aviso_lectura = malloc(sizeof(t_aviso_master_query));
+
+    t_query* query = obtener_query_por_id_uso_externo(id_query);
+
+    aviso_lectura->motivo = LECTURA_QUERY;
+    aviso_lectura->file_tag = file_tag;
+    aviso_lectura->mensaje = lectura;
+
+    t_paquete* paquete = empaquetar_aviso_master_query(aviso_lectura);
+    if (!paquete) {
+        log_error(get_logger(), "[MANEJO_QUERY] No se pudo empaquetar el aviso a query");
+        return false;
+    }
+
+    enviar_paquete(paquete, query->conexion);
+
+    log_info(get_logger(), "[MANEJO_QUERY] Aviso de lectura enviado a Query");
+
+    //TODO pulir esto, revisar que cosas más se deben liberar
+
+    // Liberar memoria
+    free(file_tag);
+    free(lectura);
+
+    return true;
+    
+}
+
+
+bool separar_string(char* input, char** file_tag, char** lectura) {
+    char* espacio = strchr(input, ' ');
+    
+    // Checkea si hay un espacio en el string
+    if (!espacio) {
+        return false;
+    }
+    
+    // Calcular longitudes
+    int len_file_tag = espacio - input;
+    int len_lectura = strlen(espacio + 1);
+    
+    // Alojar memoria
+    *file_tag = malloc(len_file_tag + 1);
+    *lectura = malloc(len_lectura + 1);
+    
+    if (!*file_tag || !*lectura) {
+        // Error de memoria; se libera
+        if (*file_tag) free(*file_tag);
+        if (*lectura) free(*lectura);
+        return false;
+    }
+    
+    // Copiar las partes
+    strncpy(*file_tag, input, len_file_tag);
+    (*file_tag)[len_file_tag] = '\0';
+    
+    strcpy(*lectura, espacio + 1);
+    
+    return true;
+}

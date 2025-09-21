@@ -20,5 +20,9 @@
 void* manejar_query(void* arg);
 
 
+bool mandar_lectura_a_query_con_id(char* string_crudo, uint32_t id_query);
+bool separar_string(char* input, char** file_tag, char** lectura);
+
+
 
 #endif /* MANEJO_QUERY_H_ */

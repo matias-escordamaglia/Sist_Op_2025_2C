@@ -4,6 +4,8 @@ t_list* lista_queries;
 
 static uint32_t contador_qid = 0;
 
+pthread_mutex_t mutex_queries_control_conectados = PTHREAD_MUTEX_INITIALIZER;
+
 t_query* crear_query(char* query_path, uint32_t prioridad, int conexion) {
 
     if (lista_queries == NULL)
@@ -32,6 +34,22 @@ uint32_t establecer_siguiente_valor_qid() {
     return contador_qid++;
 }
 
+t_query* obtener_query_por_id_uso_externo(uint32_t id_query) {
+    
+    LOCK(&mutex_queries_control_conectados);
+    t_query* encontrado = NULL;
+    for (int i = 0; i < list_size(lista_queries); i++) {
+        t_query* query = list_get(lista_queries, i);
+        if (query->query_id == id_query) {
+            encontrado = query;
+            break;
+        }
+    }
+    UNLOCK(&mutex_queries_control_conectados);
+
+    return encontrado;
+}
+
 t_query* obtener_query_por_id_uso_interno(uint32_t id_query) {
     
     t_query* encontrado = NULL;
@@ -47,6 +65,9 @@ t_query* obtener_query_por_id_uso_interno(uint32_t id_query) {
 }
 
 int conexion_de_query_por_id(uint32_t id_query) {
+    LOCK(&mutex_queries_control_conectados);
     t_query* query = obtener_query_por_id_uso_interno(id_query);
+    UNLOCK(&mutex_queries_control_conectados);
     return query->conexion;
 }
+

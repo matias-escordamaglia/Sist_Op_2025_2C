@@ -82,7 +82,11 @@ void* manejar_worker(void* arg) {
                 switch (aviso->tipo_aviso)
                 {
                 case NUEVA_LECTURA:
-                    /* code */
+                    char* lectura = aviso->argumento;
+                    mandar_lectura_a_query_con_id(lectura, get_worker_qid(id_worker));
+
+                    //TODO Liberar memoria
+
                     break;
                     
                 case DEVOLUCION_X_INTERRUPCION: 
