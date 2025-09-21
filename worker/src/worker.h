@@ -27,7 +27,6 @@ char* puerto_master;
 
 t_log_level log_level;
 
-t_log* logger;
 t_config* config;
 t_log_level log_level;
 
@@ -35,5 +34,9 @@ void* manejar_storage(void* arg);
 void* manejar_master(void* arg);
 void handshake_con_identificador_worker(int socket, int valor, uint32_t id_cpu, t_log* logger, char* nombre_modulo);
 void terminar_programa(int conexion1, int conexion2, t_log* logger, t_config* config);
+t_programa* leer_y_partir(const char* path);
+bool vacia_o_coment(const char* s);
+void rstrip(char* s);
+void cargar_scripts(const char* path_base, t_log* logger);
 
 #endif /* WORKER_H_ */

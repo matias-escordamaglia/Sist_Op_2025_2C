@@ -59,6 +59,19 @@ void iniciar_estructuras(){
 
     if (FRESH_START == true){ // Iniciamos un FS desde cero
         log_info(logger, "Iniciando seteo de File System... ");
+
+        if (mkdir(PUNTO_MONTAJE, 0777) == -1) {
+            if (errno == EEXIST) {
+                log_info(logger, "Directorio punto de montaje %s ya existe", PUNTO_MONTAJE);
+            } else {
+                log_error(logger, "No se pudo crear el directorio punto de montaje %s. Error: %s", 
+                         PUNTO_MONTAJE, strerror(errno));
+                exit(EXIT_FAILURE);
+            }
+        } else {
+            log_info(logger, "Directorio punto de montaje %s creado correctamente", PUNTO_MONTAJE);
+        }
+
         char* ruta_bitmap = add_seg_ruta(PUNTO_MONTAJE, "/bitmap.bin"); 
         char* ruta_block_hash = add_seg_ruta(PUNTO_MONTAJE, "/blocks_hash_index.config"); 
         char* ruta_f_block = add_seg_ruta(PUNTO_MONTAJE, "/physical_blocks");
