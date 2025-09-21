@@ -73,7 +73,7 @@ void iniciar_estructuras(){
             }       
         }
         if(existe_archivo(ruta_block_hash)){
-            if (remove(ruta_bitmap) == 0) {
+            if (remove(ruta_block_hash) == 0) {
                 log_info(logger, "Archivo %s borrado correctamente\n", ruta_block_hash);
             } else {
                 log_error(logger, "Error al borrar el archivo");
