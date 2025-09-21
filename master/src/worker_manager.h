@@ -36,6 +36,7 @@ t_worker_conectado* obtener_worker_por_id_uso_interno(uint32_t id_worker);
 t_worker_conectado* obtener_worker_libre();
 void establecer_worker_desalojado(uint32_t id_worker);
 void remover_cpu(t_worker_conectado* worker);
+int cant_workers_conectados();
 
 
 #endif /* WORKER_MANAGER_H_ */

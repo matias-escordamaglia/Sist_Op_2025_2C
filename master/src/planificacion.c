@@ -88,7 +88,7 @@ t_elemento_cola* obtener_mas_antiguo(t_list* cola) {
     return mas_antiguo;
 }
 
-//TODO anañadirlo en master.c con algún hilo
+
 void *main_planificacion() {
     //Iniciar semaforos corto plazo -> iniciar_sem_cp();
 
@@ -128,7 +128,8 @@ void planificar_por_fifo() {
         list_remove_element(cola_ready, mas_antiguo);
         UNLOCK(&mutex_cola_ready);
 
-        // TODO Arreglar esto para cuando no haya workers libres/se deba desalojar
+        // TODO Arreglar esto para cuando no haya workers libres/se deba desalojar, aunque aquí es FIFO
+        sem_wait(cant_workers_libres);
         t_worker_conectado* worker_libre = obtener_worker_libre();
         agregar_siguiente_query_a_enviar(mas_antiguo->query, worker_libre);
         

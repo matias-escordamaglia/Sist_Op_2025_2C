@@ -88,6 +88,10 @@ void remover_worker(t_worker_conectado* worker) {
 }
 
 
+int cant_workers_conectados() {
+    return list_size(workers_conectados);
+}
+
 
 
 

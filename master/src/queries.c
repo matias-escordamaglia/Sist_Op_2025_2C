@@ -17,6 +17,13 @@ t_query* crear_query(char* query_path, uint32_t prioridad) {
 
     list_add(lista_queries, query);
 
+    int grado_multiprocesamiento = cant_workers_conectados();
+    log_info(get_logger(), "## Se conecta un Query Control para ejecutar la Query %s con prioridad %u - " 
+                "Id asignado: %u. Nivel multiprocesamiento %u",
+                query->query_path, query->prioridad, query->query_id, grado_multiprocesamiento);
+
+    
+
 	return query;
 }
 
