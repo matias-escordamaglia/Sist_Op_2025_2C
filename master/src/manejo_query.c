@@ -49,7 +49,7 @@ void* manejar_query(void* arg) {
 
                 log_info(get_logger(), "Nuevo pedido de Query. Path: %s - Prioridad: %d", path_query, prioridad);
 
-                crear_nuevo_query(path_query, prioridad);
+                crear_nuevo_query(path_query, prioridad, cliente_fd);
 
                 free(pedido->path_query);
                 free(pedido);

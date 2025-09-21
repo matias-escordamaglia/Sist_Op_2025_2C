@@ -31,8 +31,8 @@ uint64_t timestamp_actual_en_milisegundos() {
     return (uint64_t)(tv.tv_sec * 1000 + tv.tv_usec / 1000);
 }
 
-void crear_nuevo_query(char* query_path, uint32_t prioridad) {
-    t_query* nuevo_query = crear_query(query_path, prioridad);
+void crear_nuevo_query(char* query_path, uint32_t prioridad, int conexion) {
+    t_query* nuevo_query = crear_query(query_path, prioridad, conexion);
 
     // TODO REPETIDO 1 hilo con temporizador para aging posiblemente
     //inicializar_temporizador_query(nuevo_query);

@@ -28,7 +28,7 @@ typedef struct
 
 void inicializar_listas_planificacion();
 uint64_t timestamp_actual_en_milisegundos();
-void crear_nuevo_query(char* query_path, uint32_t prioridad);
+void crear_nuevo_query(char* query_path, uint32_t prioridad, int conexion);
 t_elemento_cola* crear_nuevo_elemento(t_query* query);
 t_elemento_cola* buscar_y_remover_por_qid(t_list* lista, uint32_t qid);
 void *main_planificacion();

@@ -35,6 +35,7 @@ typedef struct {
     uint32_t prioridad;
     uint32_t program_count;
     char* query_path;
+    int conexion;
 } t_query;
 
 

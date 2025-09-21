@@ -79,6 +79,24 @@ void* manejar_worker(void* arg) {
                 
                 log_info(get_logger(), "Mensaje: %s, Motivo: %d", aviso->argumento, aviso->tipo_aviso);
 
+                switch (aviso->tipo_aviso)
+                {
+                case NUEVA_LECTURA:
+                    /* code */
+                    break;
+                    
+                case DEVOLUCION_X_INTERRUPCION: 
+                    /* code */
+                    break;
+
+                case FINALIZACION_QUERY:
+                    /* code */
+                    break;
+
+                default:
+                    break;
+                }
+
                 break;
                 
             default:
@@ -137,6 +155,8 @@ bool enviar_siguiente_query(t_worker_conectado* worker, t_pedido_master_worker* 
 
     log_info(get_logger(), "[CONEXION] Enviado QID %u con PC %u a Worker %u (FD %d)", 
              sig_pedido->query_id, sig_pedido->program_counter, worker->id_worker, worker->fd_worker);
+
+    //TODO esperar respuesta de CPU para confirmar recepcion
 
     return true;
 }
