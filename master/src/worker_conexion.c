@@ -79,7 +79,8 @@ void* manejar_worker(void* arg) {
                 
                 log_info(get_logger(), "Mensaje: %s, Motivo: %d", aviso->argumento, aviso->tipo_aviso);
 
-                uint32_t query_id = get_worker_qid(id_worker);
+                uint32_t query_id;
+                uint32_t program_counter;
 
                 switch (aviso->tipo_aviso)
                 {
@@ -92,12 +93,17 @@ void* manejar_worker(void* arg) {
                     break;
                     
                 case DEVOLUCION_X_INTERRUPCION: 
-                    uint32_t program_counter = atoi(aviso->argumento);
+                    program_counter = atoi(aviso->argumento);
+                    query_id = get_worker_qid(id_worker);
+                    
                     worker_libera_query(id_worker, query_id, program_counter);
                     break;
 
                 case FINALIZACION_QUERY:
-                    worker_libera_query(id_worker, query_id, -1);
+                    program_counter = atoi(aviso->argumento);
+                    query_id = get_worker_qid(id_worker);
+
+                    worker_libera_query(id_worker, query_id, program_counter);
                     notificar_finalizacion_a_query_control(query_id);
                     break;
 
