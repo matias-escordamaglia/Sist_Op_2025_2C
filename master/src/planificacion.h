@@ -59,6 +59,7 @@ void inicializar_cola_eventos();
 void enviar_evento_planificacion(t_tipo_evento tipo, uint32_t worker_id, uint32_t query_id, uint32_t qc_id);
 void manejar_worker_desconectado(uint32_t worker_id, uint32_t query_id_ejecutando);
 void manejar_query_control_desconectado(uint32_t qc_id, uint32_t query_id_activo);
+void worker_libera_query(uint32_t worker_id, uint32_t query_id, uint32_t pc);
 
 
 #endif /* PLANIFICACION_H_ */

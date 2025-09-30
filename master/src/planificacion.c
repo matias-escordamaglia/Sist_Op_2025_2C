@@ -369,3 +369,26 @@ void manejar_query_control_desconectado(uint32_t qc_id, uint32_t query_id_activo
 
     UNLOCK(&mutex_estado_critico);
 }
+
+void worker_libera_query(uint32_t worker_id, uint32_t query_id, uint32_t pc) {
+    LOCK(&mutex_estado_critico);
+    
+    t_elemento_cola* elemento = NULL;
+    
+    LOCK(&mutex_cola_exec);
+    elemento = buscar_y_remover_por_qid(cola_exec, query_id);
+    UNLOCK(&mutex_cola_exec);
+    
+    if (elemento != NULL) {
+        
+        LOCK(&mutex_cola_exit);
+        list_add(cola_exit, elemento);
+        UNLOCK(&mutex_cola_exit);
+        
+        log_info(get_logger(), "Query %d completado por worker %d", query_id, worker_id);
+    }
+    
+    UNLOCK(&mutex_estado_critico);
+    
+    enviar_evento_planificacion(EVENTO_WORKER_LIBERADO, worker_id, query_id, pc);
+}
