@@ -33,11 +33,13 @@ void iniciar_worker_manager();
 void registrar_worker(uint32_t id_worker, int cliente_fd);
 t_worker_conectado* obtener_worker_por_id_uso_externo(uint32_t id_worker);
 t_worker_conectado* obtener_worker_por_id_uso_interno(uint32_t id_worker);
+t_worker_conectado* obtener_worker_por_query_id(uint32_t query_id);
 t_worker_conectado* obtener_worker_libre();
 uint32_t get_worker_qid(uint32_t id_worker);
 void establecer_worker_desalojado(uint32_t id_worker);
+void marcar_worker_desconectado(uint32_t id_worker);
 void remover_cpu(t_worker_conectado* worker);
-int cant_workers_conectados();
+int get_cant_workers_conectados();
 
 
 #endif /* WORKER_MANAGER_H_ */

@@ -144,3 +144,7 @@ bool separar_string(char* input, char** file_tag, char** lectura) {
     
     return true;
 }
+
+void notificar_error_a_query_control(int conexion_query) {
+    //TODO Realizar aviso de finalizacion por error; hacer polimorfico para finalizacion exitosa?
+}
