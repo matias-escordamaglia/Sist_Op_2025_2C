@@ -33,7 +33,7 @@ uint64_t timestamp_actual_en_milisegundos() {
     return (uint64_t)(tv.tv_sec * 1000 + tv.tv_usec / 1000);
 }
 
-void crear_nuevo_query(char* query_path, uint32_t prioridad, int conexion) {
+t_query* crear_nuevo_query(char* query_path, uint32_t prioridad, int conexion) {
     t_query* nuevo_query = crear_query(query_path, prioridad, conexion);
 
     // TODO REPETIDO 1 hilo con temporizador para aging posiblemente
@@ -47,6 +47,8 @@ void crear_nuevo_query(char* query_path, uint32_t prioridad, int conexion) {
 
     //TODO REVISAR ESTOS 0s
     enviar_evento_planificacion(EVENTO_NUEVA_QUERY, -1, nuevo_query->query_id, 0);
+
+    return nuevo_query;
 }
 
 t_elemento_cola* crear_nuevo_elemento(t_query* query) {

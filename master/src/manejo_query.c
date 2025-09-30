@@ -10,12 +10,15 @@ void* manejar_query(void* arg) {
     // Enviar confirmación de handshake
     uint32_t confirmacion = HANDSHAKE_OK;
     send(cliente_fd, &confirmacion, sizeof(uint32_t), 0);
-    
 
+    t_query* query;
+    
     while (1) {
         int cod_op = recibir_operacion(cliente_fd, get_logger());
         if (cod_op == -1) {
-            log_info(get_logger(), "QUERY desconectado");
+            log_info(get_logger(), "QUERY desconectado, iniciando evento desconexión");
+            t_worker_conectado* worker = obtener_worker_por_query_id(query->query_id);
+            enviar_evento_planificacion(EVENTO_QUERY_CONTROL_DESCONECTADO, worker->id_worker, query->query_id, -1);
             break;
         }
         
@@ -49,7 +52,7 @@ void* manejar_query(void* arg) {
 
                 log_info(get_logger(), "Nuevo pedido de Query. Path: %s - Prioridad: %d", path_query, prioridad);
 
-                crear_nuevo_query(path_query, prioridad, cliente_fd);
+                query = crear_nuevo_query(path_query, prioridad, cliente_fd);
 
                 free(pedido->path_query);
                 free(pedido);

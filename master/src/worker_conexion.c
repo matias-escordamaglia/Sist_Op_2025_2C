@@ -46,9 +46,15 @@ void* manejar_worker(void* arg) {
 
 
     while (1) {
+
+        uint32_t query_id;
+        uint32_t program_counter;
+
         int cod_op = recibir_operacion(cliente_fd, get_logger());
         if (cod_op == -1) {
-            log_info(get_logger(), "WORKER desconectado");
+            log_info(get_logger(), "WORKER desconectado, iniciardo evento desconexion");
+            query_id = get_worker_qid(id_worker);
+            enviar_evento_planificacion(EVENTO_WORKER_DESCONECTADO, id_worker, query_id, -1);
             break;
         }
         
@@ -79,9 +85,6 @@ void* manejar_worker(void* arg) {
                 
                 log_info(get_logger(), "Mensaje: %s, Motivo: %d", aviso->argumento, aviso->tipo_aviso);
 
-                uint32_t query_id;
-                uint32_t program_counter;
-
                 switch (aviso->tipo_aviso)
                 {
                 case NUEVA_LECTURA:
@@ -95,7 +98,7 @@ void* manejar_worker(void* arg) {
                 case DEVOLUCION_X_INTERRUPCION: 
                     program_counter = atoi(aviso->argumento);
                     query_id = get_worker_qid(id_worker);
-                    
+
                     worker_libera_query(id_worker, query_id, program_counter);
                     break;
 
