@@ -112,8 +112,7 @@ typedef enum TipoAvisoMasterWorker{
 
 typedef enum TipoAvisoMasterQuery{
     LECTURA_QUERY,
-    FINALIZACION_EXITOSA_QUERY,
-    FINALIZACION_ERRORONEA_QUERY
+    QUERY_FINALIZADO
 } t_motivo_aviso_master_query;
 
 

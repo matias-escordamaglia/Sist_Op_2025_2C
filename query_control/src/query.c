@@ -60,8 +60,9 @@ int main(int argc, char** argv)
 
 	free(pedido_inicial);
 
-	
-	while (1) {
+	int continuar = 1;
+
+	while (continuar) {
 		int cod_op = recibir_operacion(conexion, logger);
 		if (cod_op == -1) {
 			log_error(logger, "MASTER se desconectó. Terminando QUERY.");
@@ -99,12 +100,9 @@ int main(int argc, char** argv)
 					log_info(logger, "## Lectura realizada: Archivo %s, contenido: %s", aviso->file_tag, aviso->mensaje);
 					break;
 
-				case FINALIZACION_EXITOSA_QUERY:
-					log_info(logger, "## Query Finalizada - Instrucción END");
-					break;
-				
-				case FINALIZACION_ERRORONEA_QUERY:
-					log_error(logger, "## Query Finalizado - ERROR");
+				case QUERY_FINALIZADO:
+					log_info(logger, "## Query Finalizada - %s", aviso->mensaje);
+					continuar = 0;
 					break;
 
 				default:
