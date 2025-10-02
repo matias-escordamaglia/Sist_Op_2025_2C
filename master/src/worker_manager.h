@@ -38,6 +38,7 @@ t_worker_conectado* obtener_worker_libre();
 uint32_t get_worker_qid(uint32_t id_worker);
 void establecer_worker_desalojado(uint32_t id_worker);
 void marcar_worker_desconectado(uint32_t id_worker);
+void marcar_worker_conectado(uint32_t id_worker);
 void remover_cpu(t_worker_conectado* worker);
 int get_cant_workers_conectados();
 

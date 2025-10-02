@@ -313,8 +313,9 @@ void manejar_worker_desconectado(uint32_t worker_id, uint32_t query_id_ejecutand
         }
     }
     
-    // Marcar worker como desconectado también hace wait al semaforo de cantidad
+    // Marcar worker como desconectado y hacer wait a la cantidad de workers libres
     marcar_worker_desconectado(worker_id);
+    sem_wait(cant_workers_libres);
 
     UNLOCK(&mutex_estado_critico);
     
@@ -326,7 +327,7 @@ void manejar_query_control_desconectado(uint32_t qc_id, uint32_t query_id_activo
 
     log_info(get_logger(), "Query Control %d desconectado", qc_id);
     
-    if (query_id_activo != 0) {
+    if (query_id_activo >= 0) {
         t_elemento_cola* elemento = NULL;
         
         // Buscar en READY primero
@@ -389,6 +390,8 @@ void worker_libera_query(uint32_t worker_id, uint32_t query_id, uint32_t pc) {
         
         log_info(get_logger(), "Query %d completado por worker %d", query_id, worker_id);
     }
+
+    establecer_worker_desalojado(worker_id);
     
     UNLOCK(&mutex_estado_critico);
     

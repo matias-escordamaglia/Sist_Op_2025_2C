@@ -23,8 +23,6 @@ void registrar_worker(uint32_t id_worker, int cliente_fd) {
 
     list_add(workers_registrados, worker);
 
-    sem_post(cant_workers_libres);
-
     UNLOCK(&mutex_workers_conectados);
 }
 
@@ -106,9 +104,15 @@ void marcar_worker_desconectado(uint32_t id_worker) {
     LOCK(&mutex_workers_conectados);
     t_worker_conectado* worker  = obtener_worker_por_id_uso_interno(id_worker);
     worker->worker_conectado = false;
+    worker->qid_actual = QID_NULO;
     UNLOCK(&mutex_workers_conectados);
+}
 
-    sem_wait(cant_workers_libres);
+void marcar_worker_conectado(uint32_t id_worker) {
+    LOCK(&mutex_workers_conectados);
+    t_worker_conectado* worker  = obtener_worker_por_id_uso_interno(id_worker);
+    worker->worker_conectado = true;
+    UNLOCK(&mutex_workers_conectados);
 }
 
 void remover_worker(t_worker_conectado* worker) {
