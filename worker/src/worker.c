@@ -188,7 +188,7 @@ void* manejar_master(void* arg) {
                 log_info(logger, "Nuevo pedido de Query. Query ID: %d - Path: %s - Program Count: %d - Motivo: %d " 
                                             , qid, path_query, pc, motivo);
 
-                char* mensaje  = " holis"; 
+                char* mensaje  = "PRUEBA:VERSION1.0 Lectura_de_prueba"; 
                 t_tipo_aviso_worker_master tipo_aviso = NUEVA_LECTURA;
                 t_paquete* paquete_resp = crear_paquete();
     
