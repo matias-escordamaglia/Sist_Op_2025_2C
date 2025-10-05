@@ -34,21 +34,32 @@ void* manejar_worker(void* arg) {
         send(cliente_fd, &ya_registrado, sizeof(t_estado_handshake), 0);
         close(cliente_fd);
         return NULL;
+    } else if(existente != NULL && !(existente->worker_conectado)) {
+        // Marcar como que ya estaba registrado y se volvió a conectar
+        log_warning(get_logger(), "[WORKER_CONEXION] ID de WORKER %u se ha vuelto a conectar.", id_worker);
+        marcar_worker_conectado(id_worker);
+    } else {
+        // Registrar si no existía previamente
+        registrar_worker(id_worker, cliente_fd);
+        log_info(get_logger(), "[WORKER_CONEXION] WORKER %u registrado exitósamente con FD %d", id_worker, cliente_fd);
     }
-
-    // Registrar y confirmar OK
-    registrar_worker(id_worker, cliente_fd);
-    log_info(get_logger(), "[WORKER_CONEXION] WORKER %u registrado exitósamente con FD %d", id_worker, cliente_fd);
 
     t_estado_handshake registrado = HANDSHAKE_OK;
     send(cliente_fd, &registrado, sizeof(t_estado_handshake), 0);
 
+    enviar_evento_planificacion(EVENTO_NUEVO_WORKER_CONECTADO, id_worker, -1, -1);
 
 
     while (1) {
+
+        uint32_t query_id;
+        uint32_t program_counter;
+
         int cod_op = recibir_operacion(cliente_fd, get_logger());
         if (cod_op == -1) {
-            log_info(get_logger(), "WORKER desconectado");
+            log_info(get_logger(), "WORKER desconectado, iniciardo evento desconexion");
+            query_id = get_worker_qid(id_worker);
+            enviar_evento_planificacion(EVENTO_WORKER_DESCONECTADO, id_worker, query_id, -1);
             break;
         }
         
@@ -78,6 +89,33 @@ void* manejar_worker(void* arg) {
 
                 
                 log_info(get_logger(), "Mensaje: %s, Motivo: %d", aviso->argumento, aviso->tipo_aviso);
+
+                switch (aviso->tipo_aviso)
+                {
+                case NUEVA_LECTURA:
+                    char* lectura = aviso->argumento;
+                    mandar_lectura_a_query_con_id(lectura, get_worker_qid(id_worker));
+
+                    break;
+                    
+                case DEVOLUCION_X_INTERRUPCION: 
+                    program_counter = atoi(aviso->argumento);
+                    query_id = get_worker_qid(id_worker);
+
+                    worker_libera_query(id_worker, query_id, program_counter);
+                    break;
+
+                case FINALIZACION_QUERY:
+                    program_counter = atoi(aviso->argumento);
+                    query_id = get_worker_qid(id_worker);
+
+                    worker_libera_query(id_worker, query_id, program_counter);
+                    notificar_finalizacion_a_query_control(query_id);
+                    break;
+
+                default:
+                    break;
+                }
 
                 break;
                 
@@ -137,6 +175,8 @@ bool enviar_siguiente_query(t_worker_conectado* worker, t_pedido_master_worker* 
 
     log_info(get_logger(), "[CONEXION] Enviado QID %u con PC %u a Worker %u (FD %d)", 
              sig_pedido->query_id, sig_pedido->program_counter, worker->id_worker, worker->fd_worker);
+
+    //TODO esperar respuesta de CPU para confirmar recepcion
 
     return true;
 }
