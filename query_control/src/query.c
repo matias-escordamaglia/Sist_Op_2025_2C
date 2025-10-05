@@ -22,12 +22,14 @@ int main(int argc, char** argv)
 		return EXIT_FAILURE;
 	}
 
-	config = iniciar_config(logger, archivo_config);
+	t_log* temp_logger = log_create("query.log", "QUERY", true, LOG_LEVEL_INFO);
+
+	config = iniciar_config(temp_logger, archivo_config);
 
 	log_level = obtener_log_level_config(config);
-
+	log_destroy(temp_logger);
 	logger = log_create("query.log", "QUERY", true, log_level);
-	
+
 
 	ip = config_get_string_value(config, "IP_MASTER");
 	puerto = config_get_string_value(config, "PUERTO_MASTER");
