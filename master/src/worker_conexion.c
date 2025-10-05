@@ -35,19 +35,19 @@ void* manejar_worker(void* arg) {
         close(cliente_fd);
         return NULL;
     } else if(existente != NULL && !(existente->worker_conectado)) {
+        // Marcar como que ya estaba registrado y se volvió a conectar
         log_warning(get_logger(), "[WORKER_CONEXION] ID de WORKER %u se ha vuelto a conectar.", id_worker);
         marcar_worker_conectado(id_worker);
-        enviar_evento_planificacion(EVENTO_NUEVO_WORKER_CONECTADO, id_worker, -1, -1);
+    } else {
+        // Registrar si no existía previamente
+        registrar_worker(id_worker, cliente_fd);
+        log_info(get_logger(), "[WORKER_CONEXION] WORKER %u registrado exitósamente con FD %d", id_worker, cliente_fd);
     }
-
-    // Registrar y confirmar OK
-    registrar_worker(id_worker, cliente_fd);
-    log_info(get_logger(), "[WORKER_CONEXION] WORKER %u registrado exitósamente con FD %d", id_worker, cliente_fd);
-    enviar_evento_planificacion(EVENTO_NUEVO_WORKER_CONECTADO, id_worker, -1, -1);
 
     t_estado_handshake registrado = HANDSHAKE_OK;
     send(cliente_fd, &registrado, sizeof(t_estado_handshake), 0);
 
+    enviar_evento_planificacion(EVENTO_NUEVO_WORKER_CONECTADO, id_worker, -1, -1);
 
 
     while (1) {
