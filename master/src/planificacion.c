@@ -233,7 +233,7 @@ void* manejar_eventos_planificacion(void* args) {
                 break;
                 
             case EVENTO_QUERY_CONTROL_DESCONECTADO:
-                manejar_query_control_desconectado(evento->query_control_id, evento->query_id);
+                manejar_query_control_desconectado(evento->query_id);
                 // No despertar planificador, perdimos queries
                 break;
                 
@@ -270,12 +270,12 @@ void inicializar_cola_eventos() {
     }
 }
 
-void enviar_evento_planificacion(t_tipo_evento tipo, uint32_t worker_id, uint32_t query_id, uint32_t qc_id) {
+void enviar_evento_planificacion(t_tipo_evento tipo, uint32_t worker_id, uint32_t query_id, uint32_t query_pc) {
     t_evento_planificacion* evento = malloc(sizeof(t_evento_planificacion));
     evento->tipo = tipo;
     evento->worker_id = worker_id;
     evento->query_id = query_id;
-    evento->query_control_id = qc_id;
+    evento->program_counter = query_pc;
 
     LOCK(&mutex_cola_eventos);
     queue_push(cola_eventos_planificacion, evento);
@@ -321,11 +321,11 @@ void manejar_worker_desconectado(uint32_t worker_id, uint32_t query_id_ejecutand
     
 }
 
-void manejar_query_control_desconectado(uint32_t qc_id, uint32_t query_id_activo) {
+void manejar_query_control_desconectado(uint32_t query_id_activo) {
 
     LOCK(&mutex_estado_critico);
 
-    log_info(get_logger(), "Query Control %d desconectado", qc_id);
+    log_info(get_logger(), "Query Control %d desconectado", query_id_activo);
     
     if (query_id_activo >= 0) {
         t_elemento_cola* elemento = NULL;

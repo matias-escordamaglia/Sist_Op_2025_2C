@@ -1,4 +1,5 @@
 #include "manejo_query.h"
+#define VALOR_NULO -1
 
 void* manejar_query(void* arg) {
     t_conexion_identificada* conexion = (t_conexion_identificada*)arg;
@@ -17,8 +18,7 @@ void* manejar_query(void* arg) {
         int cod_op = recibir_operacion(cliente_fd, get_logger());
         if (cod_op == -1) {
             log_info(get_logger(), "QUERY desconectado, iniciando evento desconexión");
-            t_worker_conectado* worker = obtener_worker_por_query_id(query->query_id);
-            enviar_evento_planificacion(EVENTO_QUERY_CONTROL_DESCONECTADO, worker->id_worker, query->query_id, -1);
+            enviar_evento_planificacion(EVENTO_QUERY_CONTROL_DESCONECTADO, VALOR_NULO, query->query_id, VALOR_NULO);
             break;
         }
         
