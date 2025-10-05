@@ -133,48 +133,40 @@ void planificar_por_fifo() {
 }
 
 void intentar_asignaciones_fifo() {
-    
-    LOCK(&mutex_estado_critico);
 
     while (true) {
         
-        bool hay_queries = false;
-        
-        LOCK(&mutex_cola_ready);
-        hay_queries = !list_is_empty(cola_ready);
-        UNLOCK(&mutex_cola_ready);
-        
-        if (!hay_queries) {
+        if (sem_trywait(cant_workers_libres) != 0) {
             break;
         }
-        
-        // Verificar workers disponibles (sin bloquear)
-        if (sem_trywait(cant_workers_libres) != 0) {
-            break; 
-        }
-        
-        // Hay query Y worker disponible, proceder con asignación
+
         t_elemento_cola* mas_antiguo = NULL;
         
+        // Obtener query de forma atómica
         LOCK(&mutex_cola_ready);
-        mas_antiguo = obtener_mas_antiguo(cola_ready);
-        if (mas_antiguo != NULL) {
-            list_remove_element(cola_ready, mas_antiguo);
-        }
-        UNLOCK(&mutex_cola_ready);
-        
-        if (mas_antiguo == NULL) {
-            sem_post(cant_workers_libres);
+        if (list_is_empty(cola_ready)) {
+            UNLOCK(&mutex_cola_ready);
+            sem_post(cant_workers_libres); // Devolver worker
             break;
         }
+        mas_antiguo = obtener_mas_antiguo(cola_ready);
+        list_remove_element(cola_ready, mas_antiguo);
+        UNLOCK(&mutex_cola_ready);
         
         // Obtener worker y verificar que siga conectado
         t_worker_conectado* worker_libre = obtener_worker_libre();
+
+        LOCK(&mutex_estado_critico);
+
         if (worker_libre == NULL || !(worker_libre->worker_conectado)) {
             // Worker se desconectó entre tanto, devolver query a ready
             LOCK(&mutex_cola_ready);
             list_add_in_index(cola_ready, 0, mas_antiguo); // Al frente para FIFO
             UNLOCK(&mutex_cola_ready);
+
+            UNLOCK(&mutex_estado_critico);
+
+            sem_post(cant_workers_libres);
             continue;
         }
         
@@ -183,12 +175,12 @@ void intentar_asignaciones_fifo() {
         LOCK(&mutex_cola_exec);
         list_add(cola_exec, mas_antiguo);
         UNLOCK(&mutex_cola_exec);
+
+        UNLOCK(&mutex_estado_critico);
         
         log_info(get_logger(), "Query %d asignado a Worker %d", 
                 mas_antiguo->query->query_id, worker_libre->id_worker);
     }
-
-    UNLOCK(&mutex_estado_critico);
 }
 
 
