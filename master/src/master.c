@@ -11,8 +11,14 @@ int server_fd_general;
 
 int main(int argc, char** argv) {
     
+    char* path_config = argv[1];
 
-    config = iniciar_config(logger, "master.config");
+    if (argc < 2) {
+        printf("Uso correcto: %s <archivo_config[path]>\n", argv[0]);
+        return EXIT_FAILURE;
+    }
+
+    config = iniciar_config(logger, path_config);
 
 	log_level = obtener_log_level_config(config);
 

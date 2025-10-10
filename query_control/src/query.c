@@ -22,12 +22,14 @@ int main(int argc, char** argv)
 		return EXIT_FAILURE;
 	}
 
-	config = iniciar_config(logger, archivo_config);
+	t_log* temp_logger = log_create("query.log", "QUERY", true, LOG_LEVEL_INFO);
+
+	config = iniciar_config(temp_logger, archivo_config);
 
 	log_level = obtener_log_level_config(config);
-
+	log_destroy(temp_logger);
 	logger = log_create("query.log", "QUERY", true, log_level);
-	
+
 
 	ip = config_get_string_value(config, "IP_MASTER");
 	puerto = config_get_string_value(config, "PUERTO_MASTER");
@@ -60,8 +62,9 @@ int main(int argc, char** argv)
 
 	free(pedido_inicial);
 
-	
-	while (1) {
+	int continuar = 1;
+
+	while (continuar) {
 		int cod_op = recibir_operacion(conexion, logger);
 		if (cod_op == -1) {
 			log_error(logger, "MASTER se desconectó. Terminando QUERY.");
@@ -99,12 +102,9 @@ int main(int argc, char** argv)
 					log_info(logger, "## Lectura realizada: Archivo %s, contenido: %s", aviso->file_tag, aviso->mensaje);
 					break;
 
-				case FINALIZACION_EXITOSA_QUERY:
-					log_info(logger, "## Query Finalizada - Instrucción END");
-					break;
-				
-				case FINALIZACION_ERRORONEA_QUERY:
-					log_error(logger, "## Query Finalizado - ERROR");
+				case QUERY_FINALIZADO:
+					log_info(logger, "## Query Finalizada - %s", aviso->mensaje);
+					continuar = 0;
 					break;
 
 				default:
