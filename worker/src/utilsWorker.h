@@ -7,6 +7,7 @@
 
 
 extern int conexion_storage;
+extern int conexion_master;
 extern t_log* logger;
 extern t_dictionary* diccionario_programas;
 
