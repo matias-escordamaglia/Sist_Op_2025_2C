@@ -87,6 +87,54 @@ t_paquete* empaquetar_aviso_worker_master(t_aviso_worker_master* aviso) {
     return paquete;
 }
 
-int enviar_instruccion_a_storage(int conexion_storage, char* tag, int tamanio, int operacion){
- 
-}    
+t_paquete* empaquetar_operacion_create(const char* file, const char* tag, uint32_t Op) {
+    t_paquete* paquete = crear_paquete();
+
+    insertar_uint32_a_paquete(paquete, Op);
+
+    insertar_string_a_paquete(paquete, file);
+
+    insertar_string_a_paquete(paquete, tag);
+
+    return paquete;
+}
+
+t_paquete* empaquetar_operacion_truncate(const char* file, const char* tag, size_t tam) {
+    t_paquete* paquete = crear_paquete();
+    
+    insertar_uint32_a_paquete(paquete, TRUNCATE);
+
+    insertar_string_a_paquete(paquete, file);
+
+    insertar_string_a_paquete(paquete, tag);
+
+    insertar_uint32_a_paquete(paquete, tam);    
+
+    return paquete;
+}
+
+t_paquete* empaquetar_operacion_tag(const char* file_origen, const char* tag_origen,
+                         const char* file_dest,const char* tag_dest){
+    t_paquete* paquete = crear_paquete();
+    
+    insertar_uint32_a_paquete(paquete, TAG);
+
+    insertar_string_a_paquete(paquete, file_origen);
+
+    insertar_string_a_paquete(paquete, tag_origen);
+
+    insertar_string_a_paquete(paquete, file_dest);
+
+    insertar_string_a_paquete(paquete, tag_dest);
+
+    return paquete;
+}
+
+t_paquete* empaquetar_operacion_end() {
+
+    t_paquete* paquete = crear_paquete();
+    
+    insertar_uint32_a_paquete(paquete, END);
+
+    return paquete;
+}
