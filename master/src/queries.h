@@ -19,8 +19,11 @@
 
 
 
-t_query* crear_query(char* query_path, uint32_t prioridad);
+t_query* crear_query(char* query_path, uint32_t prioridad, int conexion);
 uint32_t establecer_siguiente_valor_qid();
+t_query* obtener_query_por_id_uso_externo(uint32_t id_query);
+t_query* obtener_query_por_id_uso_interno(uint32_t id_query);
+int conexion_de_query_por_id(uint32_t id_query);
 
 
 

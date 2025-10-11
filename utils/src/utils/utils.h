@@ -86,23 +86,35 @@ typedef enum {
     ERROR,
 } t_resultado_operacion_default;
 
-typedef enum {
-    QUERY_NUEVA_CONEXION,
-    QUERY_DESCONEXION
-} t_tipo_mensaje_query;
+typedef enum Operation{
+    CREATE,
+    TRUNCATE,
+    WRITE,
+    READ,
+    TAG,
+    COMMIT,
+    FLUSH,
+    DELETE,
+    END
+} Operation;
 
 
-typedef enum {
+typedef enum MotivoMasterWorker{
     PEDIDO_QUERY,
     INTERRUPCION
 } t_motivo_pedido_master_worker;
 
-typedef enum {
-    FINALIZACION_QUERY,
-    NUEVA_LECTURA,
-    DEVOLUCION_X_INTERRUPCION,
-    DESCONEXION
+typedef enum TipoAvisoMasterWorker{
+    FINALIZACION_QUERY, // cuando ejecuto un "END"
+    NUEVA_LECTURA, //lo mando al ejecutar un "READ"
+    DEVOLUCION_X_INTERRUPCION // tengo que devoler esto, cuando master me mande en "MotivoMasterWorker"
+    // : INTERRUPCION , entonces devuelvo "DEVOLUCION_X_INTERRUPCION".
 } t_tipo_aviso_worker_master;
+
+typedef enum TipoAvisoMasterQuery{
+    LECTURA_QUERY,
+    QUERY_FINALIZADO
+} t_motivo_aviso_master_query;
 
 
 // ------------------------------------------------------------------------------------------
@@ -119,10 +131,16 @@ typedef struct {
 
 typedef struct 
 {
-    t_tipo_mensaje_query tipo;
     uint32_t prioridad;
     char* path_query;
 }t_pedido_query_master;
+
+typedef struct
+{
+    t_motivo_aviso_master_query motivo;
+    char* file_tag;
+    char* mensaje;
+}t_aviso_master_query;
 
 
 typedef struct
@@ -135,9 +153,36 @@ typedef struct
 
 typedef struct {
     t_tipo_aviso_worker_master tipo_aviso;
-    char* argumento;
+    char* argumento; // en caso de nueva lectura, envio el "nombre_file:tag contenidoDeLaLectura
+    // (todo en un mismo char*)"
 }t_aviso_worker_master;
 
+
+typedef struct {
+    char** instrucciones;   // array de líneas (una instrucción por línea)
+    size_t cant;            // cantidad de instrucciones
+} t_programa;
+
+typedef struct {
+    Operation op;           // CREATE
+    char* nombre_archivo;
+    char* tag;
+} t_create;
+
+typedef struct {
+    Operation op;           // TRUNCATE
+    char* nombre_archivo;
+    char* tag;
+    size_t tam;             // tamaño destino (>=0)
+} t_truncate;
+
+typedef struct {
+    Operation op;           // TAG
+    char* file_origen;
+    char* tag_origen;
+    char* file_dest;
+    char* tag_dest;
+} t_tag;
 
 // ------------------------------------------------------------------------------------------
 // -- Funciones --

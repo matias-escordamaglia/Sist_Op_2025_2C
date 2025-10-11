@@ -35,6 +35,7 @@ typedef struct {
     uint32_t prioridad;
     uint32_t program_count;
     char* query_path;
+    int conexion;
 } t_query;
 
 
@@ -43,6 +44,9 @@ extern sem_t* cant_queries_en_exec;
 extern sem_t* cant_queries_en_exit;
 
 extern sem_t* cant_workers_libres;
+
+extern sem_t* sem_trabajo_planificacion;
+extern sem_t* sem_eventos_pendientes;
 
 extern sem_t* sem_envio_query_pendiente;
 

@@ -22,12 +22,14 @@ int main(int argc, char** argv)
 		return EXIT_FAILURE;
 	}
 
-	config = iniciar_config(logger, archivo_config);
+	t_log* temp_logger = log_create("query.log", "QUERY", true, LOG_LEVEL_INFO);
+
+	config = iniciar_config(temp_logger, archivo_config);
 
 	log_level = obtener_log_level_config(config);
-
+	log_destroy(temp_logger);
 	logger = log_create("query.log", "QUERY", true, log_level);
-	
+
 
 	ip = config_get_string_value(config, "IP_MASTER");
 	puerto = config_get_string_value(config, "PUERTO_MASTER");
@@ -45,9 +47,10 @@ int main(int argc, char** argv)
     
 	handshake(conexion, HANDSHAKE_QUERY_MASTER, logger, "QUERY");
 
+	log_info(logger, "## Conexión al Master exitosa. IP: %s, Puerto: %s", ip, puerto);
+
     //Enviar prioridad y query a master
 	t_pedido_query_master* pedido_inicial = malloc(sizeof(t_pedido_query_master));
-	pedido_inicial->tipo = QUERY_NUEVA_CONEXION;
 	pedido_inicial->prioridad = prioridad;
 	pedido_inicial->path_query = archivo_query;
 
@@ -55,14 +58,13 @@ int main(int argc, char** argv)
 
 	enviar_paquete(paquete, conexion);
 
-	log_info(logger, "Pedido enviado. Path: %s - Prioridad: %d", pedido_inicial->path_query, pedido_inicial->prioridad);
+	log_info(logger, "## Solicitud de ejecución de Query: %s, prioridad: %d", pedido_inicial->path_query, pedido_inicial->prioridad);
 
 	free(pedido_inicial);
 
-	/*
-	Posiblemente lo siguiente no deba ser un while, debe revisarse
-	*/
-	while (1) {
+	int continuar = 1;
+
+	while (continuar) {
 		int cod_op = recibir_operacion(conexion, logger);
 		if (cod_op == -1) {
 			log_error(logger, "MASTER se desconectó. Terminando QUERY.");
@@ -78,9 +80,37 @@ int main(int argc, char** argv)
 				break;
 
 			case PAQUETE: {
-				log_info(logger, "[QUERY] Recibí un paquete desde MASTER");
 
-				//Insertar Lógica de caso recepción de paquete
+				int size;
+                void* buffer = recibir_buffer(&size, conexion);
+                if (buffer == NULL) {
+                    log_error(logger, "Error al recibir el buffer");
+                    return EXIT_FAILURE;
+                }
+                
+				t_aviso_master_query* aviso = desempaquetar_aviso_master_query(buffer);
+                
+                if (!aviso) {
+					log_error(logger, "Error al desempaquetar aviso de MASTER");
+                    free(buffer);
+					break;
+				}
+
+				switch (aviso->motivo)
+				{
+				case LECTURA_QUERY:
+					log_info(logger, "## Lectura realizada: Archivo %s, contenido: %s", aviso->file_tag, aviso->mensaje);
+					break;
+
+				case QUERY_FINALIZADO:
+					log_info(logger, "## Query Finalizada - %s", aviso->mensaje);
+					continuar = 0;
+					break;
+
+				default:
+					log_error(logger, "Motivo INEXISTENTE recibido de Master. Número de motivo: %u", aviso->motivo);
+					break;
+				}
 
 				break;
 			}
@@ -91,9 +121,9 @@ int main(int argc, char** argv)
 		}
 	}
 
+	terminar_programa(conexion, logger, config);
 
-
-    return 0;
+    return EXIT_SUCCESS;
 }
 
 void terminar_programa(int conexion, t_log* logger, t_config* config) {

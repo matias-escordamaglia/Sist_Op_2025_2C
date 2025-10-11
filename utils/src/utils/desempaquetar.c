@@ -70,15 +70,27 @@ t_pedido_query_master* desempaquetar_pedido_query_master(void* stream) {
     int offset = 0;
     t_pedido_query_master* recepcion_pedido = malloc(sizeof(t_pedido_query_master));
 
-    memcpy(&(recepcion_pedido->tipo), stream + offset, sizeof(t_tipo_mensaje_query));
-    offset += sizeof(t_tipo_mensaje_query);
-
     recepcion_pedido->prioridad = extraer_uint32(stream, &offset);
 
     recepcion_pedido->path_query = extraer_string(stream, &offset);
 
     return recepcion_pedido;
 }
+
+t_aviso_master_query* desempaquetar_aviso_master_query(void* stream) {
+    int offset = 0;
+    t_aviso_master_query* recepcion_aviso = malloc(sizeof(t_aviso_master_query));
+
+    memcpy(&(recepcion_aviso->motivo), stream + offset, sizeof(t_motivo_aviso_master_query));
+    offset += sizeof(t_motivo_aviso_master_query);
+
+    recepcion_aviso->file_tag = extraer_string(stream, &offset);
+
+    recepcion_aviso->mensaje = extraer_string(stream, &offset);
+
+    return recepcion_aviso;
+}
+
 
 t_pedido_master_worker* desempaquetar_pedido_master_worker(void* stream) {
     int offset = 0;

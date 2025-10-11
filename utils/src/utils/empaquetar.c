@@ -43,12 +43,22 @@ t_paquete* empaquetar_para_prueba_conexion(t_prueba_conexion* prueba) {
 
 t_paquete* empaquetar_pedido_query_master(t_pedido_query_master* pedido) {
     t_paquete* paquete = crear_paquete();
-    
-    insertar_variable_a_paquete(paquete, &(pedido->tipo), sizeof(t_tipo_mensaje_query));
 
     insertar_uint32_a_paquete(paquete, pedido->prioridad);
 
     insertar_string_a_paquete(paquete, pedido->path_query);
+
+    return paquete;
+}
+
+t_paquete* empaquetar_aviso_master_query(t_aviso_master_query* aviso) {
+    t_paquete* paquete = crear_paquete();
+
+    insertar_variable_a_paquete(paquete, &(aviso->motivo), sizeof(t_motivo_aviso_master_query));
+
+    insertar_string_a_paquete(paquete, aviso->file_tag);
+
+    insertar_string_a_paquete(paquete, aviso->mensaje);
 
     return paquete;
 }
@@ -73,6 +83,58 @@ t_paquete* empaquetar_aviso_worker_master(t_aviso_worker_master* aviso) {
     insertar_variable_a_paquete(paquete, &(aviso->tipo_aviso), sizeof(t_tipo_aviso_worker_master));
 
     insertar_string_a_paquete(paquete, aviso->argumento);
+
+    return paquete;
+}
+
+t_paquete* empaquetar_operacion_create(const char* file, const char* tag, uint32_t Op) {
+    t_paquete* paquete = crear_paquete();
+
+    insertar_uint32_a_paquete(paquete, Op);
+
+    insertar_string_a_paquete(paquete, file);
+
+    insertar_string_a_paquete(paquete, tag);
+
+    return paquete;
+}
+
+t_paquete* empaquetar_operacion_truncate(const char* file, const char* tag, size_t tam) {
+    t_paquete* paquete = crear_paquete();
+    
+    insertar_uint32_a_paquete(paquete, TRUNCATE);
+
+    insertar_string_a_paquete(paquete, file);
+
+    insertar_string_a_paquete(paquete, tag);
+
+    insertar_uint32_a_paquete(paquete, tam);    
+
+    return paquete;
+}
+
+t_paquete* empaquetar_operacion_tag(const char* file_origen, const char* tag_origen,
+                         const char* file_dest,const char* tag_dest){
+    t_paquete* paquete = crear_paquete();
+    
+    insertar_uint32_a_paquete(paquete, TAG);
+
+    insertar_string_a_paquete(paquete, file_origen);
+
+    insertar_string_a_paquete(paquete, tag_origen);
+
+    insertar_string_a_paquete(paquete, file_dest);
+
+    insertar_string_a_paquete(paquete, tag_dest);
+
+    return paquete;
+}
+
+t_paquete* empaquetar_operacion_end() {
+
+    t_paquete* paquete = crear_paquete();
+    
+    insertar_uint32_a_paquete(paquete, END);
 
     return paquete;
 }

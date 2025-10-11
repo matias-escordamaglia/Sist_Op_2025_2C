@@ -16,6 +16,7 @@
 #include "./utils/desempaquetar.h"
 #include "sync.h"
 #include "worker_manager.h"
+#include "manejo_query.h"
 
 
 void* manejar_worker(void* arg);
