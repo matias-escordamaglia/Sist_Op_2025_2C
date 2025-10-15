@@ -19,6 +19,7 @@
 #include "queries.h"
 #include "worker_conexion.h"
 
+#define VALOR_NULO_EVENTO -1
 
 // Agregar a planificacion.h
 typedef enum tipoEvento {

@@ -45,8 +45,7 @@ t_query* crear_nuevo_query(char* query_path, uint32_t prioridad, int conexion) {
         log_info(get_logger(), "Se crea nuevo Query con ID (%d) - Estado: READY", nuevo_query->query_id);
     UNLOCK(&mutex_cola_ready);
 
-    //TODO REVISAR ESTOS 0s
-    enviar_evento_planificacion(EVENTO_NUEVA_QUERY, -1, nuevo_query->query_id, 0);
+    enviar_evento_planificacion(EVENTO_NUEVA_QUERY, VALOR_NULO_EVENTO, nuevo_query->query_id, 0);
 
     return nuevo_query;
 }

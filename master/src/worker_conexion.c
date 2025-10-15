@@ -47,7 +47,7 @@ void* manejar_worker(void* arg) {
     t_estado_handshake registrado = HANDSHAKE_OK;
     send(cliente_fd, &registrado, sizeof(t_estado_handshake), 0);
 
-    enviar_evento_planificacion(EVENTO_NUEVO_WORKER_CONECTADO, id_worker, -1, -1);
+    enviar_evento_planificacion(EVENTO_NUEVO_WORKER_CONECTADO, id_worker, VALOR_NULO_EVENTO, VALOR_NULO_EVENTO);
 
 
     while (1) {
@@ -59,7 +59,7 @@ void* manejar_worker(void* arg) {
         if (cod_op == -1) {
             log_info(get_logger(), "WORKER desconectado, iniciardo evento desconexion");
             query_id = get_worker_qid(id_worker);
-            enviar_evento_planificacion(EVENTO_WORKER_DESCONECTADO, id_worker, query_id, -1);
+            enviar_evento_planificacion(EVENTO_WORKER_DESCONECTADO, id_worker, query_id, VALOR_NULO_EVENTO);
             break;
         }
         
