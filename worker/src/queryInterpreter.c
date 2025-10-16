@@ -88,6 +88,9 @@ bool ejecutar_linea(const char* linea) {
         }
         case WRITE: {
             // TODO: parsear y ejecutar WRITE <file>:<tag> <offset|bloque> <datos>
+            // Formato: WRITE <NOMBRE_FILE>:<TAG> <DIRECCIÓN BASE> <CONTENIDO>
+            t_tabla_paginas* tabla = obtener_o_crear_tp("nombreFile","tag");
+
             log_warning(logger, "WRITE aún no implementado: %s", linea);
             return false;
         }

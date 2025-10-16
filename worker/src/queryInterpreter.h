@@ -5,6 +5,7 @@
 #include "./utils/empaquetar.h"
 #include "./utils/desempaquetar.h"
 #include "utilsWorker.h"
+#include "memoria_interna.h"
 #include <errno.h>
 
 

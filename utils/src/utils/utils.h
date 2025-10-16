@@ -184,6 +184,25 @@ typedef struct {
     char* tag_dest;
 } t_tag;
 
+typedef struct {
+    char*  file;
+    char*  tag;
+    size_t dir_base;
+    uint8_t* data;
+    size_t len;
+} t_write;
+
+typedef struct
+{
+	char* file;
+    char* tag;
+	t_list *paginas_proceso;
+} t_tabla_paginas;
+
+extern t_list* lista_global_tablas;
+extern t_tabla_paginas* tabla_actual;
+
+
 // ------------------------------------------------------------------------------------------
 // -- Funciones --
 // ------------------------------------------------------------------------------------------
