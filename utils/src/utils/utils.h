@@ -169,6 +169,40 @@ typedef struct {
     char* tag;
 } t_create;
 
+typedef struct {
+    Operation op;           // TRUNCATE
+    char* nombre_archivo;
+    char* tag;
+    size_t tam;             // tamaño destino (>=0)
+} t_truncate;
+
+typedef struct {
+    Operation op;           // TAG
+    char* file_origen;
+    char* tag_origen;
+    char* file_dest;
+    char* tag_dest;
+} t_tag;
+
+typedef struct {
+    char*  file;
+    char*  tag;
+    size_t dir_base;
+    uint8_t* data;
+    size_t len;
+} t_write;
+
+typedef struct
+{
+	char* file;
+    char* tag;
+	t_list *paginas_proceso;
+} t_tabla_paginas;
+
+extern t_list* lista_global_tablas;
+extern t_tabla_paginas* tabla_actual;
+
+
 // ------------------------------------------------------------------------------------------
 // -- Funciones --
 // ------------------------------------------------------------------------------------------

@@ -21,7 +21,6 @@
 char* ip_storage;
 char* puerto_storage;
 
-int conexion_master;
 char* ip_master;
 char* puerto_master;
 
