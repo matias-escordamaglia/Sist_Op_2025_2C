@@ -14,49 +14,63 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <sys/mman.h>
-
+#include <pthread.h>
 
 #include <commons/log.h>
 #include <commons/config.h>
 #include "./utils/utils.h"
 #include <commons/bitarray.h>
+#include <commons/collections/dictionary.h>
 
-#include "manejo-worker.h"
 
-//configs
-char* PUERTO_ESCUCHA; 
-bool FRESH_START;
-char* PUNTO_MONTAJE;
-int RETARDO_OPERACION;
-int RETARDO_ACCESO_BLOQUE; 
+extern t_log *logger;
+extern t_config *config;
+extern t_config *sp_block_config; 
+//get configs
+extern char* PUERTO_ESCUCHA; 
+extern bool FRESH_START;
+extern char* PUNTO_MONTAJE;
+extern int RETARDO_OPERACION;
+extern int RETARDO_ACCESO_BLOQUE; 
 
 //hash config
-t_config* config_hash; 
+extern t_config* config_hash; 
 
-int BLOCK_SIZE; 
-int FS_SIZE; 
+extern int BLOCK_SIZE; 
+extern int FS_SIZE; 
 
 // bitarray
- t_bitarray* BA_bitmap; 
+extern t_bitarray* BA_bitmap; 
+
+//semaforos mutex
+extern pthread_mutex_t mutex_bitmap;
+extern pthread_mutex_t mutex_dir_files; 
+extern pthread_mutex_t mutex_file_hash;
+extern pthread_mutex_t mutex_diccionary; 
+
+//dictionarys
+extern t_dictionary* file_tag_dic; 
 
 
-t_log_level log_level;
+
+
+
+extern t_log_level log_level;
 void extraer_storage_config(t_config* config);
 char* add_seg_ruta(char *, char *);
 bool existe_archivo(char *);
-void iniciar_estructuras();
+void iniciar_estructuras(char*);
 bool existe_archivo(char *);
 char* add_seg_ruta(char *, char *);
 int existe_directorio(const char *);
 int borrar_directorio(const char *);
-void inicializar_super_block_config();
+void inicializar_super_block_config(char*);
 void inicializar_dir_physic_block(char* );
 void inicializar_bitmap(const char* );
 void crear_bloque(const char* , size_t );
 void inicializar_dir_logic_block( char* );
 void inicializar_blocks_hash(char* );
-
-
+void inicializar_dictionary();
 
 
 

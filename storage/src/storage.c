@@ -1,24 +1,68 @@
 #include "storage.h"
 
+#include "manejo-worker.h"
+#include "operaciones.h"
+
 t_log *logger;
 t_config *config;
 t_config *sp_block_config;
+
+//get configs
+char* PUERTO_ESCUCHA; 
+bool FRESH_START;
+char* PUNTO_MONTAJE;
+int RETARDO_OPERACION;
+int RETARDO_ACCESO_BLOQUE; 
+
+//hash config
+t_config* config_hash; 
+
+int BLOCK_SIZE; 
+int FS_SIZE; 
+
+// bitarray
+t_bitarray* BA_bitmap; 
+
+
+t_log_level log_level; 
 
 int server_fd_general;
 
 pthread_t hilo_manejo_worker;
 
-int main(int argc, char **argv)
-{
+//semaforos mutex
+pthread_mutex_t mutex_bitmap;
+pthread_mutex_t mutex_dir_files; 
+pthread_mutex_t mutex_file_hash;
+pthread_mutex_t mutex_diccionary; 
 
-    //config = iniciar_config(logger, "storage.config");
-    config = config_create("storage.config"); 
+//dictionarys
+t_dictionary* file_tag_dic; 
+
+
+int main(int argc, char **argv)
+{   
+    if (argc < 3) { 
+            fprintf(stderr, "Uso correcto: %s <archivo_config[path]> <archivo_superBlock[path]> \n", argv[0]);
+            return EXIT_FAILURE;
+    }
+
+    char* archivo_superBlock_path = argv[2];
+    char* archivo_config_path = argv[1];
+    char* nombre_m = argv[0]; 
+
+    printf("esto es nomb: %s\n", nombre_m);
+    printf("esto es config: %s\n", archivo_config_path);
+    printf("esto es SB %s\n", archivo_superBlock_path);
+
+
+    config = config_create(archivo_config_path); 
     extraer_storage_config(config);
 
     log_level = obtener_log_level_config(config);
     logger = log_create("storage.log", "STORAGE", true, log_level);
 
-    iniciar_estructuras();
+    iniciar_estructuras(archivo_superBlock_path);
 
     server_fd_general = iniciar_servidor(NULL, PUERTO_ESCUCHA, logger);
     if (server_fd_general == -1)
@@ -54,7 +98,7 @@ void extraer_storage_config(t_config* config_st)
         FRESH_START = false;
     }
 }
-void iniciar_estructuras(){
+void iniciar_estructuras(char* super_block_path){
     
 
     if (FRESH_START == true){ // Iniciamos un FS desde cero
@@ -111,10 +155,11 @@ void iniciar_estructuras(){
             }
         }
         log_info(logger, "Inicializando estructuras nuevas...");
-        inicializar_super_block_config();
+        inicializar_super_block_config(super_block_path);
         inicializar_blocks_hash(ruta_block_hash);
         inicializar_dir_physic_block(ruta_f_block); 
         inicializar_bitmap(ruta_bitmap);
+        inicializar_dictionary();
         inicializar_dir_logic_block(ruta_files);
         log_info(logger, "TODAS LAS ESTRUCTURAS ESTA LISTAS");
  
@@ -227,8 +272,8 @@ int borrar_directorio(const char *path) {
 
     return 0; // éxito
 }
-void inicializar_super_block_config(){
-    sp_block_config = config_create("superblock.config");
+void inicializar_super_block_config(char* path){
+    sp_block_config = config_create(path);
     BLOCK_SIZE = config_get_int_value(sp_block_config, "BLOCK_SIZE");
     FS_SIZE = config_get_int_value(sp_block_config, "FS_SIZE");
     log_info(logger, "Archivo superblock.config extraido exitosamente");
@@ -437,4 +482,34 @@ int busqueda_block_asociado_hash(char* hash){
     }
     return -1; 
 }
+void inicializar_dictionary(){
+  file_tag_dic = dictionary_create();
+}
+void inicializar_semaforos(){
+    pthread_mutex_init(&mutex_bitmap,NULL);
+    pthread_mutex_init(&mutex_dir_files,NULL);
+    pthread_mutex_init(&mutex_file_hash,NULL);
+    pthread_mutex_init(&mutex_diccionary,NULL);
+}
+//seccion critica 
+void iniciar_mutex_file_tag(char* nombre){
+    pthread_mutex_t* nuevo_mutex = malloc(sizeof(pthread_mutex_t));
+    pthread_mutex_init(nuevo_mutex, NULL);
+    dictionary_put(file_tag_dic, nombre, nuevo_mutex);
+}
+//seccion critica 
+void eliminar_mutex_file_tag(char* nombre){
+    if(dictionary_has_key(file_tag_dic,nombre)==true){
+        pthread_mutex_t* mutex_a_eliminar = (pthread_mutex_t*) dictionary_remove(file_tag_dic, nombre);
+        pthread_mutex_destroy(mutex_a_eliminar);
+        pthread_mutex_destroy(mutex_a_eliminar);
+    } 
+}
+void cargar_estructuras_existentes(){
+    
+}
+
+
+
+
 

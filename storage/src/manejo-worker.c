@@ -1,5 +1,8 @@
 #include "manejo-worker.h"
 
+#include "operaciones.h"      // Incluyes lo que usas en la implementación
+#include "storage.h"
+
 t_log* logger_worker;
 t_config* blockconfig = NULL;
 
@@ -79,11 +82,35 @@ void* atender_conexion_worker(void* arg) {
         switch (cod_op) {
             case PAQUETE:
                 int size; 
-                void* bufferr = recibir_buffer(&size, cliente_fd);
+                void* buffer_st = recibir_buffer(&size, cliente_fd);
                 log_info(logger_worker, "[WORKER] Se recibe paquete desde WORKER %u", id_worker);
-                
-                //Insertar Lógica de caso recepción de paquete
+                Operation operation = extraer_operacion(buffer_st); 
+                    switch (operation)
+                    {
+                    case  CREATE:
+                        //aca el desarrollo
+                        break;
+                    case  TRUNCATE:
+                        //aca el desarrollo
+                    case WRITE:
+                        //aca el desarrollo
 
+                        break;
+                    case READ: 
+                        break;
+                    case TAG: 
+                        break;
+                    case COMMIT:
+                        break;
+                    case FLUSH:
+                        break;
+                    case DELETE: 
+                        break;
+                    case END: 
+                        break;
+                    default:
+                        break;
+                    }
                 break;
 
             default:
@@ -96,3 +123,9 @@ void* atender_conexion_worker(void* arg) {
     close(cliente_fd);
     return NULL;
 }
+
+
+Operation extraer_operacion(void* buffer_st){
+    Operation op; 
+    memcpy(&op,buffer_st,sizeof(Operation));
+} 
