@@ -40,6 +40,7 @@ extern int BLOCK_SIZE;
 extern int FS_SIZE; 
 
 // bitarray
+extern char* mmap_BM;
 extern t_bitarray* BA_bitmap; 
 
 //semaforos mutex
@@ -49,7 +50,9 @@ extern pthread_mutex_t mutex_file_hash;
 extern pthread_mutex_t mutex_diccionary; 
 
 //dictionarys
-extern t_dictionary* file_tag_dic; 
+extern t_dictionary* file_tag_dic ; 
+extern t_dictionary* dicc_estado_tag; 
+
 
 
 
@@ -70,7 +73,22 @@ void inicializar_bitmap(const char* );
 void crear_bloque(const char* , size_t );
 void inicializar_dir_logic_block( char* );
 void inicializar_blocks_hash(char* );
-void inicializar_dictionary();
+void inicializar_dictionary_mutex();
+void crear_metadata_config(char* );
+int busqueda_block_asociado_hash(char* );
+void inicializar_semaforos();
+void iniciar_mutex_file_tag(char* );
+void eliminar_mutex_file_tag(char* );
+void cargar_estructuras_existentes(char* );
+void cargar_block_hash(char* );
+void cargar_bitmap(char* );
+void mapeo_dir_mutex_dinamic(char* );
+char* crear_key_file_tag(char* ,  char*);
+int lectura_metadata(char* );
+void crear_dicctionary_estado_file_tag();
+void finalizar_munmap();
+
+
 
 
 

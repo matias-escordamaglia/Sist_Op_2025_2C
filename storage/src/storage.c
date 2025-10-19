@@ -22,6 +22,7 @@ int FS_SIZE;
 
 // bitarray
 t_bitarray* BA_bitmap; 
+char* mmap_BM;
 
 
 t_log_level log_level; 
@@ -37,7 +38,8 @@ pthread_mutex_t mutex_file_hash;
 pthread_mutex_t mutex_diccionary; 
 
 //dictionarys
-t_dictionary* file_tag_dic; 
+t_dictionary* file_tag_dic = NULL; 
+t_dictionary* dicc_estado_tag = NULL; 
 
 
 int main(int argc, char **argv)
@@ -46,7 +48,7 @@ int main(int argc, char **argv)
             fprintf(stderr, "Uso correcto: %s <archivo_config[path]> <archivo_superBlock[path]> \n", argv[0]);
             return EXIT_FAILURE;
     }
-
+    
     char* archivo_superBlock_path = argv[2];
     char* archivo_config_path = argv[1];
     char* nombre_m = argv[0]; 
@@ -55,14 +57,18 @@ int main(int argc, char **argv)
     printf("esto es config: %s\n", archivo_config_path);
     printf("esto es SB %s\n", archivo_superBlock_path);
 
-
-    config = config_create(archivo_config_path); 
+    t_log* log_temp = log_create("temp.log","STORAGE",true,LOG_LEVEL_INFO); 
+    config = iniciar_config(log_temp,archivo_config_path);
     extraer_storage_config(config);
+    log_destroy(log_temp); 
 
     log_level = obtener_log_level_config(config);
     logger = log_create("storage.log", "STORAGE", true, log_level);
 
     iniciar_estructuras(archivo_superBlock_path);
+
+
+    log_info(logger, "Preparando Servidor...");
 
     server_fd_general = iniciar_servidor(NULL, PUERTO_ESCUCHA, logger);
     if (server_fd_general == -1)
@@ -73,6 +79,7 @@ int main(int argc, char **argv)
 
     int *server_fd_copy = malloc(sizeof(int));
     *server_fd_copy = server_fd_general;
+    
     pthread_create(&hilo_manejo_worker, NULL, manejar_cliente_worker, server_fd_copy);
     pthread_join(hilo_manejo_worker, NULL);
 
@@ -127,6 +134,7 @@ void iniciar_estructuras(char* super_block_path){
                 log_info(logger, "Archivo %s borrado correctamente\n", ruta_bitmap);
             } else {
                 log_error(logger, "Error al borrar el archivo");
+                exit(EXIT_FAILURE);
             }       
         }
         if(existe_archivo(ruta_block_hash)){
@@ -134,6 +142,8 @@ void iniciar_estructuras(char* super_block_path){
                 log_info(logger, "Archivo %s borrado correctamente\n", ruta_block_hash);
             } else {
                 log_error(logger, "Error al borrar el archivo");
+            exit(EXIT_FAILURE);
+
             }       
         }
         if(existe_directorio(ruta_f_block)==1){
@@ -143,6 +153,8 @@ void iniciar_estructuras(char* super_block_path){
             }
             else {
                 log_error(logger, "Error al borrar el directorio");
+                exit(EXIT_FAILURE);
+            
             }
         }
          if(existe_directorio(ruta_files)==1){
@@ -152,30 +164,42 @@ void iniciar_estructuras(char* super_block_path){
             }
             else {
                 log_error(logger, "Error al borrar el directorio");
+                exit(EXIT_FAILURE);
+
             }
         }
         log_info(logger, "Inicializando estructuras nuevas...");
         inicializar_super_block_config(super_block_path);
+        inicializar_dictionary_mutex();
         inicializar_blocks_hash(ruta_block_hash);
-        inicializar_dir_physic_block(ruta_f_block); 
         inicializar_bitmap(ruta_bitmap);
-        inicializar_dictionary();
+        inicializar_dir_physic_block(ruta_f_block); 
         inicializar_dir_logic_block(ruta_files);
-        log_info(logger, "TODAS LAS ESTRUCTURAS ESTA LISTAS");
- 
+        
+        free(ruta_bitmap);
+        free(ruta_block_hash);
+        free(ruta_f_block);
+        free(ruta_files);
 
     }
     else
     {
-        //cargar estructuras existentes
-        //cargar_bitmap();    
+        cargar_estructuras_existentes(super_block_path);
+         
     }
+    log_info(logger, "TODAS LAS ESTRUCTURAS ESTA LISTAS");
 }
 void finalizar_FS(){
     config_destroy(config);
     log_destroy(logger); 
-    bitarray_destroy ( BA_bitmap);
+    finalizar_munmap(); 
+    bitarray_destroy(BA_bitmap);
 
+}
+void finalizar_munmap(){
+    int tam_bitmap = ((FS_SIZE / BLOCK_SIZE + 7)/8) ; 
+    log_info(logger, "tamaño: %u", tam_bitmap);
+    munmap(mmap_BM,tam_bitmap);
 }
 bool existe_archivo(char *path){
     FILE *f = fopen(path, "r");
@@ -186,16 +210,21 @@ bool existe_archivo(char *path){
     return false; 
 }
 char* add_seg_ruta(char *base, char *extra){
+    int necesita_barra = (extra[0] != '/');
     size_t len_base = strlen(base);
     size_t len_extra = strlen(extra);
-    char *ruta_final = malloc(len_base + len_extra + 1);
-    if (!ruta_final)
-    {
-        perror("Error al realloc");
+    size_t total = len_base + len_extra + (necesita_barra ? 1 : 0) + 1;
+
+    char* ruta_final = malloc(total);
+    if (!ruta_final) {
+        perror("malloc");
         exit(EXIT_FAILURE);
     }
+
     strcpy(ruta_final, base);
-    strcpy(ruta_final + len_base, extra);
+    if (necesita_barra)
+        strcat(ruta_final, "/");
+    strcat(ruta_final, extra);
 
     return ruta_final;
 }
@@ -273,7 +302,7 @@ int borrar_directorio(const char *path) {
     return 0; // éxito
 }
 void inicializar_super_block_config(char* path){
-    sp_block_config = config_create(path);
+    sp_block_config = iniciar_config(logger,path);
     BLOCK_SIZE = config_get_int_value(sp_block_config, "BLOCK_SIZE");
     FS_SIZE = config_get_int_value(sp_block_config, "FS_SIZE");
     log_info(logger, "Archivo superblock.config extraido exitosamente");
@@ -283,7 +312,11 @@ void inicializar_super_block_config(char* path){
 }
 void inicializar_bitmap(const char* ruta){
     //ya que vamos a usar mmap menor utilizamos file descriptors 
+    //aca creamos un archivo .bin
+    //tam_bitmap = malloc(sizeof(int)); 
     int tam_bitmap = ((FS_SIZE / BLOCK_SIZE + 7)/8) ; 
+    log_info(logger, "tamaño: %u", tam_bitmap); 
+
     int fd = open( ruta, O_RDWR | O_CREAT, 0666); 
     if (fd == -1) {
         log_error(logger, "error abriendo %s: %s", ruta, strerror(errno));
@@ -295,14 +328,16 @@ void inicializar_bitmap(const char* ruta){
         exit(1);
     }
     log_info(logger, "Archivo bitmap.bin creado exitosamente"); 
-    
+    //"subimos" el archivo a memoria 
     log_info(logger, "mapeando bitmap.bin..."); 
-    char* mmap_BM = mmap(NULL,tam_bitmap,PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0); 
+    mmap_BM = mmap(NULL,tam_bitmap,PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0); 
         if (mmap_BM == MAP_FAILED) {
         log_error(logger, "error mapeo %s: %s", ruta, strerror(errno)); 
              exit(1); 
         }
+    //lo llenamos de ceros
     memset(mmap_BM, 0, tam_bitmap);
+
     BA_bitmap = bitarray_create_with_mode(mmap_BM,tam_bitmap,MSB_FIRST); 
     log_info(logger, "BITMAP Creado exitosamente"); 
     close(fd); 
@@ -347,7 +382,7 @@ void inicializar_dir_physic_block( char* ruta){
 void crear_bloque(const char* ruta, size_t block_size) {
     FILE *f = fopen(ruta, "wb");
     if (!f) { perror("fopen"); exit(1); }
-// Rellenar con ceros para asegurar tamaño fijo
+    // Rellenar con ceros para asegurar tamaño fijo
     char *buffer = calloc(1, block_size);
     fwrite(buffer, 1, block_size, f);
     free(buffer);
@@ -482,9 +517,6 @@ int busqueda_block_asociado_hash(char* hash){
     }
     return -1; 
 }
-void inicializar_dictionary(){
-  file_tag_dic = dictionary_create();
-}
 void inicializar_semaforos(){
     pthread_mutex_init(&mutex_bitmap,NULL);
     pthread_mutex_init(&mutex_dir_files,NULL);
@@ -505,9 +537,189 @@ void eliminar_mutex_file_tag(char* nombre){
         pthread_mutex_destroy(mutex_a_eliminar);
     } 
 }
-void cargar_estructuras_existentes(){
-    
+void cargar_estructuras_existentes(char* super_block_path){
+    log_info(logger, "Iniciando en modo FRESH_STAR = false");
+
+    char* ruta_bitmap = add_seg_ruta(PUNTO_MONTAJE, "/bitmap.bin"); 
+    char* ruta_block_hash = add_seg_ruta(PUNTO_MONTAJE, "/blocks_hash_index.config"); 
+    char* ruta_f_block = add_seg_ruta(PUNTO_MONTAJE, "/physical_blocks");
+    char* ruta_files = add_seg_ruta(PUNTO_MONTAJE, "/files");
+
+    log_info(logger, "Cargando estructuras existentes");
+    inicializar_dictionary_mutex();
+    inicializar_super_block_config(super_block_path);
+    cargar_block_hash(ruta_block_hash); 
+    cargar_bitmap(ruta_bitmap);
+    mapeo_dir_mutex_dinamic(ruta_files); 
+     
+    free(ruta_bitmap);
+    free(ruta_block_hash);
+    free(ruta_f_block);
+    free(ruta_files);
 }
+void cargar_block_hash(char* ruta){
+    config_hash = config_create(ruta); 
+}
+void cargar_bitmap(char* ruta){
+    log_info(logger, "mapeando bitmap.bin..."); 
+    int tam_bitmap = ((FS_SIZE / BLOCK_SIZE + 7)/8) ; 
+    log_info(logger, "tamaño: %u", tam_bitmap);
+    int fd = open(ruta,O_RDWR);
+    if (fd == -1) {
+        log_error(logger, "Error abriendo %s: %s", ruta, strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+    if (ftruncate(fd, tam_bitmap) == -1) {
+        log_error(logger, "Error con ftruncate en %s: %s", ruta, strerror(errno));
+        close(fd);
+        exit(EXIT_FAILURE);
+    }
+
+    log_info(logger, "tamaño: %u", tam_bitmap); 
+    char* mmap_BM = mmap(NULL,tam_bitmap,PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    if (mmap_BM == MAP_FAILED) {
+    log_error(logger, "error mapeo %s: %s", ruta, strerror(errno)); 
+            exit(1); 
+    }
+    BA_bitmap = bitarray_create_with_mode(mmap_BM,tam_bitmap,MSB_FIRST); 
+      if (!BA_bitmap) {
+        log_error(logger, "Error creando bitarray desde el mmap de %s", ruta);
+        munmap(mmap_BM, tam_bitmap);
+        close(fd);
+        exit(EXIT_FAILURE);
+    }
+    log_info(logger, "BITMAP Cargado exitosamente"); 
+    close(fd);
+}
+
+void mapeo_dir_mutex_dinamic(char* ruta){
+    DIR* dir_files = opendir(ruta);
+        if (dir_files == NULL) {
+            log_error(logger, "Error al abrir el directorio");
+            return;
+        }
+
+        struct dirent* entrada_file;
+
+        while ((entrada_file = readdir(dir_files)) != NULL) {
+            
+            if (strcmp(entrada_file->d_name, ".") == 0 || strcmp(entrada_file->d_name, "..") == 0) {
+                continue;
+            }
+
+            if (entrada_file->d_type == DT_DIR) {
+                char* nombre_file = entrada_file->d_name;
+                char* ruta_file = add_seg_ruta(ruta,nombre_file); 
+                
+                DIR* dir_tags = opendir(ruta_file);
+                if (dir_tags == NULL) {
+                    log_error(logger, "Error al abrir el directorio");
+                    continue;
+                }
+
+                struct dirent* entrada_tag;
+                while ((entrada_tag = readdir(dir_tags)) != NULL) {
+                    if (strcmp(entrada_tag->d_name, ".") == 0 || strcmp(entrada_tag->d_name, "..") == 0) {
+                        continue;
+                    }
+
+                    if (entrada_tag->d_type == DT_DIR) {
+                        char* nombre_tag = entrada_tag->d_name;
+                        char* ruta_tag = add_seg_ruta(ruta_file,nombre_tag);
+                        log_info(logger, "File:Tag descubierto: %s:%s", nombre_file, nombre_tag);
+               
+                     // recreando diccionario de mutex y diccionario de estado
+
+                        char* key_file_tag = crear_key_file_tag(nombre_file, nombre_tag); 
+                        log_info(logger, "valor: %s", key_file_tag);
+
+                        int estado_leido = lectura_metadata(ruta_tag);
+                        log_info(logger, "estado: %u", estado_leido);
+
+                        if(estado_leido == 1 || estado_leido == 0  ){
+                            int* estado_ptr = malloc(sizeof(int));
+                            *estado_ptr = estado_leido; 
+                            //log_info(logger, "DEBUG: dicc_estado_tag=%p, key=%s, estado_ptr=%p", (void*)dicc_estado_tag, key_file_tag, (void*)estado_ptr);
+                            dictionary_put(dicc_estado_tag, key_file_tag, estado_ptr);
+                            log_info(logger, "File:Tag añadido a diccionario de ESTASDo: %s:%s", nombre_file, nombre_tag);
+                        }else
+                            log_error(logger, "Error de lectura metadata: %s", key_file_tag); 
+                    
+                     //crear y agregamos al dicc el mutex file_tag
+                        iniciar_mutex_file_tag(key_file_tag); 
+                        log_info(logger, "File:Tag añadido a diccionario de MUTEX: %s:%s", nombre_file, nombre_tag);
+
+
+                     free(ruta_tag);
+                     free(key_file_tag);
+                      
+                    }
+                }
+                log_info(logger, "Mapeo de Files Finalizado");
+                free(ruta_file);
+                closedir(dir_tags);
+            }
+        }
+        closedir(dir_files);
+}
+char* crear_key_file_tag(char *nombre_file,  char *nombre_tag){
+    size_t len_file = strlen(nombre_file);
+    size_t len_tag = strlen(nombre_tag);
+    
+    char *key = malloc(len_file + len_tag + 2);
+    if (!key){
+        log_info(logger, "error de malloc");
+       exit(EXIT_FAILURE);
+    }
+
+    sprintf(key, "%s:%s", nombre_file, nombre_tag);
+    return key; 
+}
+int lectura_metadata(char* ruta){
+    char* ruta_metadata = add_seg_ruta(ruta, "/metadata.config");
+    //log_info(logger, "ruta metadata: %s",ruta_metadata); 
+    int estado = -1;  
+
+    t_config* config_temporal = config_create(ruta_metadata);
+    if (config_temporal == NULL) {
+        log_error(logger, "Error al abrir  Metadata");
+        free(ruta_metadata); 
+
+        return estado; 
+    }
+    
+    if (!config_has_property(config_temporal, "ESTADO")) {
+        log_error(logger, "La clave 'ESTADO' no existe en: %s", ruta_metadata);
+        config_destroy(config_temporal);
+        free(ruta_metadata);
+        return estado;
+    }
+
+    char* estado_C = config_get_string_value(config_temporal, "ESTADO");
+    if((strcmp(estado_C,"COMMITED")==0)){
+
+        estado = 0; //COMMITED
+    }
+    else 
+        estado = 1; //WORK_IN_PROGRESS
+
+    config_destroy(config_temporal);
+    free(ruta_metadata); 
+    return estado;
+}
+
+
+void inicializar_dictionary_mutex(){
+    if (dicc_estado_tag == NULL)
+    dicc_estado_tag = dictionary_create();
+    if (file_tag_dic == NULL)
+        file_tag_dic = dictionary_create();
+}
+
+
+
+
+
 
 
 

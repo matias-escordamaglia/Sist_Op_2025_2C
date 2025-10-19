@@ -5,7 +5,7 @@
 
 
 
-void create(char* nombre_file, char* nombre_tag, char* ruta) {
+/*void create(char* nombre_file, char* nombre_tag, char* ruta) {
  
     char* nuevo_file = add_seg_ruta(ruta, nombre_file); 
     if (mkdir(nuevo_file, 0777) == -1) {
@@ -64,3 +64,20 @@ void create(char* nombre_file, char* nombre_tag, char* ruta) {
     free(ruta_absoluta_metadata);
     free(ruta_absoluta_dir_log_block);
 }
+void truncar_archivo(char* file, char* tag, char* nuevo_valor){
+    char* ruta_base = "/rutaMontaje/files";
+    char* ruta_file = add_seg_ruta(ruta_base, "/");   
+    ruta_file = add_seg_ruta(ruta_file, file);        
+    char* ruta_tag  = add_seg_ruta(ruta_file, "/");   
+    ruta_tag  = add_seg_ruta(ruta_tag, tag);          
+    char* ruta_metadata = add_seg_ruta(ruta_tag, "/metadata.config"); 
+    config_set_value(ruta_metadata, "TAMAÑO", nuevo_valor);
+    config_save(ruta_metadata);
+    int tamanio_archivo = obtener_tamano(ruta_metadata);
+    if(nuevo_valor < tamanio_archivo){
+        incrementar(nuevo_valor, tamanio_archivo);
+    }
+    else {
+        decrementar(nuevo_valor, tamanio_archivo);
+    }
+}*/

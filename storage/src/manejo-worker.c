@@ -1,6 +1,6 @@
 #include "manejo-worker.h"
 
-#include "operaciones.h"      // Incluyes lo que usas en la implementación
+#include "operaciones.h"  
 #include "storage.h"
 
 t_log* logger_worker;
@@ -13,6 +13,7 @@ void pasar_log_config_a_manejo_worker(t_log* l, t_config* c) {
 void* manejar_cliente_worker(void* arg) {
     int server_fd = (*(int*)arg);
     free(arg);
+    log_info(logger,"Esperando conexiones..."); 
 
     while (1) {
         int cliente_fd = esperar_cliente(server_fd, logger_worker);
