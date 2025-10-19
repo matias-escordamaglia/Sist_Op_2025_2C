@@ -15,12 +15,14 @@
 #include "./utils/utils.h"
 #include "./utils/empaquetar.h"
 #include "./utils/desempaquetar.h"
-#include "utilsWorker.h"
+//#include "utilsWorker.h"
+#include "memoria_interna_.h"
 
 // int ;
 char* ip_storage;
 char* puerto_storage;
 
+//int conexion_master;
 char* ip_master;
 char* puerto_master;
 
