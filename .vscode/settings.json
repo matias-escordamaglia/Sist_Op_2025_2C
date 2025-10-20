@@ -24,6 +24,7 @@
         "log.h": "c",
         "empaquetar.h": "c",
         "utilsworker.h": "c",
-        "dictionary.h": "c"
+        "dictionary.h": "c",
+        "unistd.h": "c"
     }
 }

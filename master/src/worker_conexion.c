@@ -199,8 +199,6 @@ void* tratar_siguientes_queries_a_enviar(void* _) {
         pedido->query_id= qid_pedido;
         pedido->program_counter = pc_pedido;
         pedido->query_path = path;
-
-        //TODO no hardcodear
         pedido->motivo = PEDIDO_QUERY;
 
 
