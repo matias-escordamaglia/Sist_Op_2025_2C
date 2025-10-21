@@ -57,7 +57,7 @@ void* manejar_worker(void* arg) {
 
         int cod_op = recibir_operacion(cliente_fd, get_logger());
         if (cod_op == -1) {
-            log_info(get_logger(), "WORKER desconectado, iniciardo evento desconexion");
+            log_info(get_logger(), "WORKER desconectado, iniciando evento desconexion");
             query_id = get_worker_qid(id_worker);
             enviar_evento_planificacion(EVENTO_WORKER_DESCONECTADO, id_worker, query_id, VALOR_NULO_EVENTO);
             break;

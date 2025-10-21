@@ -4,7 +4,6 @@
 pthread_t hilo_planificacion;
 pthread_t hilo_pedidos_a_enviar_worker;
 pthread_t hilo_principal;
-pthread_t hilo_aging;
 
 
 int server_fd_general;
@@ -35,9 +34,6 @@ int main(int argc, char** argv) {
     
     pthread_create(&hilo_planificacion, NULL, main_planificacion, NULL);
     pthread_detach(hilo_planificacion);
-
-    pthread_create(&hilo_aging, NULL, main_aging, NULL);
-    pthread_detach(hilo_aging);
 
     
     char* puerto_escucha = config_get_string_value(get_config(), "PUERTO_ESCUCHA");

@@ -179,6 +179,12 @@ void intentar_asignaciones_fifo() {
 
 
 void planificar_por_prioridades() {
+
+    pthread_t hilo_aging;
+
+    pthread_create(&hilo_aging, NULL, main_aging, NULL);
+    pthread_detach(hilo_aging);
+
     while(true) {
         sem_wait(sem_trabajo_planificacion);
         intentar_asignaciones_prioridades();
