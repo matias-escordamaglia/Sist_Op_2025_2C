@@ -15,6 +15,7 @@
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <pthread.h>
+#include <math.h>
 
 #include <commons/log.h>
 #include <commons/config.h>
@@ -85,8 +86,14 @@ void cargar_bitmap(char* );
 void mapeo_dir_mutex_dinamic(char* );
 char* crear_key_file_tag(char* ,  char*);
 int lectura_metadata(char* );
-void crear_dicctionary_estado_file_tag();
 void finalizar_munmap();
+int asignar_bloque_logico(char* ruta_logical_block);
+void liberar_bloque_reservado(int nro_bloque);
+char* crear_nombre_block(int valor, int cod);
+int encontrar_y_reservar_bloque();
+int buscar_primer_bloque_libre();
+int buscar_num_ultimo_bloque(char* ruta_logical_block);
+
 
 
 
