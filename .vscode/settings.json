@@ -25,6 +25,8 @@
         "empaquetar.h": "c",
         "utilsworker.h": "c",
         "dictionary.h": "c",
-        "unistd.h": "c"
+        "unistd.h": "c",
+        "time.h": "c",
+        "temporal.h": "c"
     }
 }

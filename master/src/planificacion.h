@@ -8,9 +8,11 @@
 #include <unistd.h>
 #include <signal.h>
 #include <sys/time.h>
+#include <sys/select.h>
 #include <commons/log.h>
 #include <commons/string.h>
 #include <commons/config.h>
+#include <commons/temporal.h>
 
 #include "./utils/utils.h"
 #include "./utils/empaquetar.h"
@@ -66,6 +68,7 @@ uint32_t solicitar_desalojo_bloqueante(t_worker_conectado* worker_a_desalojar, u
 void asignar_query_a_worker(t_elemento_cola* elemento, t_worker_conectado* worker);
 
 void* main_aging(void* args);
+void dormir_milisegundos(int tiempo);
 bool aplicar_aging_inteligente();
 void verificar_y_aplicar_aging_si_corresponde();
 
