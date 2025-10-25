@@ -96,4 +96,5 @@ int buscar_num_ultimo_bloque(char* ruta_logical_block);
 
 
 
+
 #endif /* STORAGE_H_ */
