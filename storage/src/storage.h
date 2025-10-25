@@ -10,11 +10,8 @@
 #include <sys/stat.h>
 #include <errno.h>
 #include <dirent.h>
-#include <sys/stat.h>
-#include <errno.h>
 #include <fcntl.h>
 #include <sys/mman.h>
-#include <pthread.h>
 #include <math.h>
 
 #include <commons/log.h>
