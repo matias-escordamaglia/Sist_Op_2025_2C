@@ -87,12 +87,25 @@ bool ejecutar_linea(const char* linea) {
             return ok;
         }
         case WRITE: {
-            // TODO: parsear y ejecutar WRITE <file>:<tag> <offset|bloque> <datos>
-            // Formato: WRITE <NOMBRE_FILE>:<TAG> <DIRECCIÓN BASE> <CONTENIDO>
-            t_tabla_paginas* tabla = obtener_o_crear_tp("nombreFile","tag");
+            // t_write w = {0};
+            // if (!parsear_write_params(params, &w)) {
+            //     log_error(logger, "Sintaxis WRITE inválida: %s", linea);
+            //     return false;
+            // }
+            // log_info(logger, "VA A EJECUTAR EL WRITE");
 
-            log_warning(logger, "WRITE aún no implementado: %s", linea);
-            return false;
+            // // Llama directo a memoria (asume query_id en pedido, ajusta si no)
+            // int ok = memoria_write(&w); 
+            // if (ok < 0) {
+            //     log_error(logger, "[WORKER] WRITE falló para %s:%s base=%u", w.nombre_archivo, w.tag, w.dir_base);
+            //     destruir_write(&w);
+            //     return false;
+            // }
+
+            // // log_info(logger, "## Query %u: - Instrucción realizada: WRITE", pedido->query_id); // Log obligatorio sin params
+            // destruir_write(&w);
+            log_warning(logger, "READ aún no implementado: %s", linea);
+            return true;
         }
         case READ: {
             // TODO: parsear y ejecutar READ <file>:<tag> <offset|bloque> <tamanio>
@@ -448,4 +461,76 @@ bool parsear_tag_params(const char* params, t_tag* out) {
     bool ok = out->file_origen && out->tag_origen && out->file_dest && out->tag_dest;
     free(tmp);
     return ok;
+}
+
+bool parsear_write_params(const char* params, t_write* out) {
+    if (!params || !out) return false;
+    params = saltar_blancos(params);
+    if (*params == '\0') return false;
+
+    char* tmp = strdup(params);
+    if (!tmp) return false;
+
+    // Trim trailing whitespace
+    size_t n = strlen(tmp);
+    while (n && (tmp[n-1]=='\n'||tmp[n-1]=='\r'||tmp[n-1]==' '||tmp[n-1]=='\t')) tmp[--n]='\0';
+    if (!n) { free(tmp); return false; }
+
+    // Primer token: <FILE:TAG>
+    char* sp1 = strpbrk(tmp, " \t");
+    if (!sp1) { free(tmp); return false; }
+    *sp1 = '\0';
+    char* file_tag_str = tmp;
+
+    // Segundo token: <DIR_BASE>
+    char* p2 = saltar_blancos(sp1 + 1);
+    if (*p2 == '\0') { free(tmp); return false; }
+    char* sp2 = strpbrk(p2, " \t");
+    if (!sp2) { free(tmp); return false; } // Debe haber contenido
+    *sp2 = '\0';
+
+    errno = 0;
+    char* endp = NULL;
+    unsigned long val = strtoul(p2, &endp, 10);
+    if (errno != 0 || endp == p2 || *saltar_blancos(endp) != '\0') { free(tmp); return false; }
+
+    // Tercer token: <CONTENIDO> (todo lo restante, permitimos espacios)
+    char* contenido = saltar_blancos(sp2 + 1);
+    if (*contenido == '\0') { free(tmp); return false; }
+
+    // Split FILE:TAG
+    char* colon = strchr(file_tag_str, ':');
+    if (!colon) { free(tmp); return false; }
+    *colon = '\0';
+    const char* f = file_tag_str;
+    const char* t = colon + 1;
+    if (*f == '\0' || *t == '\0') { free(tmp); return false; }
+
+    out->file = strdup(f);
+    out->tag = strdup(t);
+    out->dir_base = (size_t)val;
+    out->len = strlen(contenido); // Bytes sin null
+    out->data = malloc(out->len); // uint8_t*
+    if (!out->data) { // Error malloc
+        free(out->file);
+        free(out->tag);
+        free(tmp);
+        return false;
+    }
+    memcpy(out->data, contenido, out->len); // Copia bytes
+
+    bool ok = out->file && out->tag && out->data;
+    free(tmp);
+    return ok;
+}
+
+void destruir_write(t_write* w) {
+    if (!w) return;
+    free(w->file);
+    free(w->tag);
+    free(w->data);
+    w->file = NULL;
+    w->tag = NULL;
+    w->data = NULL;
+    w->len = 0;
 }
