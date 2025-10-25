@@ -15,5 +15,7 @@ extern t_dictionary* diccionario_programas;
 extern uint8_t* MEM;                  // único malloc
 extern size_t   TAM_PAGINA;
 extern int      RETARDO_MEMORIA_MS;
+extern int block_size;
+
 
 #endif /*UTILSWORKER_H*/

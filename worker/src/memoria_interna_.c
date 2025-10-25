@@ -4,7 +4,7 @@
 
 // Variables globales
 int tam_bloque;
-void* memoria_interna = NULL;
+// void* memoria_interna = NULL;
 int cantidad_paginas;
 int TAM_MEMORIA_TOTAL;
 int RETARDO_MEMORIA;
@@ -33,23 +33,23 @@ void pasar_bloque_a_memoria(int* block_size) {
 }
 
 
-void inicializar_memoria_interna() {
-    t_config* config = config_create("worker.config");
-    TAM_MEMORIA_TOTAL = config_get_int_value(config, "TAM_MEMORIA");
-    cantidad_paginas = TAM_MEMORIA_TOTAL / tam_bloque;
-    memoria_interna = malloc(TAM_MEMORIA_TOTAL);
-    tabla_paginas = malloc(sizeof(t_pagina) * cantidad_paginas);
+// void inicializar_memoria_interna() {
+//     t_config* config = config_create("worker.config");
+//     TAM_MEMORIA_TOTAL = config_get_int_value(config, "TAM_MEMORIA");
+//     cantidad_paginas = TAM_MEMORIA_TOTAL / tam_bloque;
+//     // memoria_interna = malloc(TAM_MEMORIA_TOTAL);
+//     tabla_paginas = malloc(sizeof(t_pagina) * cantidad_paginas);
 
-    for (int i = 0; i < cantidad_paginas; i++) {
-        tabla_paginas[i].en_uso = false;
-        tabla_paginas[i].bit_uso = false;
-        tabla_paginas[i].modificado = false;
-        tabla_paginas[i].nro_pagina = -1;
-        tabla_paginas[i].frame = memoria_interna + (i * tam_bloque);
-    }
+//     for (int i = 0; i < cantidad_paginas; i++) {
+//         tabla_paginas[i].en_uso = false;
+//         tabla_paginas[i].bit_uso = false;
+//         tabla_paginas[i].modificado = false;
+//         tabla_paginas[i].nro_pagina = -1;
+//         tabla_paginas[i].frame = memoria_interna + (i * tam_bloque);
+//     }
 
-    printf("[MEM] Inicializada con %d páginas de %d bytes\n", cantidad_paginas, tam_bloque);
-}
+//     printf("[MEM] Inicializada con %d páginas de %d bytes\n", cantidad_paginas, tam_bloque);
+// }
 
 // --------------------------------------------------ACCEDER A PAG
 

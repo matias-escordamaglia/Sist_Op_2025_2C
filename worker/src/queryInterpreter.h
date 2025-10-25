@@ -30,5 +30,6 @@ bool ejecutar_tag(const t_tag* t);
 int enviar_tag_a_storage(int conexion,const char* file_origen, const char* tag_origen, const char* file_dest,const char* tag_dest);
 bool ejecutar_end(void);
 int enviar_end_a_master();
+bool parsear_write_params(const char* params, t_write* out);
 
 #endif // QUERYINTERPRETER_H
