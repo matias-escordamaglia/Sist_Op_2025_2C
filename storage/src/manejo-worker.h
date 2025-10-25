@@ -28,10 +28,13 @@ void escritura_bloque();
 void lectura_bloque();
 void eliminar_tag();
 
+
 int obtener_tamano(char*);
-void incrementar(int, int);
+void incrementar(int, int, char*);
 void decrementar(int, int);
 void copiar_archivo(char*, char*);
 void copiar_directorio(char*, char*);
+void eliminar_directorio(char*);
+
 
 #endif /* MANEJO_WORKER_H_ */
