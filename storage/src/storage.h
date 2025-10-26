@@ -42,10 +42,10 @@ extern char* mmap_BM;
 extern t_bitarray* BA_bitmap; 
 
 //semaforos mutex
-extern pthread_mutex_t mutex_bitmap;
-extern pthread_mutex_t mutex_dir_files; 
-extern pthread_mutex_t mutex_file_hash;
-extern pthread_mutex_t mutex_diccionary; 
+extern pthread_mutex_t* mutex_bitmap;
+extern pthread_mutex_t* mutex_dir_files; 
+extern pthread_mutex_t* mutex_file_hash;
+extern pthread_mutex_t* mutex_diccionary; 
 
 //dictionarys
 extern t_dictionary* file_tag_dic ; 
@@ -86,6 +86,7 @@ int lectura_metadata(char* );
 void finalizar_munmap();
 int asignar_bloque_logico(char* ruta_logical_block);
 void liberar_bloque_reservado(int nro_bloque);
+void ocupar_bloque_reservar(int nro_bloque) ;
 char* crear_nombre_block(int valor, int cod);
 int encontrar_y_reservar_bloque();
 int buscar_primer_bloque_libre();
