@@ -129,4 +129,5 @@ void* atender_conexion_worker(void* arg) {
 Operation extraer_operacion(void* buffer_st){
     Operation op; 
     memcpy(&op,buffer_st,sizeof(Operation));
+     return op; 
 } 

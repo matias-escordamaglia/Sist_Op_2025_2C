@@ -405,18 +405,18 @@ void eliminar_block_metadata(char* ruta_tag, int posicion_bloq){
 
     // Mover elementos a la izquierda
     for (int i = pos; claves[i] != NULL; i++) {
-        claves[i] = claves[i + 1];
+        bloques[i] = bloques[i + 1];
     }
 
     // Reconstruir el string con formato [A,B,C,D]
     char nuevo_valor[512] = "[";
-    for (int i = 0; claves[i] != NULL; i++) {
+    for (int i = 0; bloques[i] != NULL; i++) {
         strcat(nuevo_valor, claves[i]);
-        if (claves[i + 1] != NULL)
+        if (bloques[i + 1] != NULL)
             strcat(nuevo_valor, ",");
     }
     strcat(nuevo_valor, "]");
-
+    liberar_bloque_reservado(bloques[posicion_bloq]);
     // Guardar en el config
     config_set_value(config, "CLAVES", nuevo_valor);
     config_save(config);

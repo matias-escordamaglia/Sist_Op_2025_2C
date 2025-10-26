@@ -762,6 +762,119 @@ int asignar_bloque_logico(char* ruta_logical_block){
     return 0; 
 }
 void liberar_bloque_reservado(int nro_bloque) {
+    //solo si no hay mas enlaces existentes
+    pthread_mutex_lock(&mutex_bitmap);
+    
+    bitarray_clean_bit(BA_bitmap, nro_bloque);
+    
+    pthread_mutex_unlock(&mutex_bitmap);
+}
+char* crear_nombre_block(int valor, int cod) {
+    char* nombre = malloc(25); 
+
+    if (!nombre) 
+        return NULL;
+    if(cod == 4)
+    sprintf(nombre, "block%04d.dat", valor);
+    else 
+    sprintf(nombre, "%06d.dat", valor);
+
+    return nombre;
+}
+int encontrar_y_reservar_bloque() {
+    
+    pthread_mutex_lock(&mutex_bitmap);
+
+    int bloque_libre = buscar_primer_bloque_libre(BA_bitmap);
+
+    if (bloque_libre != -1) {
+        bitarray_set_bit(BA_bitmap, bloque_libre);
+    }
+
+    pthread_mutex_unlock(&mutex_bitmap); 
+    return bloque_libre;
+}
+int buscar_primer_bloque_libre() {
+    
+    int cant_bloques = FS_SIZE / BLOCK_SIZE; 
+    for (int i = 0; i<cant_bloques; i++) {
+        
+        if (bitarray_test_bit(BA_bitmap, i) == false) {
+            return i;
+        }
+    }
+
+    log_error(logger, "No se encontró espacio libre en el bitmap.");
+    return -1; 
+}
+int buscar_num_ultimo_bloque(char* ruta_logical_block){
+ // ruta_logical_block es ".../files/FILE/TAG/logical_blocks"
+    
+    char* ultimo_slash = strrchr(ruta_logical_block, '/');
+    if (ultimo_slash == NULL) {
+        log_error(logger, "Ruta inválida: %s", ruta_logical_block);
+        return -1;
+    }
+
+    char* ruta_tag = strndup(ruta_logical_block, ultimo_slash - ruta_logical_block);
+
+    char* ruta_metadata = add_seg_ruta(ruta_tag, "/metadata.config");
+     
+    t_config* temp = config_create(ruta_metadata);
+    if (temp == NULL) {
+        log_error(logger, "No se pudo leer metadata en: %s", ruta_metadata);
+        free(ruta_tag);
+        free(ruta_metadata);
+        return -1; 
+    }
+
+    int tamaño = config_get_int_value(temp, "TAMAÑO");
+    int bloques_actuales = (int)ceil((double)tamaño / (double)BLOCK_SIZE);
+    int proximo_bloque = bloques_actuales;
+    
+    free(ruta_tag);
+    free(ruta_metadata);
+    config_destroy(temp); 
+
+    return proximo_bloque;  
+}
+// funcioes para commit 
+/*
+void duplicacion_estructuras(){
+
+}
+int  verificar_existencia_de_enlaces(char* ruta_bloque_fisico){
+    struct stat info_archivo; 
+
+    if (stat(ruta_bloque_fisico, &info_archivo) == -1) {
+        log_error(logger, "No se pudo leer información del archivo en: %s", ruta_bloque_fisico);
+        return -1; 
+    }
+
+    int contador_de_links = info_archivo.st_nlink;
+    return contador_de_links; 
+}*/
+
+        return -1; 
+
+    }
+    log_info(logger, "Hard link creado: %s -> %s", ruta_L_block_final, ruta_F_block);
+
+    log_error(logger, "No se encontró espacio libre en el bitmap.");
+    return -1; 
+}
+int buscar_num_ultimo_bloque(char* ruta_logical_block){
+ // ruta_logical_block es ".../files/FILE/TAG/logical_blocks"
+
+    free(nombre_block);
+    free(pre_ruta);
+    free(ruta_F_block); 
+    free(nombre_block_logic);
+    free(ruta_L_block_final);
+
+    return 0; 
+}
+void liberar_bloque_reservado(int nro_bloque) {
     pthread_mutex_lock(&mutex_bitmap);
     
     bitarray_clean_bit(BA_bitmap, nro_bloque);
