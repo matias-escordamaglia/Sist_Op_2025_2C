@@ -397,10 +397,11 @@ void procesar_bloque_logico(char* ruta_bloque, int contador) {
     free(hash);
 }
 
-void eliminar_block_metadata(char* ruta_file){
-    t_config *config = config_create("archivo.config");
-    char **claves = config_get_array_value(config, "CLAVES");
-    int pos = 4; // posición a borrar
+void eliminar_block_metadata(char* ruta_tag, int posicion_bloq){
+    char* ruta_metadata = add_seg_ruta(ruta_tag, "/metadata.config");
+    t_config* config = config_create(ruta_metadata);
+    char **bloques = config_get_array_value(config, "BLOCKS");
+    int pos = posicion_bloq; // posición a borrar
 
     // Mover elementos a la izquierda
     for (int i = pos; claves[i] != NULL; i++) {
@@ -421,8 +422,6 @@ void eliminar_block_metadata(char* ruta_file){
     config_save(config);
 
     config_destroy(config);
-    return 0;
-
 }
 
 
