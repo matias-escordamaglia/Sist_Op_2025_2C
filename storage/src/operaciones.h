@@ -22,7 +22,7 @@
 
 
 int create(char* , char*);
-void truncar_archivo(char*, char*, char*);
+int truncar_archivo(char*, char*, int);
 void tag_file(char*, char*);
 void commit_tag(char* , char* );
 void escritura_bloque();
