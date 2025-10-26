@@ -134,7 +134,7 @@ void* manejar_worker(void* arg) {
     ---------------------------- ENVIOS Y PEDIDOS ---------------------------------------- 
     -------------------------------------------------------------------------------------- */
 
-t_queue* cola_envio_queries;
+t_queue* cola_envio_pedidos;
 
 void agregar_siguiente_query_a_enviar(t_query* query, t_worker_conectado* worker_libre) {
 
@@ -150,22 +150,40 @@ void agregar_siguiente_query_a_enviar(t_query* query, t_worker_conectado* worker
     nuevo_pedido -> pc = query -> program_count;
     nuevo_pedido -> query_path = query -> query_path;
     nuevo_pedido -> worker_asignado = worker_a_usar;
+    nuevo_pedido -> tipo = PEDIDO_QUERY;
     
 
-    queue_push(cola_envio_queries, nuevo_pedido);
-    sem_post(sem_envio_query_pendiente);
+    queue_push(cola_envio_pedidos, nuevo_pedido);
+    sem_post(sem_envio_pedido_worker_pendiente);
 
 } 
 
-bool enviar_siguiente_query(t_worker_conectado* worker, t_pedido_master_worker* sig_pedido) {
+void agregar_pedido_interrupcion(t_worker_conectado* worker, uint32_t query_id) {
+
+    t_siguiente_pedido* nuevo_pedido = malloc(sizeof(t_siguiente_pedido));
+
+    char* mensaje_interrupt = "Pedido Interrupcion; si lo está leyendo hay un error";
+
+    nuevo_pedido -> qid = query_id;
+    nuevo_pedido -> pc = -1;
+    nuevo_pedido -> query_path = mensaje_interrupt;
+    nuevo_pedido -> worker_asignado = worker;
+    nuevo_pedido -> tipo = INTERRUPCION;
+
+    queue_push(cola_envio_pedidos, nuevo_pedido);
+    sem_post(sem_envio_pedido_worker_pendiente);
+
+}
+
+bool enviar_siguiente_pedido(t_worker_conectado* worker, t_pedido_master_worker* sig_pedido) {
     if (!worker || !worker->worker_conectado) {
-        log_error(get_logger(), "[CONEXION] No se puede enviar el query: worker nula o no conectada.");
+        log_error(get_logger(), "[CONEXION] No se puede enviar el pedido: worker nula o no conectada.");
         return false;
     }
 
     t_paquete* paquete = empaquetar_pedido_master_worker(sig_pedido);
     if (!paquete) {
-        log_error(get_logger(), "[CONEXION] No se pudo empaquetar el siguiente query");
+        log_error(get_logger(), "[CONEXION] No se pudo empaquetar el siguiente pedido");
         return false;
     }
 
@@ -182,27 +200,28 @@ bool enviar_siguiente_query(t_worker_conectado* worker, t_pedido_master_worker* 
 }
 
 
-void* tratar_siguientes_queries_a_enviar(void* _) {
-    cola_envio_queries = queue_create();
+void* tratar_siguientes_pedidos_a_enviar_worker(void* _) {
+    cola_envio_pedidos = queue_create();
 
     while(true) {
-        sem_wait(sem_envio_query_pendiente);
+        sem_wait(sem_envio_pedido_worker_pendiente);
 
-        t_siguiente_pedido* sig_pedido = queue_pop(cola_envio_queries);
+        t_siguiente_pedido* sig_pedido = queue_pop(cola_envio_pedidos);
         uint32_t qid_pedido = sig_pedido->qid;
         uint32_t pc_pedido = sig_pedido->pc;
         char* path = sig_pedido->query_path;
         t_worker_conectado* worker = sig_pedido->worker_asignado;
+        t_motivo_pedido_master_worker motivo = sig_pedido -> tipo;
         free(sig_pedido);
 
         t_pedido_master_worker* pedido = malloc(sizeof(t_pedido_master_worker));
         pedido->query_id= qid_pedido;
         pedido->program_counter = pc_pedido;
         pedido->query_path = path;
-        pedido->motivo = PEDIDO_QUERY;
+        pedido->motivo = motivo;
 
 
-        if (enviar_siguiente_query(worker, pedido)) {
+        if (enviar_siguiente_pedido(worker, pedido)) {
             log_info(get_logger(), "[DEBUG] Query (ID: %u) enviado a Worker (ID: %u)", pedido->query_id, worker->id_worker);
         } else {
             log_error(get_logger(), "[ERROR] Falló el envío del query (ID: %u) a Worker (ID: %u)", 

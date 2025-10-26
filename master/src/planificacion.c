@@ -38,8 +38,6 @@ uint64_t timestamp_actual_en_milisegundos() {
 t_query* crear_nuevo_query(char* query_path, uint32_t prioridad, int conexion) {
     t_query* nuevo_query = crear_query(query_path, prioridad, conexion);
 
-    // TODO REPETIDO 1 hilo con temporizador para aging posiblemente
-    //inicializar_temporizador_query(nuevo_query);
     t_elemento_cola* nuevo_elemento = crear_nuevo_elemento(nuevo_query);
 
     LOCK(&mutex_cola_ready);
@@ -56,7 +54,6 @@ t_elemento_cola* crear_nuevo_elemento(t_query* query) {
     t_elemento_cola* nuevo_elemento = malloc(sizeof(t_elemento_cola));
 
     nuevo_elemento->query = query;
-    //TODO REPETIDO 1: Aquí seguro vaya un temporizador u algún hilo para lo de aging si es que está activo
     nuevo_elemento->tiempo_llegada = timestamp_actual_en_milisegundos();
     nuevo_elemento->prioridad_efectiva = query->prioridad;
     nuevo_elemento->ultimo_aging = nuevo_elemento->tiempo_llegada;
@@ -377,6 +374,7 @@ void agregar_query_ordenada(t_list* lista, t_elemento_cola* elemento) {
     }
     
     list_add_in_index(lista, posicion, elemento);
+    elemento->tiempo_llegada = timestamp_actual_en_milisegundos();
 }
 
 //TODO
@@ -410,8 +408,7 @@ void* main_aging(void* args) {
     int cant_veces_aging_loop = 0;
     
     while (true) {
-        //TODO: Revisar esta cuenta
-        //TODO: Revisar la referencia a la funcion que está desactivada por alguna razón
+        
         dormir_milisegundos(tiempo_aging_ms);
         
         bool puede_desalojar_ahora = aplicar_aging_inteligente();
@@ -438,6 +435,7 @@ void dormir_milisegundos(int tiempo_aging_ms) {
     tv.tv_sec = tiempo_aging_ms / 1000;
     tv.tv_usec = (tiempo_aging_ms % 1000) * 1000;
     select(0, NULL, NULL, NULL, &tv);
+
 }
 
 bool aplicar_aging_inteligente() {

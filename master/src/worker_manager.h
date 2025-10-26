@@ -26,6 +26,7 @@ typedef struct {
     uint32_t pc;
     char* query_path;
     t_worker_conectado* worker_asignado;
+    t_pedido_master_worker tipo;
 } t_siguiente_pedido;
 
 void iniciar_worker_manager(); 
