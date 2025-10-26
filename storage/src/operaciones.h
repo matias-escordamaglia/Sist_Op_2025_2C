@@ -25,8 +25,8 @@ int create(char* , char*);
 int truncar_archivo(char*, char*, int);
 void tag_file(char*, char*);
 int commit_tag(char* , char* );
-void escritura_bloque();
-void lectura_bloque();
+int escritura_bloque(char*, char*, int, char*);
+char* lectura_bloque(char*, char*, int);
 void eliminar_tag();
 
 
@@ -37,7 +37,8 @@ void copiar_archivo(char*, char*);
 void copiar_directorio(char*, char*);
 void eliminar_directorio(char*);
 int bloq_L_apuntan_bloq_F_0(char*);
-void recorrer_logical_blocks(char*);
+void recorrer_logical_blocks(char*, char*);
 int procesar_bloque_logico(char*, int);
+void eliminar_block_metadata(char*, int);
 
 #endif /* OPERACIONES_H_ */
