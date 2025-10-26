@@ -307,7 +307,7 @@ void recorrer_logical_blocks(char* path_dir) {
     }
 
     struct dirent* entry;  
-
+    int i = 0;
     while ((entry = readdir(dir)) != NULL) {
         if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
             continue;
@@ -317,7 +317,7 @@ void recorrer_logical_blocks(char* path_dir) {
         snprintf(ruta_bloque, sizeof(ruta_bloque), "%s/%s", path_dir, entry->d_name);
 
         printf("Bloque lógico encontrado: %s\n", ruta_bloque);
-        int i = 0;
+        
         procesar_bloque_logico(ruta_bloque, i);
         i++;
     }
