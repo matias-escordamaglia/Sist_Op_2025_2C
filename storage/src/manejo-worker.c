@@ -3,14 +3,6 @@
 #include "operaciones.h"  
 #include "storage.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <dirent.h>
-#include <sys/stat.h>
-#include <unistd.h>
-#include <commons/crypto.h>
-
 t_log* logger_worker;
 t_config* blockconfig = NULL;
 

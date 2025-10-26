@@ -715,13 +715,125 @@ void inicializar_dictionary_mutex(){
     if (file_tag_dic == NULL)
         file_tag_dic = dictionary_create();
 }
+// --- Esta función debe ser llamada DENTRO de un mutex del File:Tag ---
+int asignar_bloque_logico(char* ruta_logical_block){
+// buscamos un bloque fisico
+// dentro de esta carpeta creamos el hard link del B. Físico 0. 
+    int k=4; 
+    int bloque_fisico = encontrar_y_reservar_bloque(); 
+    if (bloque_fisico == -1) {
+        log_error(logger, "Espacio insuficiente en el bitmap");
+        // (Manejar el error, quizás devolver un código de error)
+        return -1;
+    }
+    char* nombre_block = crear_nombre_block(bloque_fisico, k); 
+    char* pre_ruta = add_seg_ruta("/physical_blocks",nombre_block);
+    char* ruta_F_block = add_seg_ruta(PUNTO_MONTAJE,pre_ruta);
+//encontrar numero de bloque logico a esta ruta
+    int posicion = buscar_num_ultimo_bloque(ruta_logical_block);
+    int Q = 6; 
+    char* nombre_block_logic = crear_nombre_block(posicion, Q); 
+    char* ruta_L_block_final= add_seg_ruta(ruta_logical_block, nombre_block_logic);
+//creación de hard link 
+    if (link(ruta_F_block, ruta_L_block_final) == -1) {
+
+        liberar_bloque_reservado(bloque_fisico);
+        log_error(logger, "No se pudo crear Hard Link BASE. Error: %s", strerror(errno));
 
 
+        free(nombre_block);
+        free(pre_ruta);
+        free(ruta_F_block); 
+        free(nombre_block_logic);
+        free(ruta_L_block_final);
+
+        return -1; 
+
+    }
+    log_info(logger, "Hard link creado: %s -> %s", ruta_L_block_final, ruta_F_block);
 
 
+    free(nombre_block);
+    free(pre_ruta);
+    free(ruta_F_block); 
+    free(nombre_block_logic);
+    free(ruta_L_block_final);
 
+    return 0; 
+}
+void liberar_bloque_reservado(int nro_bloque) {
+    pthread_mutex_lock(&mutex_bitmap);
+    
+    bitarray_clean_bit(BA_bitmap, nro_bloque);
+    
+    pthread_mutex_unlock(&mutex_bitmap);
+}
+char* crear_nombre_block(int valor, int cod) {
+    char* nombre = malloc(25); 
 
+    if (!nombre) 
+        return NULL;
+    if(cod == 4)
+    sprintf(nombre, "block%04d.dat", valor);
+    else 
+    sprintf(nombre, "%06d.dat", valor);
 
+    return nombre;
+}
+int encontrar_y_reservar_bloque() {
+    
+    pthread_mutex_lock(&mutex_bitmap);
 
+    int bloque_libre = buscar_primer_bloque_libre(BA_bitmap);
 
+    if (bloque_libre != -1) {
+        bitarray_set_bit(BA_bitmap, bloque_libre);
+    }
 
+    pthread_mutex_unlock(&mutex_bitmap); 
+    return bloque_libre;
+}
+int buscar_primer_bloque_libre() {
+    
+    int cant_bloques = FS_SIZE / BLOCK_SIZE; 
+    for (int i = 0; i<cant_bloques; i++) {
+        
+        if (bitarray_test_bit(BA_bitmap, i) == false) {
+            return i;
+        }
+    }
+
+    log_error(logger, "No se encontró espacio libre en el bitmap.");
+    return -1; 
+}
+int buscar_num_ultimo_bloque(char* ruta_logical_block){
+ // ruta_logical_block es ".../files/FILE/TAG/logical_blocks"
+    
+    char* ultimo_slash = strrchr(ruta_logical_block, '/');
+    if (ultimo_slash == NULL) {
+        log_error(logger, "Ruta inválida: %s", ruta_logical_block);
+        return -1;
+    }
+
+    char* ruta_tag = strndup(ruta_logical_block, ultimo_slash - ruta_logical_block);
+
+    char* ruta_metadata = add_seg_ruta(ruta_tag, "/metadata.config");
+     
+    t_config* temp = config_create(ruta_metadata);
+    if (temp == NULL) {
+        log_error(logger, "No se pudo leer metadata en: %s", ruta_metadata);
+        free(ruta_tag);
+        free(ruta_metadata);
+        return -1; 
+    }
+
+    int tamaño = config_get_int_value(temp, "TAMAÑO");
+    int bloques_actuales = (int)ceil((double)tamaño / (double)BLOCK_SIZE);
+    int proximo_bloque = bloques_actuales;
+    
+    free(ruta_tag);
+    free(ruta_metadata);
+    config_destroy(temp); 
+
+    return proximo_bloque;  
+}
