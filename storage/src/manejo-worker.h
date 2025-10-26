@@ -17,24 +17,6 @@ extern t_config* blockconfig;
 void pasar_log_config_a_manejo_worker(t_log* l, t_config*);
 void* manejar_cliente_worker(void* arg);
 void* atender_conexion_worker(void* arg);
-Operation extraer_operacion(void* );
-
-
-void create(char*, char*, char*);
-void truncar_archivo(char*, char*, char*);
-void tag_file(char*, char*);
-void commit_tag();
-void escritura_bloque();
-void lectura_bloque();
-void eliminar_tag();
-
-
-int obtener_tamano(char*);
-void incrementar(int, int, char*);
-void decrementar(int, int);
-void copiar_archivo(char*, char*);
-void copiar_directorio(char*, char*);
-void eliminar_directorio(char*);
-
+Operation extraer_operacion(void*, int* );
 
 #endif /* MANEJO_WORKER_H_ */

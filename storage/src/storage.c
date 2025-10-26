@@ -32,10 +32,10 @@ int server_fd_general;
 pthread_t hilo_manejo_worker;
 
 //semaforos mutex
-pthread_mutex_t mutex_bitmap;
-pthread_mutex_t mutex_dir_files; 
-pthread_mutex_t mutex_file_hash;
-pthread_mutex_t mutex_diccionary; 
+pthread_mutex_t* mutex_bitmap;
+pthread_mutex_t* mutex_dir_files; 
+pthread_mutex_t* mutex_file_hash;
+pthread_mutex_t* mutex_diccionary; 
 
 //dictionarys
 t_dictionary* file_tag_dic = NULL; 
@@ -769,6 +769,14 @@ void liberar_bloque_reservado(int nro_bloque) {
     
     pthread_mutex_unlock(&mutex_bitmap);
 }
+void ocupar_bloque_reservar(int nro_bloque) {
+    //solo si no hay mas enlaces existentes
+    pthread_mutex_lock(&mutex_bitmap);
+    
+    bitarray_set_bit(BA_bitmap, nro_bloque);
+    
+    pthread_mutex_unlock(&mutex_bitmap);
+}
 char* crear_nombre_block(int valor, int cod) {
     char* nombre = malloc(25); 
 
@@ -838,22 +846,6 @@ int buscar_num_ultimo_bloque(char* ruta_logical_block){
 
     return proximo_bloque;  
 }
-// funcioes para commit 
-/*
-void duplicacion_estructuras(){
-
-}
-int  verificar_existencia_de_enlaces(char* ruta_bloque_fisico){
-    struct stat info_archivo; 
-
-    if (stat(ruta_bloque_fisico, &info_archivo) == -1) {
-        log_error(logger, "No se pudo leer información del archivo en: %s", ruta_bloque_fisico);
-        return -1; 
-    }
-
-    int contador_de_links = info_archivo.st_nlink;
-    return contador_de_links; 
-}*/
 
 
 

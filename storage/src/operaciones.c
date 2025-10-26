@@ -73,7 +73,7 @@ void create(char* nombre_file, char* nombre_tag, char* ruta) {
     free(ruta_absoluta_dir_log_block);
 }
 
-void truncar_archivo(char* file, char* tag, char* nuevo_valor){
+int truncar_archivo(char* file, char* tag, int nuevo_valor){
     char* ruta_file = add_seg_ruta(PUNTO_MONTAJE, file);          
     char* ruta_tag  = add_seg_ruta(ruta_file, tag);          
     char* ruta_metadata = add_seg_ruta(ruta_tag, "/metadata.config");
@@ -364,7 +364,7 @@ void procesar_bloque_logico(char* ruta_bloque) {
     }
 
     printf("Hash del bloque: %s\n", hash);
-
+    
     if(config_has_property(config_hash, hash) == 0){
         // hacer que el bloque logico apunte al bloque fisico ya asignado
         char* bloque_F = config_get_string_value(config_hash, hash);
