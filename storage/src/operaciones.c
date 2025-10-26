@@ -81,15 +81,14 @@ int truncar_archivo(char* file, char* tag, int nuevo_valor){
     char* ruta_metadata = add_seg_ruta(ruta_tag, "/metadata.config");
     char* ruta_L_blocks = add_seg_ruta(ruta_file,"/logical_blocks"); 
     int tamanio_archivo = obtener_tamano(ruta_metadata);
-    int valor_numerico = atoi(nuevo_valor);
-    if(valor_numerico < tamanio_archivo){
-        incrementar(valor_numerico, tamanio_archivo, ruta_L_blocks);
+    if(nuevo_valor < tamanio_archivo){
+        incrementar(nuevo_valor, tamanio_archivo, ruta_L_blocks);
     }
     else {
-        decrementar(valor_numerico, tamanio_archivo);
+        decrementar(nuevo_valor, tamanio_archivo);
     }
     t_config* config = config_create(ruta_metadata);
-    config_set_value(config, "TAMAÑO", nuevo_valor);
+    config_set_value(config, "TAMAÑO", tag);//mofidicar
     config_save(config);               
 } // falta desasignar 
 
@@ -404,14 +403,14 @@ void eliminar_block_metadata(char* ruta_tag, int posicion_bloq){
     int pos = posicion_bloq; // posición a borrar
 
     // Mover elementos a la izquierda
-    for (int i = pos; claves[i] != NULL; i++) {
+    for (int i = pos; bloques[i] != NULL; i++) {
         bloques[i] = bloques[i + 1];
     }
 
     // Reconstruir el string con formato [A,B,C,D]
     char nuevo_valor[512] = "[";
     for (int i = 0; bloques[i] != NULL; i++) {
-        strcat(nuevo_valor, claves[i]);
+        strcat(nuevo_valor, bloques[i]);
         if (bloques[i + 1] != NULL)
             strcat(nuevo_valor, ",");
     }
