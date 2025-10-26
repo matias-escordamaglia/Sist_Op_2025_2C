@@ -21,8 +21,8 @@
 #include <commons/bitarray.h>
 
 
-void create(char* , char* , char* );
-void truncar_archivo(char*, char*, int);
+int create(char* , char*);
+void truncar_archivo(char*, char*, char*);
 void tag_file(char*, char*);
 void commit_tag(char* , char* );
 void escritura_bloque();
@@ -36,8 +36,8 @@ void decrementar(int, int);
 void copiar_archivo(char*, char*);
 void copiar_directorio(char*, char*);
 void eliminar_directorio(char*);
-void bloq_L_apuntan_bloq_F_0(char*);
+int bloq_L_apuntan_bloq_F_0(char*);
 void recorrer_logical_blocks(char*);
-void procesar_bloque_logico(char*);
+void procesar_bloque_logico(char*, int);
 
 #endif /* OPERACIONES_H_ */

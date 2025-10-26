@@ -12,13 +12,15 @@
 #include <commons/crypto.h>
 
 // Funciones nuevas
-
-void create(char* nombre_file, char* nombre_tag, char* ruta) {
- 
-    char* nuevo_file = add_seg_ruta(ruta, nombre_file); 
-    if (mkdir(PUNTO_MONTAJE, 0777) == -1) {
+// CREATE TERMINADO
+int create(char* nombre_file, char* nombre_tag) {
+    int ERROR_FILE_TAG_PREEXISTENTE = -2;
+    char* ruta_files = add_seg_ruta(PUNTO_MONTAJE, "/files");
+    char* nuevo_file = add_seg_ruta(ruta_files, nombre_file); 
+    if (mkdir(nuevo_file, 0777) == -1) {
         if (errno == EEXIST) {
             log_info(logger, "File %s ya existe", nombre_file);
+            return ERROR_FILE_TAG_PREEXISTENTE;
         } else {
             log_error(logger, "No se pudo crear el File %s. Error: %s", nombre_file, strerror(errno));
             free(nuevo_file);
@@ -28,9 +30,10 @@ void create(char* nombre_file, char* nombre_tag, char* ruta) {
     char* nuevo_tag = add_seg_ruta(nuevo_file, nombre_tag); 
     if (mkdir(nuevo_tag, 0777) == -1) {
         if (errno == EEXIST) {
-            log_info(logger, "File %s ya existe", nombre_tag);
+            log_info(logger, "Tag %s ya existe", nombre_tag);
+            return ERROR_FILE_TAG_PREEXISTENTE;
         } else {
-            log_error(logger, "No se pudo crear el File %s. Error: %s", nombre_tag, strerror(errno));
+            log_error(logger, "No se pudo crear el Tag %s. Error: %s", nombre_tag, strerror(errno));
             free(nuevo_tag);
             exit(EXIT_FAILURE);
         }
@@ -46,9 +49,7 @@ void create(char* nombre_file, char* nombre_tag, char* ruta) {
         }
     fprintf(f, "TAMAÑO=0\n");
     fprintf(f, "ESTADO=WORK_IN_PROGRESS\n");
-    fprintf(f, "BLOCKS=[0]\n");
-  
-    bitarray_set_bit(BA_bitmap,0); 
+    fprintf(f, "BLOCKS=[]\n");
 
     log_info(logger, "Metadata %s creado exitosamente",ruta_absoluta_metadata );
     fclose(f);
@@ -71,6 +72,7 @@ void create(char* nombre_file, char* nombre_tag, char* ruta) {
     free(nuevo_tag);
     free(ruta_absoluta_metadata);
     free(ruta_absoluta_dir_log_block);
+    return 0;
 }
 
 int truncar_archivo(char* file, char* tag, int nuevo_valor){
@@ -107,9 +109,9 @@ void commit_tag(char* file, char* tag){
     t_config* config = config_create(ruta_metadata);
     char* estado = config_get_string_value(config, "ESTADO");
     if(strcmp(estado,"COMMITED") == 1){
-        config_set_value(config, "ESTADO", "COMMITED"); 
         recorrer_logical_blocks(ruta_L_blocks);   
-
+        config_set_value(config, "ESTADO", "COMMITED"); 
+    
     }
 }
 
@@ -160,7 +162,7 @@ void decrementar(int nuevo_valor, int valor_original){
 
 }
 
-void bloq_L_apuntan_bloq_F_0(char* ruta_logical_block){
+int bloq_L_apuntan_bloq_F_0(char* ruta_logical_block){
     int k = 4; 
     int bloque_fisico = 0;
     char* nombre_block = crear_nombre_block(bloque_fisico, k); 
@@ -315,15 +317,16 @@ void recorrer_logical_blocks(char* path_dir) {
         snprintf(ruta_bloque, sizeof(ruta_bloque), "%s/%s", path_dir, entry->d_name);
 
         printf("Bloque lógico encontrado: %s\n", ruta_bloque);
-
-        procesar_bloque_logico(ruta_bloque);
+        int i = 0;
+        procesar_bloque_logico(ruta_bloque, i);
+        i++;
     }
 
     closedir(dir);  
 }
 
 
-void procesar_bloque_logico(char* ruta_bloque) {
+void procesar_bloque_logico(char* ruta_bloque, int contador) {
     struct stat st;
 
     // se obtiene info del bloque lógico (y su bloque físico)
@@ -367,8 +370,9 @@ void procesar_bloque_logico(char* ruta_bloque) {
     
     if(config_has_property(config_hash, hash) == 0){
         // hacer que el bloque logico apunte al bloque fisico ya asignado
-        char* bloque_F = config_get_string_value(config_hash, hash);
-        char* ruta_bloque_F = add_seg_ruta(PUNTO_MONTAJE, bloque_F);
+        int bloque_F = config_get_int_value(config_hash, hash);
+        char* nombre_bloque_F = crear_nombre_block(bloque_F, 4);
+        char* ruta_bloque_F = add_seg_ruta(PUNTO_MONTAJE, nombre_bloque_F);
         if (link(ruta_bloque_F, ruta_bloque) == -1) {
 
             liberar_bloque_reservado(bloque_F);
@@ -391,6 +395,33 @@ void procesar_bloque_logico(char* ruta_bloque) {
 
 
     free(hash);
+}
+
+void eliminar_block_metadata(char* ruta_tag, int posicion_bloq){
+    char* ruta_metadata = add_seg_ruta(ruta_tag, "/metadata.config");
+    t_config* config = config_create(ruta_metadata);
+    char **bloques = config_get_array_value(config, "BLOCKS");
+    int pos = posicion_bloq; // posición a borrar
+
+    // Mover elementos a la izquierda
+    for (int i = pos; claves[i] != NULL; i++) {
+        bloques[i] = bloques[i + 1];
+    }
+
+    // Reconstruir el string con formato [A,B,C,D]
+    char nuevo_valor[512] = "[";
+    for (int i = 0; bloques[i] != NULL; i++) {
+        strcat(nuevo_valor, claves[i]);
+        if (bloques[i + 1] != NULL)
+            strcat(nuevo_valor, ",");
+    }
+    strcat(nuevo_valor, "]");
+    liberar_bloque_reservado(bloques[posicion_bloq]);
+    // Guardar en el config
+    config_set_value(config, "CLAVES", nuevo_valor);
+    config_save(config);
+
+    config_destroy(config);
 }
 
 
