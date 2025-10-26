@@ -5,7 +5,7 @@
 // Variables globales
 int tam_bloque;
 void* memoria_interna = NULL;
-int cantidad_paginas;
+int cantidad_paginas_total;
 int TAM_MEMORIA_TOTAL;
 int RETARDO_MEMORIA;
 
@@ -17,8 +17,14 @@ typedef struct {
     void* frame;       // Dirección dentro del malloc
 } t_pagina;
 
+typedef struct {
+    char* nombre_file_tag;
+    t_pagina* tabla;
+    int cant_paginas;
+} t_tabla_file_tag;
+
 // Tabla de páginas
-t_pagina* tabla_paginas = NULL;
+t_pagina* tabla_total_paginas = NULL;
 
 // Puntero del reloj
 int puntero_clock = 0;
@@ -36,9 +42,10 @@ void pasar_bloque_a_memoria(int* block_size) {
 void inicializar_memoria_interna() {
     t_config* config = config_create("worker.config");
     TAM_MEMORIA_TOTAL = config_get_int_value(config, "TAM_MEMORIA");
-    cantidad_paginas = TAM_MEMORIA_TOTAL / tam_bloque;
+    RETARDO_MEMORIA= config_get_int_value(config,"RETARDO_MEMORIA");
+    cantidad_paginas_total = TAM_MEMORIA_TOTAL / tam_bloque;
     memoria_interna = malloc(TAM_MEMORIA_TOTAL);
-    tabla_paginas = malloc(sizeof(t_pagina) * cantidad_paginas);
+    tabla_total_paginas = malloc(sizeof(t_pagina) * cantidad_paginas);
 
     for (int i = 0; i < cantidad_paginas; i++) {
         tabla_paginas[i].en_uso = false;
@@ -53,15 +60,15 @@ void inicializar_memoria_interna() {
 
 // --------------------------------------------------ACCEDER A PAG
 
-void acceder_a_pagina(int nro_pagina) {
-    t_config* config = config_create("worker.config");
+void acceder_a_pagina(int nro_pagina, char* file_tag) {
+    //falta implementar el acceso a file tag
     pthread_mutex_lock(&mutex_memoria);
-    RETARDO_MEMORIA= config_get_int_value(config,"RETARDO_MEMORIA");
     // Buscar la página en memoria
     for (int i = 0; i < cantidad_paginas; i++) {
         if (tabla_paginas[i].en_uso && tabla_paginas[i].nro_pagina == nro_pagina) {
             tabla_paginas[i].bit_uso = true;
             printf("[MEM] Acceso a página %d (bit de uso actualizado)\n", nro_pagina);
+            
             pthread_mutex_unlock(&mutex_memoria);
             usleep(RETARDO_MEMORIA * 1000);
             return;
@@ -115,11 +122,12 @@ int reemplazar_pagina_clock() {
 
 // ------------------ Liberar memoria ------------------
 
-/*void liberar_memoria_interna() {
+void liberar_memoria_interna() {
     free(memoria_interna);
     free(tabla_paginas);
-    free(ALGORITMO_REEMPLAZO);
+    //free(ALGORITMO_REEMPLAZO);
     printf("[MEM] Memoria interna liberada.\n");
-}*/
+}
 
 //Para hacer el write o read real debemos invocar a storage para que haga esa operacion
+

@@ -47,7 +47,7 @@ int main(int argc, char** argv)
     recv(conexion_storage, &block_size, sizeof(int), MSG_WAITALL);
     pasar_bloque_a_memoria(&block_size);
     //inicializacion memoria
-    //inicializar_memoria_interna();
+    inicializar_memoria_interna();
     log_info(logger, "Memoria interna inicializada correctamente.");
 
 	conexion_master = crear_conexion(ip_master, puerto_master, logger);
