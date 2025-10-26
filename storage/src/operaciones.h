@@ -38,6 +38,6 @@ void copiar_directorio(char*, char*);
 void eliminar_directorio(char*);
 int bloq_L_apuntan_bloq_F_0(char*);
 void recorrer_logical_blocks(char*);
-void procesar_bloque_logico(char*, int);
+int procesar_bloque_logico(char*, int);
 
 #endif /* OPERACIONES_H_ */

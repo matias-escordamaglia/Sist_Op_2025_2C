@@ -85,11 +85,12 @@ int truncar_archivo(char* file, char* tag, int nuevo_valor){
         incrementar(nuevo_valor, tamanio_archivo, ruta_L_blocks);
     }
     else {
-        decrementar(nuevo_valor, tamanio_archivo);
+        //decrementar(nuevo_valor, tamanio_archivo);
     }
     t_config* config = config_create(ruta_metadata);
     config_set_value(config, "TAMAÑO", tag);//mofidicar
-    config_save(config);               
+    config_save(config);    
+    return 0;           
 } // falta desasignar 
 
 void tag_file(char* origen, char* destino){
@@ -157,10 +158,10 @@ void incrementar(int nuevo_valor, int valor_original, char* ruta_logical_block){
  }
 
 
-void decrementar(int nuevo_valor, int valor_original){
-    int cant_bloques = (valor_original - nuevo_valor) / BLOCK_SIZE;
+//void decrementar(int nuevo_valor, int valor_original){
+  //  int cant_bloques = (valor_original - nuevo_valor) / BLOCK_SIZE;
 
-}
+//}
 
 int bloq_L_apuntan_bloq_F_0(char* ruta_logical_block){
     int k = 4; 
@@ -326,13 +327,13 @@ void recorrer_logical_blocks(char* path_dir) {
 }
 
 
-void procesar_bloque_logico(char* ruta_bloque, int contador) {
+int procesar_bloque_logico(char* ruta_bloque, int contador) {
     struct stat st;
 
     // se obtiene info del bloque lógico (y su bloque físico)
     if (stat(ruta_bloque, &st) == -1) {
         perror("Error en stat");
-        return;
+        return -1;
     }
 
     printf("Bloque lógico: %s\n", ruta_bloque);
@@ -344,14 +345,14 @@ void procesar_bloque_logico(char* ruta_bloque, int contador) {
     FILE* f = fopen(ruta_bloque, "rb");
     if (!f) {
         perror("No se pudo abrir el bloque");
-        return;
+        return -1;
     }
 
     void* buffer = malloc(st.st_size);
     if (!buffer) {
         perror("No se pudo reservar memoria");
         fclose(f);
-        return;
+        return -1;
     }
 
     fread(buffer, 1, st.st_size, f);
@@ -363,7 +364,7 @@ void procesar_bloque_logico(char* ruta_bloque, int contador) {
 
     if (!hash) {
         perror("Error calculando hash MD5");
-        return;
+        return -1;
     }
 
     printf("Hash del bloque: %s\n", hash);
@@ -393,8 +394,8 @@ void procesar_bloque_logico(char* ruta_bloque, int contador) {
         free(bloque_fisico);
     }
 
-
     free(hash);
+    return 0;
 }
 
 void eliminar_block_metadata(char* ruta_tag, int posicion_bloq){
@@ -416,7 +417,8 @@ void eliminar_block_metadata(char* ruta_tag, int posicion_bloq){
             strcat(nuevo_valor, ",");
     }
     strcat(nuevo_valor, "]");
-    liberar_bloque_reservado(bloques[posicion_bloq]);
+    int valor = atoi(bloques[posicion_bloq]);
+    liberar_bloque_reservado(valor);
     // Guardar en el config
     config_set_value(config, "CLAVES", nuevo_valor);
     config_save(config);
