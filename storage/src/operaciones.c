@@ -100,7 +100,7 @@ void tag_file(char* origen, char* destino){
 }
 
 
-void commit_tag(char* file, char* tag){
+int commit_tag(char* file, char* tag){
     char* ruta_file = add_seg_ruta(PUNTO_MONTAJE, file);          
     char* ruta_tag  = add_seg_ruta(ruta_file, tag);
     char* ruta_metadata = add_seg_ruta(ruta_tag, "/metadata.config");
@@ -112,6 +112,7 @@ void commit_tag(char* file, char* tag){
         config_set_value(config, "ESTADO", "COMMITED"); 
     
     }
+    return 1;
 }
 
 void escritura_bloque(){

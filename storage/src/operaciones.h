@@ -24,7 +24,7 @@
 int create(char* , char*);
 int truncar_archivo(char*, char*, int);
 void tag_file(char*, char*);
-void commit_tag(char* , char* );
+int commit_tag(char* , char* );
 void escritura_bloque();
 void lectura_bloque();
 void eliminar_tag();

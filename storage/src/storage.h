@@ -42,10 +42,10 @@ extern char* mmap_BM;
 extern t_bitarray* BA_bitmap; 
 
 //semaforos mutex
-extern pthread_mutex_t* mutex_bitmap;
-extern pthread_mutex_t* mutex_dir_files; 
-extern pthread_mutex_t* mutex_file_hash;
-extern pthread_mutex_t* mutex_diccionary; 
+extern pthread_mutex_t mutex_bitmap;
+extern pthread_mutex_t mutex_dir_files; 
+extern pthread_mutex_t mutex_file_hash;
+extern pthread_mutex_t mutex_diccionary; 
 
 //dictionarys
 extern t_dictionary* file_tag_dic ; 

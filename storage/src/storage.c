@@ -32,10 +32,10 @@ int server_fd_general;
 pthread_t hilo_manejo_worker;
 
 //semaforos mutex
-pthread_mutex_t* mutex_bitmap;
-pthread_mutex_t* mutex_dir_files; 
-pthread_mutex_t* mutex_file_hash;
-pthread_mutex_t* mutex_diccionary; 
+pthread_mutex_t mutex_bitmap;
+pthread_mutex_t mutex_dir_files; 
+pthread_mutex_t mutex_file_hash;
+pthread_mutex_t mutex_diccionary; 
 
 //dictionarys
 t_dictionary* file_tag_dic = NULL; 
@@ -814,37 +814,6 @@ int buscar_primer_bloque_libre() {
 
     log_error(logger, "No se encontró espacio libre en el bitmap.");
     return -1; 
-}
-int buscar_num_ultimo_bloque(char* ruta_logical_block){
- // ruta_logical_block es ".../files/FILE/TAG/logical_blocks"
-    
-    char* ultimo_slash = strrchr(ruta_logical_block, '/');
-    if (ultimo_slash == NULL) {
-        log_error(logger, "Ruta inválida: %s", ruta_logical_block);
-        return -1;
-    }
-
-    char* ruta_tag = strndup(ruta_logical_block, ultimo_slash - ruta_logical_block);
-
-    char* ruta_metadata = add_seg_ruta(ruta_tag, "/metadata.config");
-     
-    t_config* temp = config_create(ruta_metadata);
-    if (temp == NULL) {
-        log_error(logger, "No se pudo leer metadata en: %s", ruta_metadata);
-        free(ruta_tag);
-        free(ruta_metadata);
-        return -1; 
-    }
-
-    int tamaño = config_get_int_value(temp, "TAMAÑO");
-    int bloques_actuales = (int)ceil((double)tamaño / (double)BLOCK_SIZE);
-    int proximo_bloque = bloques_actuales;
-    
-    free(ruta_tag);
-    free(ruta_metadata);
-    config_destroy(temp); 
-
-    return proximo_bloque;  
 }
 int buscar_num_ultimo_bloque(char* ruta_logical_block){
  // ruta_logical_block es ".../files/FILE/TAG/logical_blocks"

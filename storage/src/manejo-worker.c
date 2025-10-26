@@ -115,12 +115,12 @@ void* atender_conexion_worker(void* arg) {
                             estado = atender_create(nombre_file,nombre_tag);
                             break;
                         case  TRUNCATE:
-                            int tamanio = (int)extraer_uint32(buffer_st,offset);
+                            int tamanio = (int)extraer_uint32(buffer_st,&offset);
                             estado = atender_truncate(nombre_file,nombre_tag,tamanio); 
                             break;      
                         case TAG: 
-                            char* file_destino = extraer_string(buffer_st,offset); 
-                            char* tag_destino  = extraer_string(buffer_st,offset);
+                            char* file_destino = extraer_string(buffer_st,&offset); 
+                            char* tag_destino  = extraer_string(buffer_st,&offset);
                             estado = atender_tag(nombre_file,nombre_tag,file_destino,tag_destino); 
                             free(file_destino);
                             free(tag_destino);
@@ -176,7 +176,7 @@ void enviar_estado_op(int estado, int socket){
 int atender_create(char* file, char* tag){
     char* key_file_tag = crear_key_file_tag(file,tag);  
     int estado; 
-    pthread_mutex_lock(mutex_diccionary);
+    pthread_mutex_lock(&mutex_diccionary);
 
     if (dictionary_has_key(file_tag_dic, key_file_tag)){
         log_error(logger, "Error: Se intentó operar sobre un File:Tag Existente: %s", key_file_tag);
@@ -194,7 +194,7 @@ int atender_create(char* file, char* tag){
         }
         
     }
-    pthread_mutex_unlock(mutex_diccionary); 
+    pthread_mutex_unlock(&mutex_diccionary); 
     free(key_file_tag);
     return estado; 
 }
@@ -213,8 +213,6 @@ int atender_truncate(char* file, char* tag,int tamanio){
 
     return estado; 
 }
-int atender_truncate
-
 int atender_commit(char* file, char* tag){
     char* key_file_tag = crear_key_file_tag(file,tag);  
     pthread_mutex_t* mutex_file_tag = dictionary_get(file_tag_dic,key_file_tag);
@@ -223,3 +221,7 @@ int atender_commit(char* file, char* tag){
     pthread_mutex_unlock(mutex_file_tag);
     return estado; 
 }
+int atender_tag(char* file, char* tag, char* file_destino,char* tag_destino){
+    return 0; 
+}
+
