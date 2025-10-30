@@ -87,10 +87,10 @@ t_paquete* empaquetar_aviso_worker_master(t_aviso_worker_master* aviso) {
     return paquete;
 }
 
-t_paquete* empaquetar_operacion_create(char* file, char* tag, uint32_t Op) {
+t_paquete* empaquetar_operacion_create(char* file, char* tag) {
     t_paquete* paquete = crear_paquete();
 
-    insertar_uint32_a_paquete(paquete, Op);
+    insertar_uint32_a_paquete(paquete, CREATE);
 
     insertar_string_a_paquete(paquete, file);
 
@@ -129,11 +129,35 @@ t_paquete* empaquetar_operacion_tag(char* file_origen, char* tag_origen, char* f
     return paquete;
 }
 
-t_paquete* empaquetar_operacion_end() {
-
+t_paquete* empaquetar_operacion_fin_error(uint32_t queryid, uint32_t error_code) {
     t_paquete* paquete = crear_paquete();
-    
-    insertar_uint32_a_paquete(paquete, END);
 
+    insertar_uint32_a_paquete(paquete, FIN_ERROR);
+    insertar_uint32_a_paquete(paquete, queryid);
+    insertar_uint32_a_paquete(paquete, error_code);
+
+    return paquete;
+}
+
+t_paquete* empaquetar_operacion_commit(char* file, char* tag) {
+    t_paquete* paquete = crear_paquete();
+    insertar_uint32_a_paquete(paquete, COMMIT);
+    insertar_string_a_paquete(paquete, file);
+    insertar_string_a_paquete(paquete, tag);
+    return paquete;
+}
+
+t_paquete* empaquetar_operacion_delete(char* file, char* tag) {
+    t_paquete* paquete = crear_paquete();
+    insertar_uint32_a_paquete(paquete, DELETE);
+    insertar_string_a_paquete(paquete, file);
+    insertar_string_a_paquete(paquete, tag);
+    return paquete;
+}
+
+t_paquete* empaquetar_operacion_end(uint32_t queryid) {
+    t_paquete* paquete = crear_paquete();
+    insertar_uint32_a_paquete(paquete, END);
+    insertar_uint32_a_paquete(paquete, queryid);
     return paquete;
 }
