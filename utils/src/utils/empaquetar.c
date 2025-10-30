@@ -87,7 +87,7 @@ t_paquete* empaquetar_aviso_worker_master(t_aviso_worker_master* aviso) {
     return paquete;
 }
 
-t_paquete* empaquetar_operacion_create(const char* file, const char* tag, uint32_t Op) {
+t_paquete* empaquetar_operacion_create(char* file, char* tag, uint32_t Op) {
     t_paquete* paquete = crear_paquete();
 
     insertar_uint32_a_paquete(paquete, Op);
@@ -99,7 +99,7 @@ t_paquete* empaquetar_operacion_create(const char* file, const char* tag, uint32
     return paquete;
 }
 
-t_paquete* empaquetar_operacion_truncate(const char* file, const char* tag, size_t tam) {
+t_paquete* empaquetar_operacion_truncate(char* file, char* tag, size_t tam) {
     t_paquete* paquete = crear_paquete();
     
     insertar_uint32_a_paquete(paquete, TRUNCATE);
@@ -113,8 +113,7 @@ t_paquete* empaquetar_operacion_truncate(const char* file, const char* tag, size
     return paquete;
 }
 
-t_paquete* empaquetar_operacion_tag(const char* file_origen, const char* tag_origen,
-                         const char* file_dest,const char* tag_dest){
+t_paquete* empaquetar_operacion_tag(char* file_origen, char* tag_origen, char* file_dest, char* tag_dest){
     t_paquete* paquete = crear_paquete();
     
     insertar_uint32_a_paquete(paquete, TAG);

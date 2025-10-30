@@ -129,7 +129,7 @@ void crear_y_agregar_tabla_a_lista_global(char* file, char* tag)
     log_info(logger, "Tabla creada para %s:%s - Tamaño inicial: 0", file, tag); // Opcional, ayuda debug
 }
 
-bool rango_valido(const t_tabla_paginas* tabla, uint32_t base, uint32_t tam) {
+bool rango_valido( t_tabla_paginas* tabla, uint32_t base, uint32_t tam) {
     if (!tabla) return false;
     if (base > tabla->tam_file) return false;
     if (tam > tabla->tam_file - base) return false;
@@ -240,7 +240,7 @@ uint32_t direccion_fisica(uint32_t marco, uint32_t offset, uint32_t tam_p) {
     return marco * tam_p + offset;
 }
 
-void escribir_en_memoria(uint32_t dir_fisica, const void* src, uint32_t nbytes) {
+void escribir_en_memoria(uint32_t dir_fisica, void* src, uint32_t nbytes) {
     memcpy((uint8_t*)memoria_interna + dir_fisica, src, nbytes);
 }
 

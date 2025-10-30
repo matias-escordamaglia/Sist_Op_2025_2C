@@ -20,8 +20,9 @@ t_paquete* empaquetar_pedido_query_master(t_pedido_query_master* pedido);
 t_paquete* empaquetar_aviso_master_query(t_aviso_master_query* aviso);
 t_paquete* empaquetar_pedido_master_worker(t_pedido_master_worker* pedido);
 t_paquete* empaquetar_aviso_worker_master(t_aviso_worker_master* aviso);
-t_paquete* empaquetar_operacion_create(const char* file, const char* tag, uint32_t Op);
-t_paquete* empaquetar_operacion_truncate(const char* file, const char* tag, size_t tam);
-t_paquete* empaquetar_operacion_tag(const char* file_origen, const char* tag_origen, const char* file_dest,const char* tag_dest);
+t_paquete* empaquetar_operacion_create(char* file, char* tag, uint32_t Op);
+t_paquete* empaquetar_operacion_truncate( char* file, char* tag, size_t tam);
+t_paquete* empaquetar_operacion_tag( char* file_origen, char* tag_origen, char* file_dest, char* tag_dest);
+t_paquete* empaquetar_operacion_end();
 
 #endif /* UTILS_EMPAQUETAR_H_ */
