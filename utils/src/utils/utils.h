@@ -96,7 +96,9 @@ typedef enum Operation{
     COMMIT,
     FLUSH,
     DELETE,
-    END
+    END,
+    RESPONSE = 100,
+    FIN_ERROR,
 } Operation;
 
 
