@@ -3,7 +3,7 @@
 
 void envioAQueryInterpreter(t_pedido_master_worker* pedido){
     size_t cant = 0;
-    const char* const* vec = instrucciones_desde("querie1.txt", 4, &cant);
+    char* const* vec = instrucciones_desde("querie1.txt", 4, &cant);
     if (!vec) {
         log_error(logger, "No hay instrucciones desde la 4 para %s", "querie1.txt");
         return;
@@ -12,7 +12,7 @@ void envioAQueryInterpreter(t_pedido_master_worker* pedido){
     ejecutarOperacion(pedido, vec, cant);
 }
 
-void ejecutarOperacion(t_pedido_master_worker* pedido, const char* const* instrucciones, size_t cantidad)
+void ejecutarOperacion(t_pedido_master_worker* pedido, char* const* instrucciones, size_t cantidad)
 {
     if (!pedido || !instrucciones) { log_error(logger, "Argumentos nulos"); return; }
 
@@ -26,7 +26,7 @@ void ejecutarOperacion(t_pedido_master_worker* pedido, const char* const* instru
 
     // Iteramos desde PC-1 hasta fin, avanzando sólo cuando la instrucción actual termina OK
     for (size_t i = pc - 1; i < cantidad; ++i) {
-        const char* linea = instrucciones[i];
+        char* linea = instrucciones[i];
         log_info(logger, "INST %zu: %s", i + 1, linea);
 
         bool ok = ejecutar_linea(linea);
@@ -38,10 +38,11 @@ void ejecutarOperacion(t_pedido_master_worker* pedido, const char* const* instru
         }
 
         // Si fue END, cortamos ejecución (ya ejecutada)
-        Operation op; const char* params=NULL;
+        Operation op; 
+        char* params=NULL;
         if (detectar_operacion(linea, &op, &params) && op == END) {
             pedido->program_counter = i + 1;
-            log_info(logger, "END ejecutado. PC=%zu", pedido->program_counter);
+            log_info(logger, "END ejecutado. PC=%u", pedido->program_counter);
             return;
         }
 
@@ -49,13 +50,12 @@ void ejecutarOperacion(t_pedido_master_worker* pedido, const char* const* instru
         pedido->program_counter = i + 2; // próximo a ejecutar en 1-based
     }
 
-    log_info(logger, "Ejecución completa. PC final=%zu (cant=%zu)", pedido->program_counter, cantidad);
+    log_info(logger, "Ejecución completa. PC final=%u (cant=%zu)", pedido->program_counter, cantidad);
 }
 
-bool ejecutar_linea(const char* linea) {
+bool ejecutar_linea(char* linea) {
     Operation op;
-    const char* params = NULL;
-    log_info(logger,"AAAAAAAAAAA");
+    char* params = NULL;
     if (!detectar_operacion(linea, &op, &params)) {
         log_error(logger, "Operacion desconocida: %s", linea);
         return false;
@@ -182,8 +182,7 @@ int enviar_end_a_master() {
     return 1;
 }
 
-int enviar_tag_a_storage(int conexion,const char* file_origen, const char* tag_origen,
-                         const char* file_dest,const char* tag_dest)
+int enviar_tag_a_storage(int conexion, char* file_origen,char* tag_origen, char* file_dest, char* tag_dest)
 {
     if (!file_origen || !tag_origen || !file_dest || !tag_dest) {
         log_error(logger, "TAG parámetros inválidos: fo=%p to=%p fd=%p td=%p",(void*)file_origen, (void*)tag_origen, (void*)file_dest, (void*)tag_dest);
@@ -199,7 +198,7 @@ int enviar_tag_a_storage(int conexion,const char* file_origen, const char* tag_o
     return 1; // simulamos éxito
 }
 
-bool ejecutar_create(const t_create* c, uint32_t Op) {
+bool ejecutar_create(t_create* c, uint32_t Op) {
     // log_info(logger, "[WORKER] Ejecutando CREATE %s:%s", c->nombre_archivo, c->tag);
     int ok = enviar_create_a_storage(conexion_storage, c->nombre_archivo, c->tag, Op);
     if (ok != 1) {
@@ -210,7 +209,7 @@ bool ejecutar_create(const t_create* c, uint32_t Op) {
     return true;
 }
 
-int enviar_create_a_storage(int conexion, const char* file, const char* tag, uint32_t Op){
+int enviar_create_a_storage(int conexion, char* file, char* tag, uint32_t Op){
 
     log_info(logger, "[STUB] Enviar a Storage: Op: %u  --> %s:%s" , Op, file, tag);
     t_paquete* paquete = empaquetar_operacion_create(file, tag, Op);
@@ -230,7 +229,7 @@ void destruir_create(t_create* c) {
     c->tag = NULL;
 }
 
-bool parsear_create_params(const char* params, t_create* out) {
+bool parsear_create_params( char* params, t_create* out) {
     if (!params || !out) return false;
     params = saltar_blancos(params);
     if (*params=='\0') return false;
@@ -245,8 +244,8 @@ bool parsear_create_params(const char* params, t_create* out) {
     char* colon = strchr(tmp, ':');
     if (!colon) { free(tmp); return false; }
     *colon = '\0';
-    const char* f = tmp;
-    const char* t = colon+1;
+    char* f = tmp;
+    char* t = colon+1;
     if (*f=='\0' || *t=='\0') { free(tmp); return false; }
 
     out->op = CREATE;
@@ -256,8 +255,8 @@ bool parsear_create_params(const char* params, t_create* out) {
     return out->nombre_archivo && out->tag;
 }
 
-bool detectar_operacion(const char* linea, Operation* out_op, const char** out_params) {
-    const char* p = saltar_blancos(linea);
+bool detectar_operacion(char* linea, Operation* out_op, char** out_params) {
+    char* p = saltar_blancos(linea);
     if (empieza_con(p, "CREATE"))   { *out_op = CREATE;   *out_params = p + 6; return true; }
     if (empieza_con(p, "TRUNCATE")) { *out_op = TRUNCATE; *out_params = p + 8; return true; }
     if (empieza_con(p, "WRITE"))    { *out_op = WRITE;    *out_params = p + 5; return true; }
@@ -270,7 +269,7 @@ bool detectar_operacion(const char* linea, Operation* out_op, const char** out_p
     return false;
 }
 
-bool ejecutar_tag(const t_tag* t) {
+bool ejecutar_tag( t_tag* t) {
     if (!t) return false;
 
     log_info(logger, "[WORKER] Ejecutando TAG %s:%s -> %s:%s",t->file_origen, t->tag_origen, t->file_dest, t->tag_dest);
@@ -294,27 +293,27 @@ void destruir_tag(t_tag* t) {
 }
 
 
-bool empieza_con(const char* s, const char* kw) {
+bool empieza_con(char* s, char* kw) {
     size_t n = strlen(kw);
     return strncmp(s, kw, n)==0 && (s[n]=='\0' || isspace((unsigned char)s[n]));
 }
 
-char* saltar_blancos(const char* p) {
+char* saltar_blancos(char* p) {
     while (*p==' ' || *p=='\t') ++p;
     return p;
 }
 
-const char* instruccion_n(const char* nombre, size_t idx){
+char* instruccion_n(char* nombre, size_t idx){
     t_programa* p = obtener_programa(nombre);
     if (!p || idx==0 || idx > p->cant) return NULL;
     return p->instrucciones[idx-1];
 }
 
-t_programa* obtener_programa(const char* nombre){
+t_programa* obtener_programa(char* nombre){
     return diccionario_programas ? dictionary_get(diccionario_programas, nombre) : NULL;
 }
 
-const char* const* instrucciones_desde(const char* nombre, size_t idx_1based, size_t* out_cant) {
+char* const* instrucciones_desde(char* nombre, size_t idx_1based, size_t* out_cant) {
     t_programa* p = obtener_programa(nombre);
     if (!out_cant) return NULL;
     *out_cant = 0;
@@ -322,10 +321,10 @@ const char* const* instrucciones_desde(const char* nombre, size_t idx_1based, si
 
     size_t offset = idx_1based - 1;
     *out_cant = p->cant - offset;
-    return (const char* const*)(p->instrucciones + offset);
+    return (char* const*)(p->instrucciones + offset);
 }
 
-bool parsear_truncate_params(const char* params, t_truncate* out) {
+bool parsear_truncate_params(char* params, t_truncate* out) {
     if (!params || !out) return false;
     params = saltar_blancos(params);
     if (*params == '\0') return false;
@@ -342,16 +341,16 @@ bool parsear_truncate_params(const char* params, t_truncate* out) {
     char* sep = strpbrk(tmp, " \t");
     if (!sep) { free(tmp); return false; }   // debe existir el tamaño
     *sep = '\0';
-    const char* nombre_tag = tmp;
-    const char* tam_str = saltar_blancos(sep + 1);
+    char* nombre_tag = tmp;
+    char* tam_str = saltar_blancos(sep + 1);
     if (*tam_str == '\0') { free(tmp); return false; }
 
     // dentro de "NOMBRE:TAG" partimos por ':'
     char* colon = strchr((char*)nombre_tag, ':');
     if (!colon) { free(tmp); return false; }
     *colon = '\0';
-    const char* f = nombre_tag;
-    const char* t = colon + 1;
+    char* f = nombre_tag;
+      char* t = colon + 1;
     if (*f=='\0' || *t=='\0') { free(tmp); return false; }
 
     // parsear tamaño (>=0)
@@ -369,7 +368,7 @@ bool parsear_truncate_params(const char* params, t_truncate* out) {
     return out->nombre_archivo && out->tag;
 }
 
-bool ejecutar_truncate(const t_truncate* c) {
+bool ejecutar_truncate(  t_truncate* c) {
     if (!c) return false;
     log_info(logger, "[WORKER] Ejecutando TRUNCATE %s:%s -> tam=%zu", c->nombre_archivo, c->tag, c->tam);
 
@@ -391,7 +390,7 @@ void destruir_truncate(t_truncate* c) {
     c->tam = 0;
 }
 
-int enviar_truncate_a_storage(int conexion, const char* file, const char* tag, size_t tam) {
+int enviar_truncate_a_storage(int conexion,   char* file,   char* tag, size_t tam) {
     if (!file || !tag) {
         log_error(logger, "TRUNCATE con parametros invalidos: file=%p tag=%p", (void*)file, (void*)tag);
         return -1;
@@ -404,7 +403,7 @@ int enviar_truncate_a_storage(int conexion, const char* file, const char* tag, s
     return 1; // simulamos éxito por ahora
 }
 
-bool parsear_tag_params(const char* params, t_tag* out) {
+bool parsear_tag_params(  char* params, t_tag* out) {
     if (!params || !out) return false;
     params = saltar_blancos(params);
     if (*params == '\0') return false;
@@ -440,16 +439,16 @@ bool parsear_tag_params(const char* params, t_tag* out) {
     char* colon1 = strchr(origen, ':');
     if (!colon1) { free(tmp); return false; }
     *colon1 = '\0';
-    const char* fo = origen;
-    const char* to = colon1 + 1;
+      char* fo = origen;
+      char* to = colon1 + 1;
     if (*fo == '\0' || *to == '\0') { free(tmp); return false; }
 
     // split destino "FD:TD"
     char* colon2 = strchr(destino, ':');
     if (!colon2) { free(tmp); return false; }
     *colon2 = '\0';
-    const char* fd = destino;
-    const char* td = colon2 + 1;
+      char* fd = destino;
+      char* td = colon2 + 1;
     if (*fd == '\0' || *td == '\0') { free(tmp); return false; }
 
     out->op = TAG;
@@ -463,7 +462,7 @@ bool parsear_tag_params(const char* params, t_tag* out) {
     return ok;
 }
 
-bool parsear_write_params(const char* params, t_write* out) {
+bool parsear_write_params(  char* params, t_write* out) {
     if (!params || !out) return false;
     params = saltar_blancos(params);
     if (*params == '\0') return false;
@@ -502,8 +501,8 @@ bool parsear_write_params(const char* params, t_write* out) {
     char* colon = strchr(file_tag_str, ':');
     if (!colon) { free(tmp); return false; }
     *colon = '\0';
-    const char* f = file_tag_str;
-    const char* t = colon + 1;
+      char* f = file_tag_str;
+      char* t = colon + 1;
     if (*f == '\0' || *t == '\0') { free(tmp); return false; }
 
     out->file = strdup(f);
