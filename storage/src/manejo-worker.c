@@ -1,14 +1,19 @@
 #include "manejo-worker.h"
 
+#include "operaciones.h"  
+#include "storage.h"
+
 t_log* logger_worker;
 t_config* blockconfig = NULL;
 
-void pasar_logger_a_manejo_worker(t_log* l) {
+void pasar_log_config_a_manejo_worker(t_log* l, t_config* c) {
+    blockconfig = c; 
     logger_worker = l;
 } 
 void* manejar_cliente_worker(void* arg) {
     int server_fd = (*(int*)arg);
     free(arg);
+    log_info(logger,"Esperando conexiones..."); 
 
     while (1) {
         int cliente_fd = esperar_cliente(server_fd, logger_worker);
@@ -56,9 +61,9 @@ void* atender_conexion_worker(void* arg) {
 
     t_estado_handshake registrado = HANDSHAKE_OK;
     send(cliente_fd, &registrado, sizeof(t_estado_handshake), 0);
+    log_info(logger_worker, "Worker ID: %u se conectó", id_worker); 
     
     
-    blockconfig = iniciar_config_vieja(logger_worker, "superblock.config");
     char* blockSizeChar = config_get_string_value(blockconfig, "BLOCK_SIZE");
     int block_size = atoi(blockSizeChar); 
 
@@ -78,11 +83,35 @@ void* atender_conexion_worker(void* arg) {
         switch (cod_op) {
             case PAQUETE:
                 int size; 
-                void* bufferr = recibir_buffer(&size, cliente_fd);
+                void* buffer_st = recibir_buffer(&size, cliente_fd);
                 log_info(logger_worker, "[WORKER] Se recibe paquete desde WORKER %u", id_worker);
-                
-                //Insertar Lógica de caso recepción de paquete
+                Operation operation = extraer_operacion(buffer_st); 
+                    switch (operation)
+                    {
+                    case  CREATE:
+                        //aca el desarrollo
+                        break;
+                    case  TRUNCATE:
+                        //aca el desarrollo
+                    case WRITE:
+                        //aca el desarrollo
 
+                        break;
+                    case READ: 
+                        break;
+                    case TAG: 
+                        break;
+                    case COMMIT:
+                        break;
+                    case FLUSH:
+                        break;
+                    case DELETE: 
+                        break;
+                    case END: 
+                        break;
+                    default:
+                        break;
+                    }
                 break;
 
             default:
@@ -95,3 +124,9 @@ void* atender_conexion_worker(void* arg) {
     close(cliente_fd);
     return NULL;
 }
+
+
+Operation extraer_operacion(void* buffer_st){
+    Operation op; 
+    memcpy(&op,buffer_st,sizeof(Operation));
+} 

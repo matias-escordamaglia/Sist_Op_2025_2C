@@ -91,7 +91,10 @@ int acceder_memoria(char* file, char* tag,uint32_t dir_base, void *buffer, uint3
         } else {
             // reservado para READ en el futuro
         }
+<<<<<<< HEAD
         //habria que agregar que para cualquier acceso a la pagina se actualice el tiempo de ultimo uso para el LRU
+=======
+>>>>>>> origin/develop
 
         actualizar_reemplazo(entrada);
         recorrido_siguiente(&seg, tam_pagina);
@@ -130,7 +133,11 @@ void crear_y_agregar_tabla_a_lista_global(char* file, char* tag)
     log_info(logger, "Tabla creada para %s:%s - Tamaño inicial: 0", file, tag); // Opcional, ayuda debug
 }
 
+<<<<<<< HEAD
 bool rango_valido(const t_tabla_paginas* tabla, uint32_t base, uint32_t tam) {
+=======
+bool rango_valido( t_tabla_paginas* tabla, uint32_t base, uint32_t tam) {
+>>>>>>> origin/develop
     if (!tabla) return false;
     if (base > tabla->tam_file) return false;
     if (tam > tabla->tam_file - base) return false;
@@ -225,6 +232,7 @@ int asignar_marco_o_reemplazar(t_entrada_pagina** victima, uint32_t id_query) {
     }
 
     // No hay marcos libres: memoria llena.
+<<<<<<< HEAD
     if (strcmp(algoritmo_reemplazo, "LRU") == 0) {
             *victima = reemplazar_pagina_lru();
         } else if (strcmp(algoritmo_reemplazo, "CLOCK-M") == 0) {
@@ -243,6 +251,14 @@ int asignar_marco_o_reemplazar(t_entrada_pagina** victima, uint32_t id_query) {
         }
 
     return -1; // Fallback en caso de error
+=======
+    if (true) { 
+        //(LRU o CLOCK-M)
+        return -1;
+    }
+
+    return -1;  // Fallback en caso de error
+>>>>>>> origin/develop
 }
 
 void aplicar_retardo_memoria(uint32_t milis) {
@@ -253,7 +269,11 @@ uint32_t direccion_fisica(uint32_t marco, uint32_t offset, uint32_t tam_p) {
     return marco * tam_p + offset;
 }
 
+<<<<<<< HEAD
 void escribir_en_memoria(uint32_t dir_fisica, const void* src, uint32_t nbytes) {
+=======
+void escribir_en_memoria(uint32_t dir_fisica, void* src, uint32_t nbytes) {
+>>>>>>> origin/develop
     memcpy((uint8_t*)memoria_interna + dir_fisica, src, nbytes);
 }
 
@@ -301,6 +321,7 @@ t_entrada_pagina* get_entry(t_tabla_paginas* tabla, uint32_t nro_pagina) {
         }
     }
     return NULL;
+<<<<<<< HEAD
 }
 
 t_entrada_pagina* reemplazar_pagina_clock() {
@@ -400,4 +421,6 @@ t_entrada_pagina* buscar_entrada_por_marco(uint32_t marco_num) {
             }
         }
     }
+=======
+>>>>>>> origin/develop
 }
