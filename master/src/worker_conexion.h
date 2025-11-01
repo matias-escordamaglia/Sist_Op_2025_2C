@@ -20,12 +20,14 @@
 
 
 void* manejar_worker(void* arg);
-
+void alta_aviso_confirmacion(t_motivo_pedido_master_worker motivo_pedido, uint32_t query_id);
 
 void agregar_siguiente_query_a_enviar(t_query* query, t_worker_conectado* worker_libre);
 void agregar_pedido_interrupcion(t_worker_conectado* worker, uint32_t query_id);
 bool enviar_siguiente_pedido(t_worker_conectado* worker, t_pedido_master_worker* sig_pedido);
 void* tratar_siguientes_pedidos_a_enviar_worker(void* _);
+
+void inicializar_sistema_confirmaciones();
 
 
 #endif /* WORKER_CONEXION_H_ */

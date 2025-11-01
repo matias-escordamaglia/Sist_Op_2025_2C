@@ -1,6 +1,8 @@
 #include "worker_conexion.h"
 
-uint32_t id_worker;
+#define LIBERACION_WORKER_SIN_EVENTO false
+#define LIBERACION_WORKER_CON_EVENTO true
+
 
 void* manejar_worker(void* arg) {
 
@@ -102,7 +104,12 @@ void* manejar_worker(void* arg) {
                     program_counter = atoi(aviso->argumento);
                     query_id = get_worker_qid(id_worker);
 
+                    //TODO: Revisar si esta funcion va aquí o hay que modificar esta lógica
+                    //Acordarse del caso desalojo por desconexion query
                     worker_libera_query(id_worker, query_id, program_counter);
+
+                    alta_aviso_confirmacion(INTERRUPCION, query_id, id_worker);
+
                     break;
 
                 case FINALIZACION_QUERY:
@@ -111,7 +118,15 @@ void* manejar_worker(void* arg) {
 
                     worker_libera_query(id_worker, query_id, program_counter);
                     notificar_finalizacion_a_query_control(query_id);
+
+                    alta_aviso_confirmacion(INTERRUPCION, query_id, id_worker);
+
                     break;
+
+                case RESPUESTA_SIG_QUERY: 
+                    // TODO : Revisar si hay que agregar lógica previamente
+                    
+                    alta_aviso_confirmacion(PEDIDO_QUERY, -1, id_worker);
 
                 default:
                     break;
@@ -130,11 +145,32 @@ void* manejar_worker(void* arg) {
 }
 
 
+void alta_aviso_confirmacion(t_motivo_pedido_master_worker motivo_pedido, uint32_t query_id, uint32_t id_worker) {
+
+    char key[32];
+    sprintf(key, "%u", id_worker);
+
+    pthread_mutex_lock(&mutex_confirmaciones);
+        t_confirmacion_pedido* conf = dictionary_get(confirmaciones_por_worker, key);
+        if (conf != NULL && conf->tipo_pedido == motivo_pedido) {
+            conf->respuesta_recibida = true;
+            sem_post(&conf->sem_respuesta);
+            log_info(get_logger(), "[CONFIRMACION] Worker %u realizó una confirmacion para QID %u", 
+                    id_worker, query_id);
+        }
+    pthread_mutex_unlock(&mutex_confirmaciones);
+}
+
+
 /*  --------------------------------------------------------------------------------------
     ---------------------------- ENVIOS Y PEDIDOS ---------------------------------------- 
     -------------------------------------------------------------------------------------- */
 
 t_queue* cola_envio_pedidos;
+
+t_dictionary* confirmaciones_por_worker;
+
+pthread_mutex_t mutex_confirmaciones = PTHREAD_MUTEX_INITIALIZER;
 
 void agregar_siguiente_query_a_enviar(t_query* query, t_worker_conectado* worker_libre) {
 
@@ -146,11 +182,19 @@ void agregar_siguiente_query_a_enviar(t_query* query, t_worker_conectado* worker
         worker_a_usar = obtener_worker_libre();
     }
 
+    t_confirmacion_pedido* conf = malloc(sizeof(t_confirmacion_pedido));
+    sem_init(&conf->sem_respuesta, 0, 0);
+    conf -> respuesta_recibida = false;
+    conf -> worker_id = worker_a_usar->id_worker;
+    conf -> query_id = query->query_id;
+    conf -> tipo_pedido = PEDIDO_QUERY;
+
     nuevo_pedido -> qid = query -> query_id;
     nuevo_pedido -> pc = query -> program_count;
     nuevo_pedido -> query_path = query -> query_path;
     nuevo_pedido -> worker_asignado = worker_a_usar;
     nuevo_pedido -> tipo = PEDIDO_QUERY;
+    nuevo_pedido -> confirmacion = conf;
     
 
     queue_push(cola_envio_pedidos, nuevo_pedido);
@@ -164,11 +208,19 @@ void agregar_pedido_interrupcion(t_worker_conectado* worker, uint32_t query_id) 
 
     char* mensaje_interrupt = "Pedido Interrupcion; si lo está leyendo hay un error";
 
+    t_confirmacion_pedido* conf = malloc(sizeof(t_confirmacion_pedido));
+    sem_init(&conf->sem_respuesta, 0, 0);
+    conf -> respuesta_recibida = false;
+    conf -> worker_id = worker -> id_worker;
+    conf -> query_id = query_id;
+    conf -> tipo_pedido = INTERRUPCION;
+
     nuevo_pedido -> qid = query_id;
     nuevo_pedido -> pc = -1;
     nuevo_pedido -> query_path = mensaje_interrupt;
     nuevo_pedido -> worker_asignado = worker;
     nuevo_pedido -> tipo = INTERRUPCION;
+    nuevo_pedido->confirmacion = conf;
 
     queue_push(cola_envio_pedidos, nuevo_pedido);
     sem_post(sem_envio_pedido_worker_pendiente);
@@ -189,12 +241,9 @@ bool enviar_siguiente_pedido(t_worker_conectado* worker, t_pedido_master_worker*
 
     enviar_paquete(paquete, worker->fd_worker);
 
-    worker->qid_actual = sig_pedido->query_id;
 
     log_info(get_logger(), "[CONEXION] Enviado QID %u con PC %u a Worker %u (FD %d)", 
              sig_pedido->query_id, sig_pedido->program_counter, worker->id_worker, worker->fd_worker);
-
-    //TODO esperar respuesta de CPU para confirmar recepcion
 
     return true;
 }
@@ -202,6 +251,8 @@ bool enviar_siguiente_pedido(t_worker_conectado* worker, t_pedido_master_worker*
 
 void* tratar_siguientes_pedidos_a_enviar_worker(void* _) {
     cola_envio_pedidos = queue_create();
+
+    inicializar_sistema_confirmaciones();
 
     while(true) {
         sem_wait(sem_envio_pedido_worker_pendiente);
@@ -212,6 +263,8 @@ void* tratar_siguientes_pedidos_a_enviar_worker(void* _) {
         char* path = sig_pedido->query_path;
         t_worker_conectado* worker = sig_pedido->worker_asignado;
         t_motivo_pedido_master_worker motivo = sig_pedido -> tipo;
+        t_confirmacion_pedido* conf = sig_pedido -> confirmacion;
+
         free(sig_pedido);
 
         t_pedido_master_worker* pedido = malloc(sizeof(t_pedido_master_worker));
@@ -220,15 +273,50 @@ void* tratar_siguientes_pedidos_a_enviar_worker(void* _) {
         pedido->query_path = path;
         pedido->motivo = motivo;
 
+        char key[32];
+        sprintf(key, "%u", worker->id_worker);
+
+        pthread_mutex_lock(&mutex_confirmaciones);
+        dictionary_put(confirmaciones_por_worker, key, conf);
+        pthread_mutex_unlock(&mutex_confirmaciones);
+
 
         if (enviar_siguiente_pedido(worker, pedido)) {
-            log_info(get_logger(), "[DEBUG] Query (ID: %u) enviado a Worker (ID: %u)", pedido->query_id, worker->id_worker);
+            if(motivo==PEDIDO_QUERY) {
+                log_info(get_logger(), "[DEBUG] Query (ID: %u) enviado a Worker (ID: %u), esperando confirmación...", 
+                     pedido -> query_id, worker -> id_worker);
+            } else {
+                log_info(get_logger(), "[DEBUG] Pedido a Worker %u enviado", worker -> id_worker);
+            }
+
+            sem_wait(&conf->sem_respuesta);
+            
+            if (conf->respuesta_recibida) {
+                log_info(get_logger(), "[CONFIRMACION] Respuesta exitosa para QID %u de Worker %u", 
+                         qid_pedido, worker->id_worker);
+            } else {
+                log_warning(get_logger(), "[CONFIRMACION] Error o timeout en respuesta para QID %u de Worker %u", 
+                            qid_pedido, worker->id_worker);
+            }
         } else {
             log_error(get_logger(), "[ERROR] Falló el envío del query (ID: %u) a Worker (ID: %u)", 
-                                    pedido->query_id, worker->id_worker);
+                      pedido->query_id, worker->id_worker);
         }
 
+        
+        pthread_mutex_lock(&mutex_confirmaciones);
+        dictionary_remove(confirmaciones_por_worker, key);
+        pthread_mutex_unlock(&mutex_confirmaciones);
+        
+        sem_destroy(&conf->sem_respuesta);
+        free(conf);
         free(pedido);
     }
 
+}
+
+
+void inicializar_sistema_confirmaciones() {
+    confirmaciones_por_worker = dictionary_create();
+    pthread_mutex_init(&mutex_confirmaciones, NULL);
 }

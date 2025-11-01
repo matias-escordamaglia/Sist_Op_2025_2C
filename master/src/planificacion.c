@@ -385,6 +385,9 @@ uint32_t solicitar_desalojo_bloqueante(t_worker_conectado* worker_a_desalojar, u
 void asignar_query_a_worker(t_elemento_cola* elemento, t_worker_conectado* worker) {
     
     agregar_siguiente_query_a_enviar(elemento->query, worker);
+
+    //Semaforos de confirmacion? Al parecer si
+    asociar_qid_a_worker(elemento->query->query_id, worker);
     
     LOCK(&mutex_cola_exec);
     list_add(cola_exec, elemento);

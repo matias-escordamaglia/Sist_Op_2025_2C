@@ -129,6 +129,12 @@ int get_cant_workers_conectados() {
     return list_size(workers_registrados);
 }
 
+void asociar_qid_a_worker(uint32_t qid, t_worker_conectado worker) {
+    LOCK(&mutex_workers_conectados);
+        worker->qid_actual = qid;
+    UNLOCK(&mutex_workers_conectados);
+}
+
 
 
 
