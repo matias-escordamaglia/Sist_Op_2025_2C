@@ -199,6 +199,16 @@ typedef struct
 	t_list *paginas_proceso;
 } t_tabla_paginas;
 
+typedef struct {
+    int numero_pagina;            
+    int marco_memoria;            
+    bool presente;               
+    bool modificada;              
+    bool usada;                   
+    time_t ultimo_acceso;        
+    char* file_tag;             
+} t_entrada_pagina;
+
 extern t_list* lista_global_tablas;
 extern t_tabla_paginas* tabla_actual;
 
