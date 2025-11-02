@@ -65,7 +65,7 @@ t_elemento_cola* obtener_query_mas_prioritaria_mas_antigua();
 t_elemento_cola* obtener_victima_desalojo(uint32_t prioridad_desalojador);
 void agregar_query_ordenada(t_list* lista, t_elemento_cola* elemento);
 uint32_t solicitar_desalojo_bloqueante(t_worker_conectado* worker_a_desalojar, uint32_t query_id);
-void asignar_query_a_worker(t_elemento_cola* elemento, t_worker_conectado* worker);
+
 
 void* main_aging(void* args);
 void dormir_milisegundos(int tiempo);

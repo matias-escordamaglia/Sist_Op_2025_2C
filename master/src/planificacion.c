@@ -167,7 +167,13 @@ void intentar_asignaciones_fifo() {
             continue;
         }
         
-        asignar_query_a_worker(mas_antiguo, worker_libre);
+        if (asignar_query_a_worker(mas_antiguo, worker_libre)) {
+                asociar_qid_a_worker(mas_antiguo->query->query_id, worker_libre);
+
+                LOCK(&mutex_cola_exec);
+                    list_add(cola_exec, mas_antiguo);
+                UNLOCK(&mutex_cola_exec);
+            }
 
         UNLOCK(&mutex_estado_critico);
         
@@ -220,9 +226,15 @@ void intentar_asignaciones_prioridades() {
             list_remove_element(cola_ready, query_candidata);
             UNLOCK(&mutex_cola_ready);
             
-
-            asignar_query_a_worker(query_candidata, worker_libre);
             
+            if (asignar_query_a_worker(query_candidata, worker_libre)) {
+                asociar_qid_a_worker(query_candidata->query->query_id, worker_libre);
+
+                LOCK(&mutex_cola_exec);
+                    list_add(cola_exec, query_candidata);
+                UNLOCK(&mutex_cola_exec);
+            }
+
             log_info(get_logger(), 
                     "Query %d (prioridad=%d, PC=%d) asignado a Worker %d", 
                     query_candidata->query->query_id,
@@ -274,7 +286,15 @@ void intentar_asignaciones_prioridades() {
         agregar_query_ordenada(cola_ready, query_victima);
         UNLOCK(&mutex_cola_ready);
         
-        asignar_query_a_worker(query_candidata, worker_a_desalojar);
+        if (asignar_query_a_worker(query_candidata, worker_a_desalojar)) {
+            asociar_qid_a_worker(query_candidata->query->query_id, worker_a_desalojar);
+
+            LOCK(&mutex_cola_exec);
+                list_add(cola_exec, query_candidata);
+            UNLOCK(&mutex_cola_exec);
+        } else {
+            //TODO: Manejar error; cancelar ciclo?
+        }
         
         log_info(get_logger(), 
                 "Desalojo completado: Query %d ejecutándose, Query %d en READY (PC=%d)",
@@ -382,18 +402,8 @@ uint32_t solicitar_desalojo_bloqueante(t_worker_conectado* worker_a_desalojar, u
     return 0;
 }
 
-void asignar_query_a_worker(t_elemento_cola* elemento, t_worker_conectado* worker) {
-    
-    agregar_siguiente_query_a_enviar(elemento->query, worker);
 
-    //Semaforos de confirmacion? Al parecer si
-    asociar_qid_a_worker(elemento->query->query_id, worker);
-    
-    LOCK(&mutex_cola_exec);
-    list_add(cola_exec, elemento);
-    UNLOCK(&mutex_cola_exec);
 
-}
 
 
 /*-------------------------------AGING-----------------------------------*/

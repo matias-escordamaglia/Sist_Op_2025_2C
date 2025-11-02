@@ -6,6 +6,8 @@
 #include <stdint.h>
 #include <pthread.h>
 #include <unistd.h>
+#include <time.h>
+#include <errno.h>
 #include <signal.h>
 #include <commons/log.h>
 #include <commons/string.h>
@@ -22,10 +24,11 @@
 void* manejar_worker(void* arg);
 void alta_aviso_confirmacion(t_motivo_pedido_master_worker motivo_pedido, uint32_t query_id);
 
-void agregar_siguiente_query_a_enviar(t_query* query, t_worker_conectado* worker_libre);
-void agregar_pedido_interrupcion(t_worker_conectado* worker, uint32_t query_id);
+void agregar_siguiente_query_a_enviar(t_query* query, t_worker_conectado* worker_libre, t_confirmacion_pedido* conf);
+void agregar_pedido_interrupcion(t_worker_conectado* worker, uint32_t query_id, t_confirmacion_pedido* conf);
 bool enviar_siguiente_pedido(t_worker_conectado* worker, t_pedido_master_worker* sig_pedido);
 void* tratar_siguientes_pedidos_a_enviar_worker(void* _);
+bool asignar_query_a_worker(t_elemento_cola* elemento, t_worker_conectado* worker);
 
 void inicializar_sistema_confirmaciones();
 
