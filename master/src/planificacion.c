@@ -167,7 +167,7 @@ void intentar_asignaciones_fifo() {
             continue;
         }
         
-        if (asignar_query_a_worker(mas_antiguo, worker_libre)) {
+        if (asignar_query_a_worker(mas_antiguo->query, worker_libre)) {
                 asociar_qid_a_worker(mas_antiguo->query->query_id, worker_libre);
 
                 LOCK(&mutex_cola_exec);
@@ -227,7 +227,7 @@ void intentar_asignaciones_prioridades() {
             UNLOCK(&mutex_cola_ready);
             
             
-            if (asignar_query_a_worker(query_candidata, worker_libre)) {
+            if (asignar_query_a_worker(query_candidata->query, worker_libre)) {
                 asociar_qid_a_worker(query_candidata->query->query_id, worker_libre);
 
                 LOCK(&mutex_cola_exec);
@@ -286,7 +286,7 @@ void intentar_asignaciones_prioridades() {
         agregar_query_ordenada(cola_ready, query_victima);
         UNLOCK(&mutex_cola_ready);
         
-        if (asignar_query_a_worker(query_candidata, worker_a_desalojar)) {
+        if (asignar_query_a_worker(query_candidata->query, worker_a_desalojar)) {
             asociar_qid_a_worker(query_candidata->query->query_id, worker_a_desalojar);
 
             LOCK(&mutex_cola_exec);

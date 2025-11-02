@@ -145,22 +145,6 @@ void* manejar_worker(void* arg) {
 }
 
 
-void alta_aviso_confirmacion(t_motivo_pedido_master_worker motivo_pedido, uint32_t query_id, uint32_t id_worker) {
-
-    char key[32];
-    sprintf(key, "%u", id_worker);
-
-    pthread_mutex_lock(&mutex_confirmaciones);
-        t_confirmacion_pedido* conf = dictionary_get(confirmaciones_por_worker, key);
-        if (conf != NULL && conf->tipo_pedido == motivo_pedido) {
-            conf->respuesta_recibida = true;
-            sem_post(&conf->sem_respuesta);
-            log_info(get_logger(), "[CONFIRMACION] Worker %u realizó una confirmacion para QID %u", 
-                    id_worker, query_id);
-        }
-    pthread_mutex_unlock(&mutex_confirmaciones);
-}
-
 
 /*  --------------------------------------------------------------------------------------
     ---------------------------- ENVIOS Y PEDIDOS ---------------------------------------- 
@@ -293,19 +277,19 @@ void inicializar_sistema_confirmaciones() {
     pthread_mutex_init(&mutex_confirmaciones, NULL);
 }
 
-bool asignar_query_a_worker(t_elemento_cola* elemento, t_worker_conectado* worker) {
+bool asignar_query_a_worker(t_query* query, t_worker_conectado* worker) {
     
     t_confirmacion_pedido* conf = malloc(sizeof(t_confirmacion_pedido));
     sem_init(&conf->sem_respuesta, 0, 0);
     conf->respuesta_recibida = false;
     conf->worker_id = worker->id_worker;
-    conf->query_id = elemento->query->query_id;
+    conf->query_id = query->query_id;
     conf->tipo_pedido = PEDIDO_QUERY;
 
     log_info(get_logger(), "[DEBUG] Esperando confirmación de Worker %u para QID %u...", 
-             worker->id_worker, elemento->query->query_id);
+             worker->id_worker, query->query_id);
 
-    agregar_siguiente_query_a_enviar(elemento->query, worker, conf);
+    agregar_siguiente_query_a_enviar(query, worker, conf);
 
 
     struct timespec timeout;
@@ -330,11 +314,27 @@ bool asignar_query_a_worker(t_elemento_cola* elemento, t_worker_conectado* worke
 
     char key[32];
     sprintf(key, "%u", worker->id_worker);
-    pthread_mutex_lock(&mutex_confirmaciones);
-    dictionary_remove(confirmaciones_por_worker, key);
-    pthread_mutex_unlock(&mutex_confirmaciones);
+    LOCK(&mutex_confirmaciones);
+        dictionary_remove(confirmaciones_por_worker, key);
+    UNLOCK(&mutex_confirmaciones);
     
     
     sem_destroy(&conf->sem_respuesta);
     free(conf);
+}
+
+void alta_aviso_confirmacion(t_motivo_pedido_master_worker motivo_pedido, uint32_t query_id, uint32_t id_worker) {
+
+    char key[32];
+    sprintf(key, "%u", id_worker);
+
+    LOCK(&mutex_confirmaciones);
+        t_confirmacion_pedido* conf = dictionary_get(confirmaciones_por_worker, key);
+        if (conf != NULL && conf->tipo_pedido == motivo_pedido) {
+            conf->respuesta_recibida = true;
+            sem_post(&conf->sem_respuesta);
+            log_info(get_logger(), "[CONFIRMACION] Worker %u realizó una confirmacion para QID %u", 
+                    id_worker, query_id);
+        }
+    UNLOCK(&mutex_confirmaciones);
 }

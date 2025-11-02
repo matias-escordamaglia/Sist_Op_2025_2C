@@ -33,7 +33,7 @@ typedef struct {
     uint32_t pc;
     char* query_path;
     t_worker_conectado* worker_asignado;
-    t_pedido_master_worker tipo;
+    t_motivo_pedido_master_worker tipo;
     t_confirmacion_pedido* confirmacion;
 } t_siguiente_pedido;
 
@@ -50,6 +50,6 @@ void marcar_worker_desconectado(uint32_t id_worker);
 void marcar_worker_conectado(uint32_t id_worker);
 void remover_cpu(t_worker_conectado* worker);
 int get_cant_workers_conectados();
-void asociar_qid_a_worker(uint32_t qid, t_worker_conectado worker);
+void asociar_qid_a_worker(uint32_t qid, t_worker_conectado* worker);
 
 #endif /* WORKER_MANAGER_H_ */
