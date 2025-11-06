@@ -76,18 +76,19 @@ int create(char* nombre_file, char* nombre_tag) {
 }
 
 int truncar_archivo(char* file, char* tag, int nuevo_valor){
-    char* ruta_file = add_seg_ruta(PUNTO_MONTAJE, file);          
+    char* ruta_files = add_seg_ruta(PUNTO_MONTAJE, "/files");
+    char* ruta_file = add_seg_ruta(ruta_files, file);          
     char* ruta_tag  = add_seg_ruta(ruta_file, tag);          
     char* ruta_metadata = add_seg_ruta(ruta_tag, "/metadata.config");
     char* ruta_L_blocks = add_seg_ruta(ruta_tag,"/logical_blocks"); 
-    int tamanio_archivo = obtener_tamano(ruta_metadata);
+    t_config* config_tag = config_create(ruta_metadata);
+    int tamanio_archivo = config_get_int_value(config_tag,"TAMAÑO");
     if(nuevo_valor < tamanio_archivo){
         incrementar(nuevo_valor, tamanio_archivo, ruta_L_blocks);
     }
     else {
         //decrementar(nuevo_valor, tamanio_archivo);
     }
-    t_config* config = config_create(ruta_metadata);
     config_set_value(config, "TAMAÑO", tag);//mofidicar
     config_save(config);    
     return 0;           
@@ -102,7 +103,8 @@ void tag_file(char* origen, char* destino){
 
 
 int commit_tag(char* file, char* tag){
-    char* ruta_file = add_seg_ruta(PUNTO_MONTAJE, file);          
+    char* ruta_files = add_seg_ruta(PUNTO_MONTAJE,"/files");
+    char* ruta_file = add_seg_ruta(ruta_files, file);          
     char* ruta_tag  = add_seg_ruta(ruta_file, tag);
     char* ruta_metadata = add_seg_ruta(ruta_tag, "/metadata.config");
     char* ruta_L_blocks = add_seg_ruta(ruta_file,"/logical_blocks");
@@ -151,7 +153,7 @@ int escritura_bloque(char* file, char* tag, int num_L_block, char* contenido){
             char* nombre_nuevo_F_block = crear_nombre_block(nuevo_bloque_fisico, 4);
             char* ruta_F_blocks = add_seg_ruta(PUNTO_MONTAJE, "/physical_blocks");
             char* ruta_nuevo_F_block = add_seg_ruta(ruta_F_blocks, nombre_nuevo_F_block);
-            
+
             FILE* f = fopen(ruta_L_block, "wb");
             if (!f) {
                 log_error(logger, "fopen nuevo");

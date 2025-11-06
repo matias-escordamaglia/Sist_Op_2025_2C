@@ -106,7 +106,7 @@ void* atender_conexion_worker(void* arg) {
                     char* nombre_tag  = extraer_string(buffer_st,&offset);
 
                     log_info(logger_worker, "Aplicando RETARDO_OPERACION para OP: %d", operation);
-                    usleep(RETARDO_OPERACION * 1000);
+                    usleep(RETARDO_OPERACION * 100);
 
                     int estado = -1; 
 
@@ -116,6 +116,7 @@ void* atender_conexion_worker(void* arg) {
                             break;
                         case  TRUNCATE:
                             int tamanio = (int)extraer_uint32(buffer_st,&offset);
+                            log_info(logger,"truncando iniciar");
                             estado = atender_truncate(nombre_file,nombre_tag,tamanio); 
                             break;      
                         case TAG: 
@@ -177,15 +178,18 @@ int atender_create(char* file, char* tag){
     if (dictionary_has_key(file_tag_dic, key_file_tag)){
         log_error(logger, "Error: Se intentó operar sobre un File:Tag Existente: %s", key_file_tag);
         free(key_file_tag);
+        pthread_mutex_unlock(&mutex_diccionary); 
         return -1; 
     }else {
         estado = create(file,tag);
         if(estado==0){
             iniciar_mutex_file_tag(key_file_tag);
+            anadir_a_dicc_estado(key_file_tag); 
             log_info(logger,"File:Tag creado exitosamente: %s", key_file_tag);
 
         }else{
             log_info(logger, "Error el crear File:Tag->%s",key_file_tag); 
+            pthread_mutex_unlock(&mutex_diccionary); 
             return estado; 
         }
         
@@ -195,10 +199,17 @@ int atender_create(char* file, char* tag){
     return estado; 
 }
 int atender_truncate(char* file, char* tag,int tamanio){
+    log_info(logger,"entrado a funcion truncate");
     char* key_file_tag = crear_key_file_tag(file,tag); 
+    log_info(logger,"entrado a funcion truncate");
 
     pthread_mutex_lock(&mutex_diccionary); 
+    log_info(logger,"entrado a funcion truncate2222");
 
+    if(dictionary_has_key(file_tag_dic,key_file_tag)){
+        log_info(logger,"SI se encontro");
+    }else 
+        log_info(logger,"NO se encontro");
     pthread_mutex_t* mutex_file_tag = dictionary_get(file_tag_dic,key_file_tag);
 
 
@@ -207,17 +218,20 @@ int atender_truncate(char* file, char* tag,int tamanio){
         free(key_file_tag);
         return -1; 
     } 
+    log_info(logger,"mutex_filetag good"); 
 
     pthread_mutex_lock(mutex_file_tag);
     pthread_mutex_unlock(&mutex_diccionary); 
 
     int estado_tag = obtener_estado_file_tag(key_file_tag); 
-    int estado_truncate;
+    log_info(logger, "estado de tag en dicc: %u", estado_tag);
+    int estado_truncate = -1;
 
     if (estado_tag == 0 ) { //commited 
         log_error(logger, "Error: Se intentó TRUNCATE en un File:Tag en estado COMMITED: %s", key_file_tag);
         estado_truncate = -1; 
     } else {
+        log_info(logger, "truncando archivo: %s", key_file_tag); 
         estado_truncate = truncar_archivo(file, tag, tamanio);
     }
 
@@ -236,7 +250,9 @@ int atender_commit(char* file, char* tag){
     pthread_mutex_t* mutex_file_tag = dictionary_get(file_tag_dic,key_file_tag);
     if (mutex_file_tag == NULL) {
         log_error(logger, "Error: Se intentó operar sobre un File:Tag no existente: %s", key_file_tag);
+        pthread_mutex_unlock(&mutex_diccionary); 
         free(key_file_tag);
+
         return -1; 
     } 
     pthread_mutex_lock(mutex_file_tag);
@@ -301,5 +317,5 @@ int atender_tag(char* file, char* tag, char* file_destino,char* tag_destino){
     return estado; 
 }
 int atender_delete(char* file, char* tag){
-    
+
 }

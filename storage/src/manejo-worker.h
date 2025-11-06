@@ -23,5 +23,6 @@ int atender_create(char* file, char* tag);
 int atender_truncate(char* file, char* tag,int tamanio);
 int atender_commit(char* file, char* tag);
 int atender_tag(char* file, char* tag, char* file_destino,char* tag_destino);
+int atender_delete(char* file, char* tag); 
 
 #endif /* MANEJO_WORKER_H_ */

@@ -875,7 +875,7 @@ int obtener_estado_file_tag(char* key){
     intptr_t estado_tag = (intptr_t)dictionary_get(dicc_estado_tag, key);
     estado_final = (int)estado_tag;
     }else{
-        log_error(logger, "Error: Se intentó operar sobre un File:Tag no existente: %s", key);
+        log_error(logger, "Error12: Se intentó operar sobre un File:Tag no existente: %s", key);
         estado_final = -1; 
     
     } 

@@ -1,291 +1,360 @@
-#include <worker.h>
+/**
+ * test_client.c
+ *
+ * Mock Worker para testear el módulo Storage.
+ * Este programa simula ser un Worker, se conecta al Storage,
+ * realiza el handshake y envía operaciones de prueba.
+ */
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+#include <sys/socket.h>
+#include <stdint.h> // Para uint32_t
+
+// --- Configuración del Test ---
+#define IP_STORAGE "127.0.0.1"
+#define PUERTO_STORAGE "8001" // <--- ¡CAMBIÁ ESTO POR TU PUERTO_ESCUCHA!
+#define FAKE_WORKER_ID 99
+// -----------------------------
 
 
-char* archivo_config;
-uint32_t id_worker;
+// --- Definiciones que copiamos de tu proyecto ---
 
-pthread_t hilo_master;
-pthread_t hilo_storage;
+// Estados del Handshake
+typedef enum {
+    HANDSHAKE_OK,
+    HANDSHAKE_FALLO
+} t_estado_handshake;
 
-int main(int argc, char** argv)
-{	
+// Operaciones
+typedef enum {
+    CREATE,
+    TRUNCATE,
+    WRITE,
+    READ,
+    TAG,
+    COMMIT,
+    FLUSH,
+    DELETE,
+    END
+} Operation;
 
-	if (argc < 3) {
-        printf("Uso correcto: %s <archivo_config[path]> <ID_Worker[int]>\n", argv[0]);
-        return EXIT_FAILURE;
+// Códigos de Paquete (simplificado)
+#define PAQUETE 1
+// --- Fin de definiciones ---
+
+
+// --- Mini-biblioteca de Paquetes (para no depender de commons) ---
+
+typedef struct {
+    int size;
+    void* stream;
+} t_buffer;
+
+typedef struct {
+    int codigo_operacion;
+    t_buffer* buffer;
+} t_paquete;
+
+t_paquete* crear_paquete(int cod_op) {
+    t_paquete* paquete = malloc(sizeof(t_paquete));
+    paquete->codigo_operacion = cod_op;
+    paquete->buffer = malloc(sizeof(t_buffer));
+    paquete->buffer->size = 0;
+    paquete->buffer->stream = NULL;
+    return paquete;
+}
+
+void liberar_paquete(t_paquete* paquete) {
+    free(paquete->buffer->stream);
+    free(paquete->buffer);
+    free(paquete);
+}
+
+void agregar_a_paquete(t_paquete* paquete, void* valor, int size) {
+    paquete->buffer->stream = realloc(paquete->buffer->stream, paquete->buffer->size + size);
+    memcpy(paquete->buffer->stream + paquete->buffer->size, valor, size);
+    paquete->buffer->size += size;
+}
+
+void agregar_string_a_paquete(t_paquete* paquete, char* string) {
+    uint32_t len = strlen(string) + 1;
+    agregar_a_paquete(paquete, &len, sizeof(uint32_t));
+    agregar_a_paquete(paquete, string, len);
+}
+
+void* serializar_paquete(t_paquete* paquete, int* bytes) {
+    *bytes = paquete->buffer->size + sizeof(int) + sizeof(int); // cod_op + size + data
+    void* magic = malloc(*bytes);
+    int offset = 0;
+    memcpy(magic + offset, &(paquete->codigo_operacion), sizeof(int));
+    offset += sizeof(int);
+    memcpy(magic + offset, &(paquete->buffer->size), sizeof(int));
+    offset += sizeof(int);
+    memcpy(magic + offset, paquete->buffer->stream, paquete->buffer->size);
+    return magic;
+}
+
+// --- Funciones de Deserialización (para la respuesta) ---
+int deserializar_int(void* buffer) {
+    int valor;
+    memcpy(&valor, buffer, sizeof(int));
+    return valor;
+}
+
+// --- Fin de Mini-biblioteca ---
+
+
+/**
+ * @brief Conecta al servidor Storage.
+ * @return El file descriptor del socket, o -1 si falla.
+ */
+int conectar_a_storage() {
+    struct sockaddr_in serv_addr;
+    int sock_fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (sock_fd < 0) {
+        perror("Error creando socket");
+        return -1;
     }
 
-	archivo_config = argv[1];
-    id_worker = atoi(argv[2]);
-
-	config = iniciar_config(logger, archivo_config);
-
-	log_level = obtener_log_level_config(config);
-
-	logger = log_create("worker.log", "WORKER", true, log_level);
-	
-    ip_storage = config_get_string_value(config, "IP_STORAGE");
-	puerto_storage = config_get_string_value(config, "PUERTO_STORAGE");
-
-
-	ip_master = config_get_string_value(config, "IP_MASTER");
-	puerto_master = config_get_string_value(config, "PUERTO_MASTER");
-
-    conexion_storage = crear_conexion(ip_storage, puerto_storage, logger);
-
-    if (conexion_storage == -1) {
-        log_error(logger, "No se pudo establecer conexión con STORAGE. Abortando.");
-        terminar_programa(conexion_storage, -99, logger, config);
-        exit(EXIT_FAILURE);
+    memset(&serv_addr, 0, sizeof(serv_addr));
+    serv_addr.sin_family = AF_INET;
+    serv_addr.sin_port = htons(atoi(PUERTO_STORAGE));
+    if (inet_pton(AF_INET, IP_STORAGE, &serv_addr.sin_addr) <= 0) {
+        perror("Dirección IP inválida");
+        close(sock_fd);
+        return -1;
     }
-    char* base = config_get_string_value(config, "PATH_SCRIPTS");
-    cargar_scripts(base, logger);
-    
 
-    handshake_con_identificador_worker(conexion_storage, 1, id_worker, logger, "STORAGE");
-    recv(conexion_storage, &block_size, sizeof(int), MSG_WAITALL);
-    // pasar_bloque_a_memoria(&block_size);
-    //inicializacion memoria
-    iniciar_memoria_interna(config);
-    
-    log_info(logger, "Memoria interna inicializada correctamente.");
-
-	conexion_master = crear_conexion(ip_master, puerto_master, logger);
-
-    if (conexion_master == -1) {
-        log_error(logger, "No se pudo establecer conexión con el MASTER. Abortando.");
-        terminar_programa(conexion_master, conexion_storage, logger, config);
-        exit(EXIT_FAILURE);
+    if (connect(sock_fd, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) < 0) {
+        perror("Error al conectar");
+        close(sock_fd);
+        return -1;
     }
+    printf("Conectado a Storage en %s:%s\n", IP_STORAGE, PUERTO_STORAGE);
+    return sock_fd;
+}
+
+/**
+ * @brief Realiza el handshake de 3 pasos con Storage.
+ * @return 0 en éxito, -1 en fallo.
+ */
+int realizar_handshake(int sock_fd) {
+    uint32_t paso1_envio = 1;
+    t_estado_handshake paso1_recv;
+    uint32_t paso2_envio = FAKE_WORKER_ID;
+    t_estado_handshake paso2_recv;
+    int paso3_recv_block_size;
+
+    printf("Iniciando Handshake...\n");
+
+    // Paso 1: Enviar '1' y recibir OK
+    if (send(sock_fd, &paso1_envio, sizeof(uint32_t), 0) <= 0) {
+        perror("HS Paso 1 (send) falló"); return -1;
+    }
+    if (recv(sock_fd, &paso1_recv, sizeof(t_estado_handshake), MSG_WAITALL) <= 0) {
+        perror("HS Paso 1 (recv) falló"); return -1;
+    }
+    if (paso1_recv != HANDSHAKE_OK) {
+        printf("HS Paso 1: Storage rechazó (recibido: %d)\n", paso1_recv); return -1;
+    }
+    printf("Handshake Paso 1 OK\n");
+
+    // Paso 2: Enviar ID y recibir OK
+    if (send(sock_fd, &paso2_envio, sizeof(uint32_t), 0) <= 0) {
+        perror("HS Paso 2 (send) falló"); return -1;
+    }
+    if (recv(sock_fd, &paso2_recv, sizeof(t_estado_handshake), MSG_WAITALL) <= 0) {
+        perror("HS Paso 2 (recv) falló"); return -1;
+    }
+    if (paso2_recv != HANDSHAKE_OK) {
+        printf("HS Paso 2: Storage rechazó (recibido: %d)\n", paso2_recv); return -1;
+    }
+    printf("Handshake Paso 2 OK (ID: %d)\n", FAKE_WORKER_ID);
+
+    // Paso 3: Recibir BLOCK_SIZE
+    if (recv(sock_fd, &paso3_recv_block_size, sizeof(int), MSG_WAITALL) <= 0) {
+        perror("HS Paso 3 (recv BLOCK_SIZE) falló"); return -1;
+    }
+    printf("Handshake Paso 3 OK (BLOCK_SIZE recibido: %d)\n", paso3_recv_block_size);
     
-    handshake_con_identificador_worker(conexion_master, 1, id_worker, logger, "MASTER");
-
-    int* server_fd_copia_storage = malloc(sizeof(int));
-    *server_fd_copia_storage = conexion_storage;
-	pthread_create(&hilo_storage, NULL, manejar_storage, server_fd_copia_storage);
-	
-    int* server_fd_copia_master = malloc(sizeof(int));
-    *server_fd_copia_master = conexion_master;
-    pthread_create(&hilo_master, NULL, manejar_master, server_fd_copia_master);
-
-	/*
-	Lo siguiente debe ajustarse para cada modulo
-	*/
-	pthread_join(hilo_storage, NULL);
-	pthread_join(hilo_master, NULL);
-    
-    //liberar memoria al final
-    destroy_memoria_interna();
-
+    printf("--- Handshake Completo ---\n");
     return 0;
 }
 
-void cargar_scripts(const char* path_base, t_log* logger){
-    DIR* dir = opendir(path_base);
-    if (!dir) {log_error(logger, "No se pudo abrir %s", path_base); return; }
-    if (!diccionario_programas) diccionario_programas = dictionary_create();
-
-    struct dirent* e;
-    char ruta[4096];
-    while ((e = readdir(dir)) != NULL){
-        if (e->d_type != DT_REG) continue;
-
-        if (snprintf(ruta, sizeof(ruta), "%s/%s", path_base, e->d_name) >= (int)sizeof(ruta)){
-            log_error(logger, "Ruta demasiado larga: %s/%s", path_base, e->d_name);
-            continue;
-        }
-
-        t_programa* prog = leer_y_partir(ruta);
-        if (!prog){ log_error(logger, "No se pudo leer %s", ruta); continue; }
-
-        dictionary_put(diccionario_programas, strdup(e->d_name), prog);
-        log_info(logger, "Script registrado: %s (instrucciones=%zu)", e->d_name, prog->cant);
+/**
+ * @brief Espera la respuesta de estado de Storage.
+ * @return El estado (0 = OK, -1 = Error).
+ */
+int esperar_respuesta(int sock_fd) {
+    int cod_op, size;
+    // 1. Recibir Cod Op
+    if (recv(sock_fd, &cod_op, sizeof(int), MSG_WAITALL) <= 0) {
+        perror("Error recibiendo respuesta (cod_op)"); return -1;
     }
-    closedir(dir);
-}
-
-void* manejar_storage(void* arg) {
-    int conexion = *((int*)arg);
-    free(arg);
+    // 2. Recibir Tamaño
+    if (recv(sock_fd, &size, sizeof(int), MSG_WAITALL) <= 0) {
+        perror("Error recibiendo respuesta (size)"); return -1;
+    }
+    // 3. Recibir Buffer
+    void* buffer = malloc(size);
+    if (recv(sock_fd, buffer, size, MSG_WAITALL) <= 0) {
+        perror("Error recibiendo respuesta (buffer)"); free(buffer); return -1;
+    }
     
-    log_info(logger, " Worker - STORAGE conectado  - FD del socket: %d", conexion);
-
-    while (1) {	
-        int cod_op = recibir_operacion(conexion, logger);
-        if (cod_op == -1) {
-            log_info(logger, "STORAGE desconectado");
-            break;
-        }
-        
-        switch (cod_op) {
-            case MENSAJE:
-                
-                //Realizar cosas en caso que llegue un mensaje (o tratarlo como error)
-
-                break;
-                
-            case PAQUETE:
-
-                int size;
-                void* buffer = recibir_buffer(&size, conexion);
-                if (buffer == NULL) {
-                    log_error(logger, "Error al recibir el buffer de STORAGE");
-                    return NULL;
-                }
-                
-
-                break;
-
-            default:
-                log_warning(logger, "Código de operación desconocido de QUERY: %d", cod_op);
-                break;
-        }
-    }
-
-    close(conexion);
-    return NULL;
+    // 4. Deserializar el estado
+    int estado = deserializar_int(buffer);
+    free(buffer);
+    return estado;
 }
 
-void* manejar_master(void* arg) {
-    int conexion = *((int*)arg);
-    free(arg);
+/**
+ * @brief Envía una operación serializada.
+ */
+void enviar_operacion(int sock_fd, t_paquete* paquete) {
+    int size;
+    void* buffer_envio = serializar_paquete(paquete, &size);
     
-    log_info(logger, " Worker - MASTER conectado  - FD del socket: %d", conexion);
-
-    while (1) {
-        int cod_op = recibir_operacion(conexion, logger);
-        if (cod_op == -1) {
-            log_info(logger, "MASTER desconectado");
-            break;
-        }
-        
-        switch (cod_op) {
-            case MENSAJE:
-                
-                //Realizar cosas en caso que llegue un mensaje (o tratarlo como error)
-
-                break;
-                
-            case PAQUETE:
-
-                int size;
-                void* buffer = recibir_buffer(&size, conexion);
-                if (buffer == NULL) {
-                    log_error(logger, "Error al recibir el buffer de MASTER");
-                    return NULL;
-                }
-                
-                t_pedido_master_worker* pedido = desempaquetar_pedido_master_worker(buffer);
-                
-                if (!pedido) {
-                    log_error(logger, "Error al desempaquetar pedido de MASTER");
-                    free(buffer);
-                    break;
-                }
-                
-                envioAQueryInterpreter(pedido);
-
-                t_motivo_pedido_master_worker motivo = pedido->motivo;
-                char* path_query = pedido->query_path;
-                uint32_t pc = pedido->program_counter;
-                uint32_t qid = pedido->query_id;
-
-                log_info(logger, "Nuevo pedido de Query. Query ID: %d - Path: %s - Program Count: %d - Motivo: %d " 
-                                            , qid, path_query, pc, motivo);
-
-                char* mensaje  = "PRUEBA:VERSION1.0 Lectura_de_prueba"; 
-                t_tipo_aviso_worker_master tipo_aviso = NUEVA_LECTURA;
-                t_paquete* paquete_resp = crear_paquete();
+    if (send(sock_fd, buffer_envio, size, 0) <= 0) {
+        perror("Error al enviar paquete de operación");
+    }
     
-                insertar_variable_a_paquete(paquete_resp, &(tipo_aviso), sizeof(t_tipo_aviso_worker_master));
-                insertar_string_a_paquete(paquete_resp, mensaje);
-                enviar_paquete(paquete_resp,conexion);
-
-                free(pedido->query_path);
-                free(pedido);
-                free(buffer); 
-
-                break;
-                
-            default:
-                log_warning(logger, "Código de operación desconocido de MASTER: %d", cod_op);
-                break;
-        }
-    }
-
-    close(conexion);
-    return NULL;
+    free(buffer_envio);
+    liberar_paquete(paquete);
 }
 
-void handshake_con_identificador_worker(int socket, int valor ,uint32_t id_worker, t_log* logger, char* nombre_modulo) {
-    if (handshake(socket, valor, logger, nombre_modulo) == (uint32_t)-1) {
-        log_error(logger, "Handshake fallido con %s", nombre_modulo);
-        exit(EXIT_FAILURE);
-    }
+// --- Casos de Prueba ---
 
-    t_estado_handshake estado_handshake;
-
-    send(socket, &id_worker, sizeof(uint32_t), 0);
-
-    if (recv(socket, &estado_handshake, sizeof(t_estado_handshake), MSG_WAITALL) <= 0) {
-        log_error(logger, "No se recibió respuesta de %s tras enviar el ID de WORKER", nombre_modulo);
-        exit(EXIT_FAILURE);
-    }
-        
-
-    if (estado_handshake == HANDSHAKE_OK) {
-        log_info(logger, "WORKER %u registrado correctamente en %s", id_worker, nombre_modulo);
-    } else {
-        log_error(logger, "WORKER %u ya estaba registrado en %s. Abortando...", id_worker, nombre_modulo);
-        exit(EXIT_FAILURE);
-    }
-}
-
-void terminar_programa(int conexion1, int conexion2, t_log* logger, t_config* config) {
+void test_create_ok(int sock_fd) {
+    printf("\n--- Test: CREATE OK (MATERIAS:BASE) ---\n");
+    t_paquete* p = crear_paquete(PAQUETE);
+    Operation op = CREATE;
+    agregar_a_paquete(p, &op, sizeof(Operation));
+    agregar_string_a_paquete(p, "MATERIAS");
+    agregar_string_a_paquete(p, "BASE");
     
-	log_info(logger, "Finalizando programa...");
+    enviar_operacion(sock_fd, p);
     
-	log_destroy(logger);
-    config_destroy(config);
+    int estado = esperar_respuesta(sock_fd);
+    if (estado == 0) printf("RESULTADO: OK (Estado 0)\n");
+    else printf("RESULTADO: FALLÓ (Estado %d)\n", estado);
+}
+
+void test_create_fail(int sock_fd) {
+    printf("\n--- Test: CREATE FAIL (MATERIAS:BASE ya existe) ---\n");
+    t_paquete* p = crear_paquete(PAQUETE);
+    Operation op = CREATE;
+    agregar_a_paquete(p, &op, sizeof(Operation));
+    agregar_string_a_paquete(p, "MATERIAS");
+    agregar_string_a_paquete(p, "BASE");
     
-	close(conexion1);
-	if(conexion2 != -99 ) {
-		close(conexion2);
-	}
+    enviar_operacion(sock_fd, p);
+    
+    int estado = esperar_respuesta(sock_fd);
+    if (estado == -1) printf("RESULTADO: OK (Falló como se esperaba. Estado %d)\n", estado);
+    else printf("RESULTADO: FALLÓ (Debería haber dado error. Estado %d)\n", estado);
 }
 
-void rstrip(char* s){
-    size_t n = strlen(s);
-    while (n && (s[n-1]=='\n'||s[n-1]=='\r'||s[n-1]==' '||s[n-1]=='\t')) s[--n]='\0';
+void test_truncate_ok(int sock_fd) {
+    printf("\n--- Test: TRUNCATE OK (MATERIAS:BASE a 1024) ---\n");
+    t_paquete* p = crear_paquete(PAQUETE);
+    Operation op = TRUNCATE;
+    uint32_t tamanio = 1024;
+    
+    agregar_a_paquete(p, &op, sizeof(Operation));
+    agregar_string_a_paquete(p, "MATERIAS");
+    agregar_string_a_paquete(p, "BASE");
+    agregar_a_paquete(p, &tamanio, sizeof(uint32_t));
+    
+    enviar_operacion(sock_fd, p);
+    
+    int estado = esperar_respuesta(sock_fd);
+    if (estado == 0) printf("RESULTADO: OK (Estado 0)\n");
+    else printf("RESULTADO: FALLÓ (Estado %d)\n", estado);
 }
 
-bool vacia_o_coment(const char* s){
-    while (*s==' '||*s=='\t') s++;
-    return (*s=='\0' || *s=='#' || (*s=='/' && *(s+1)=='/'));
+void test_commit_ok(int sock_fd) {
+    printf("\n--- Test: COMMIT OK (MATERIAS:BASE) ---\n");
+    t_paquete* p = crear_paquete(PAQUETE);
+    Operation op = COMMIT;
+    agregar_a_paquete(p, &op, sizeof(Operation));
+    agregar_string_a_paquete(p, "MATERIAS");
+    agregar_string_a_paquete(p, "BASE");
+    
+    enviar_operacion(sock_fd, p);
+    
+    int estado = esperar_respuesta(sock_fd);
+    if (estado == 0) printf("RESULTADO: OK (Estado 0)\n");
+    else printf("RESULTADO: FALLÓ (Estado %d)\n", estado);
 }
 
-t_programa* leer_y_partir(const char* path){
-    FILE* f = fopen(path, "rb");
-    if (!f) return NULL;
+void test_truncate_fail_commited(int sock_fd) {
+    printf("\n--- Test: TRUNCATE FAIL (MATERIAS:BASE está COMMITED) ---\n");
+    t_paquete* p = crear_paquete(PAQUETE);
+    Operation op = TRUNCATE;
+    uint32_t tamanio = 2048;
+    
+    agregar_a_paquete(p, &op, sizeof(Operation));
+    agregar_string_a_paquete(p, "MATERIAS");
+    agregar_string_a_paquete(p, "BASE");
+    agregar_a_paquete(p, &tamanio, sizeof(uint32_t));
+    
+    enviar_operacion(sock_fd, p);
+    
+    int estado = esperar_respuesta(sock_fd);
+    if (estado == -1) printf("RESULTADO: OK (Falló como se esperaba. Estado %d)\n", estado);
+    else printf("RESULTADO: FALLÓ (Debería haber dado error. Estado %d)\n", estado);
+}
 
-    t_programa* p = calloc(1, sizeof(*p));
-    if (!p){ fclose(f); return NULL; }
+void test_tag_ok(int sock_fd) {
+    printf("\n--- Test: TAG OK (MATERIAS:BASE -> MATERIAS:V2) ---\n");
+    t_paquete* p = crear_paquete(PAQUETE);
+    Operation op = TAG;
+    
+    agregar_a_paquete(p, &op, sizeof(Operation));
+    agregar_string_a_paquete(p, "MATERIAS"); // Origen
+    agregar_string_a_paquete(p, "BASE");
+    agregar_string_a_paquete(p, "MATERIAS"); // Destino
+    agregar_string_a_paquete(p, "V2");
+    
+    enviar_operacion(sock_fd, p);
+    
+    int estado = esperar_respuesta(sock_fd);
+    if (estado == 0) printf("RESULTADO: OK (Estado 0)\n");
+    else printf("RESULTADO: FALLÓ (Estado %d)\n", estado);
+}
 
-    char* line = NULL; size_t cap = 0; ssize_t n;
-    while ((n = getline(&line, &cap, f)) != -1){
-        (void)n;
-        rstrip(line);
-        if (vacia_o_coment(line)) continue;
 
-        char* dup = strdup(line);
-        if (!dup){ fclose(f); free(line); return p; } // dejamos lo cargado hasta ahora
-
-        char** nuevo = realloc(p->instrucciones, (p->cant+1)*sizeof(char*));
-        if (!nuevo){ free(dup); fclose(f); free(line); return p; }
-        p->instrucciones = nuevo;
-        p->instrucciones[p->cant++] = dup;
+int main() {
+    int sock_fd = conectar_a_storage();
+    if (sock_fd == -1) {
+        return EXIT_FAILURE;
     }
-    free(line);
-    fclose(f);
-    return p;
+
+    if (realizar_handshake(sock_fd) == -1) {
+        close(sock_fd);
+        return EXIT_FAILURE;
+    }
+
+    // --- Ejecutamos la secuencia de pruebas ---
+    test_create_ok(sock_fd);
+    sleep(1);
+    test_create_fail(sock_fd);
+    sleep(1);
+    test_truncate_ok(sock_fd);
+    sleep(1);
+    test_commit_ok(sock_fd);
+    sleep(1);
+    test_truncate_fail_commited(sock_fd);
+    sleep(1);
+    test_tag_ok(sock_fd);
+    
+    // Aquí podés agregar más pruebas para TAG (fallido), DELETE, etc.
+
+    printf("\n--- Pruebas finalizadas ---\n");
+    close(sock_fd);
+    return EXIT_SUCCESS;
 }
