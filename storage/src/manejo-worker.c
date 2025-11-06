@@ -126,14 +126,11 @@ void* atender_conexion_worker(void* arg) {
                             free(tag_destino);
                             break;
                         case WRITE:
-
                             break;
                         case READ: 
                             break;
                         case COMMIT:
                             //int estado = gestionar_commit(file,tag);
-                            break;
-                        case FLUSH:
                             break;
                         case DELETE: 
                             break;
@@ -236,6 +233,8 @@ int atender_tag(char* file, char* tag, char* file_destino,char* tag_destino){
         log_error(logger, "Error: Se intentó operar sobre un File:Tag Destino existente: %s", key_file_tag_destino);
         free(key_file_tag);
         free(key_file_tag_destino);
+        free(file_tag_origen);
+        free(file_tag_destino); 
         pthread_mutex_unlock(&mutex_diccionary); 
         return -1; 
     }
@@ -243,6 +242,8 @@ int atender_tag(char* file, char* tag, char* file_destino,char* tag_destino){
         log_error(logger, "Error: Se intentó operar sobre un File:Tag no existente: %s", key_file_tag);
         free(key_file_tag);
         free(key_file_tag_destino);
+        free(file_tag_origen);
+        free(file_tag_destino); 
         pthread_mutex_unlock(&mutex_diccionary); 
         return -1; 
     } 
