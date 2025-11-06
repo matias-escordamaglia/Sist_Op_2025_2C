@@ -125,16 +125,15 @@ void* atender_conexion_worker(void* arg) {
                             free(file_destino);
                             free(tag_destino);
                             break;
+                        case COMMIT:
+                            estado = atender_commit(nombre_file,nombre_tag);
+                            break;
+                        case DELETE: 
+                            estado = atender_delete(nombre_file,nombre_tag);
+                            break;
                         case WRITE:
                             break;
                         case READ: 
-                            break;
-                        case COMMIT:
-                            //int estado = gestionar_commit(file,tag);
-                            break;
-                        case DELETE: 
-                            break;
-                        case END: 
                             break;
                         default:
                             break;
@@ -300,4 +299,7 @@ int atender_tag(char* file, char* tag, char* file_destino,char* tag_destino){
 
 
     return estado; 
+}
+int atender_delete(char* file, char* tag){
+    
 }
