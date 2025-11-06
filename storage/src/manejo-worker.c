@@ -229,21 +229,21 @@ int atender_tag(char* file, char* tag, char* file_destino,char* tag_destino){
     char* key_file_tag_destino = crear_key_file_tag(file_destino,tag_destino);
     char* file_tag_origen = add_seg_ruta(file,tag); 
     char* file_tag_destino = add_seg_ruta(file_destino,tag_destino); 
-    pthread_mutex_lock(mutex_diccionary); 
+    pthread_mutex_lock(&mutex_diccionary); 
     pthread_mutex_t* mutex_file_tag = dictionary_get(file_tag_dic,key_file_tag);
     
     if(dictionary_has_key(file_tag_dic,key_file_tag_destino)==true){
         log_error(logger, "Error: Se intentó operar sobre un File:Tag Destino existente: %s", key_file_tag_destino);
         free(key_file_tag);
         free(key_file_tag_destino);
-        pthread_mutex_unlock(mutex_diccionary); 
+        pthread_mutex_unlock(&mutex_diccionary); 
         return -1; 
     }
     if (mutex_file_tag == NULL) {
         log_error(logger, "Error: Se intentó operar sobre un File:Tag no existente: %s", key_file_tag);
         free(key_file_tag);
         free(key_file_tag_destino);
-        pthread_mutex_unlock(mutex_diccionary); 
+        pthread_mutex_unlock(&mutex_diccionary); 
         return -1; 
     } 
     pthread_mutex_lock(mutex_file_tag);
@@ -253,7 +253,7 @@ int atender_tag(char* file, char* tag, char* file_destino,char* tag_destino){
     iniciar_mutex_file_tag(key_file_tag_destino); 
 
     pthread_mutex_unlock(mutex_file_tag);
-    pthread_mutex_unlock(mutex_diccionary); 
+    pthread_mutex_unlock(&mutex_diccionary); 
     free(key_file_tag);
     free(key_file_tag_destino);
     free(file_tag_origen);
