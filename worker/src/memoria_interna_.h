@@ -18,6 +18,6 @@ void liberar_memoria_interna();
 
 // Funciones del algoritmo CLOCK
 void acceder_a_pagina(int nro_pagina);
-int reemplazar_pagina_clock();
+//int reemplazar_pagina_clock();
 
 #endif

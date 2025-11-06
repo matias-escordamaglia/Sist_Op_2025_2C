@@ -13,6 +13,7 @@
 #include <commons/log.h>
 #include <commons/config.h>
 #include <commons/collections/list.h>
+#include <commons/bitarray.h>
 
 
 
@@ -95,7 +96,9 @@ typedef enum Operation{
     COMMIT,
     FLUSH,
     DELETE,
-    END
+    END,
+    RESPONSE = 100,
+    FIN_ERROR,
 } Operation;
 
 
@@ -192,15 +195,32 @@ typedef struct {
     size_t len;
 } t_write;
 
-typedef struct
-{
-	char* file;
+// Struct para entrada de página
+typedef struct {
+    int marco_num;
+    bool presente;
+    bool modificado;
+    bool bit_uso;
+    int nro_pagina;
+    time_t ultimo_acceso;
+} t_entrada_pagina;
+
+// Struct para tabla de File:Tag
+typedef struct {
     char* tag;
-	t_list *paginas_proceso;
+    t_list* paginas_proceso;
+    char* file;
+    int tam_file;
 } t_tabla_paginas;
 
-extern t_list* lista_global_tablas;
-extern t_tabla_paginas* tabla_actual;
+// Global
+typedef struct {
+    uint32_t pagina;
+    uint32_t offset_en_pagina;
+    uint32_t bytes_en_pagina;
+    uint32_t offset_en_buffer;
+    uint32_t bytes_restantes; 
+} segmento_acceso;
 
 
 // ------------------------------------------------------------------------------------------

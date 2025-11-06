@@ -3,7 +3,6 @@
 
 char* archivo_config;
 uint32_t id_worker;
-int block_size;
 
 pthread_t hilo_master;
 pthread_t hilo_storage;
@@ -45,9 +44,10 @@ int main(int argc, char** argv)
 
     handshake_con_identificador_worker(conexion_storage, 1, id_worker, logger, "STORAGE");
     recv(conexion_storage, &block_size, sizeof(int), MSG_WAITALL);
-    pasar_bloque_a_memoria(&block_size);
+    // pasar_bloque_a_memoria(&block_size);
     //inicializacion memoria
-    //inicializar_memoria_interna();
+    iniciar_memoria_interna(config);
+    
     log_info(logger, "Memoria interna inicializada correctamente.");
 
 	conexion_master = crear_conexion(ip_master, puerto_master, logger);
@@ -75,7 +75,7 @@ int main(int argc, char** argv)
 	pthread_join(hilo_master, NULL);
     
     //liberar memoria al final
-    // liberar_memoria_interna();
+    destroy_memoria_interna();
 
     return 0;
 }
