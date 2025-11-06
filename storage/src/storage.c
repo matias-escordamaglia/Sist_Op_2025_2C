@@ -639,10 +639,9 @@ void mapeo_dir_mutex_dinamic(char* ruta){
                         log_info(logger, "estado: %u", estado_leido);
 
                         if(estado_leido == 1 || estado_leido == 0  ){
-                            int* estado_ptr = malloc(sizeof(int));
-                            *estado_ptr = estado_leido; 
+                            intptr_t estado_ptr = estado_leido; 
                             //log_info(logger, "DEBUG: dicc_estado_tag=%p, key=%s, estado_ptr=%p", (void*)dicc_estado_tag, key_file_tag, (void*)estado_ptr);
-                            dictionary_put(dicc_estado_tag, key_file_tag, estado_ptr);
+                            dictionary_put(dicc_estado_tag, key_file_tag, (void*)(intptr_t)estado_ptr);
                             log_info(logger, "File:Tag añadido a diccionario de ESTASDo: %s:%s", nombre_file, nombre_tag);
                         }else
                             log_error(logger, "Error de lectura metadata: %s", key_file_tag); 
@@ -847,4 +846,39 @@ int buscar_num_ultimo_bloque(char* ruta_logical_block){
     config_destroy(temp); 
 
     return proximo_bloque;  
+}
+int añadir_a_dicc_estado(char* key){
+    int estado_op;
+    pthread_mutex_lock(&mutex_dic_estado); 
+
+    if(dictionary_has_key(dicc_estado_tag, key)){
+
+        log_error(logger, "Error: Se intentó operar sobre un File:Tag existente: %s", key);
+        estado_op = -1; 
+
+    }else{
+    
+    intptr_t estado_ptr = (intptr_t)1; 
+    dictionary_put(dicc_estado_tag, key, (void*)(intptr_t)estado_ptr);
+    log_info(logger, "File:Tag añadido a diccionario de ESTASDo: %s",key);
+        
+    estado_op = 1;
+    }
+    pthread_mutex_unlock(&mutex_dic_estado); 
+    return estado_op; 
+}
+int obtener_estado_file_tag(char* key){
+    int estado_final;
+    pthread_mutex_lock(&mutex_dic_estado); 
+
+    if(dictionary_has_key(dicc_estado_tag, key)){
+    intptr_t estado_tag = (intptr_t)dictionary_get(dicc_estado_tag, key);
+    estado_final = (int)estado_tag;
+    }else{
+        log_error(logger, "Error: Se intentó operar sobre un File:Tag no existente: %s", key);
+        estado_final = -1; 
+    
+    } 
+    pthread_mutex_unlock(&mutex_dic_estado); 
+    return estado_final; 
 }

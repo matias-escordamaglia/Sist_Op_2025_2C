@@ -210,7 +210,7 @@ int atender_truncate(char* file, char* tag,int tamanio){
     } 
 
     pthread_mutex_lock(mutex_file_tag);
-    pthread_mutex_lock(&mutex_diccionary); 
+    pthread_mutex_unlock(&mutex_diccionary); 
 
     int estado_tag = obtener_estado_file_tag(key_file_tag); 
     int estado_truncate;
@@ -228,21 +228,7 @@ int atender_truncate(char* file, char* tag,int tamanio){
 
     return estado_truncate; 
 }
-int obtener_estado_file_tag(char* key){
-    int estado_final;
-    pthread_mutex_lock(&mutex_dic_estado); 
 
-    if(dictionary_has_key(dicc_estado_tag, key)){
-    intptr_t estado_tag = (intptr_t)dictionary_get(dicc_estado_tag, key);
-    estado_final = (int)estado_tag;
-    }else{
-        log_error(logger, "Error: Se intentó operar sobre un File:Tag no existente: %s", key);
-        estado_final = -1; 
-    
-    } 
-    pthread_mutex_unlock(&mutex_dic_estado); 
-    return estado_final; 
-}
 int atender_commit(char* file, char* tag){
     char* key_file_tag = crear_key_file_tag(file,tag);  
     pthread_mutex_t* mutex_file_tag = dictionary_get(file_tag_dic,key_file_tag);
