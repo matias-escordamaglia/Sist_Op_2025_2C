@@ -847,7 +847,7 @@ int buscar_num_ultimo_bloque(char* ruta_logical_block){
 
     return proximo_bloque;  
 }
-int añadir_a_dicc_estado(char* key){
+int anadir_a_dicc_estado(char* key){
     int estado_op;
     pthread_mutex_lock(&mutex_dic_estado); 
 
@@ -862,7 +862,7 @@ int añadir_a_dicc_estado(char* key){
     dictionary_put(dicc_estado_tag, key, (void*)(intptr_t)estado_ptr);
     log_info(logger, "File:Tag añadido a diccionario de ESTASDo: %s",key);
         
-    estado_op = 1;
+    estado_op = 0;
     }
     pthread_mutex_unlock(&mutex_dic_estado); 
     return estado_op; 
@@ -881,4 +881,19 @@ int obtener_estado_file_tag(char* key){
     } 
     pthread_mutex_unlock(&mutex_dic_estado); 
     return estado_final; 
+}
+int actualizar_dicc_estado(char* key_file_tag,int nuevo_estado){
+    pthread_mutex_lock(&mutex_dic_estado); 
+
+    if(!dictionary_has_key(dicc_estado_tag, key_file_tag)){
+        log_error(logger, "Error: Se intentó actualizar un estado no existente: %s", key_file_tag);
+        pthread_mutex_unlock(&mutex_dic_estado);
+        return -1;
+    }
+    intptr_t estado_ptr = (intptr_t)nuevo_estado; 
+    dictionary_put(dicc_estado_tag, key_file_tag, (void*)(intptr_t)estado_ptr);
+    log_info(logger, "Estado actualizado para %s a %d", key_file_tag, nuevo_estado);       
+    
+    pthread_mutex_unlock(&mutex_dic_estado); 
+    return 0;
 }

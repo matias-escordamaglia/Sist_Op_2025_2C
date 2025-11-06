@@ -92,7 +92,8 @@ int encontrar_y_reservar_bloque();
 int buscar_primer_bloque_libre();
 int buscar_num_ultimo_bloque(char* ruta_logical_block);
 int obtener_estado_file_tag(char* key);
-int añadir_a_dicc_estado(char* key);
+int anadir_a_dicc_estado(char* key);
+int actualizar_dicc_estado(char* key_file_tag,int nuevo_estado);
 
 
 

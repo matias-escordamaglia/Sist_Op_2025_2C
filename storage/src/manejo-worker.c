@@ -231,11 +231,33 @@ int atender_truncate(char* file, char* tag,int tamanio){
 
 int atender_commit(char* file, char* tag){
     char* key_file_tag = crear_key_file_tag(file,tag);  
+
+    pthread_mutex_lock(&mutex_diccionary); 
+
     pthread_mutex_t* mutex_file_tag = dictionary_get(file_tag_dic,key_file_tag);
+    if (mutex_file_tag == NULL) {
+        log_error(logger, "Error: Se intentó operar sobre un File:Tag no existente: %s", key_file_tag);
+        free(key_file_tag);
+        return -1; 
+    } 
     pthread_mutex_lock(mutex_file_tag);
+    pthread_mutex_unlock(&mutex_diccionary); 
+
+    if (obtener_estado_file_tag(key_file_tag) == 0) {
+        log_warning(logger, "Warning: Se intentó COMMIT sobre un tag ya commiteado: %s", key_file_tag);
+        pthread_mutex_unlock(mutex_file_tag);
+        free(key_file_tag);
+        return -1; ///no es error pero no se puedo commitear 
+    }
     int estado = commit_tag(file,tag);
+    int estado_dic ;
+    if(estado==0){
+        estado_dic = actualizar_dicc_estado(key_file_tag,0); 
+    }
     pthread_mutex_unlock(mutex_file_tag);
-    return estado; 
+    if(estado==0 && estado_dic == 0)
+        return 0; 
+   return -1; 
 }
 int atender_tag(char* file, char* tag, char* file_destino,char* tag_destino){
     char* key_file_tag = crear_key_file_tag(file,tag); 
