@@ -253,8 +253,12 @@ void incrementar(int nuevo_valor, int valor_original, char* ruta_logical_block){
  }
 
 
-//void decrementar(int nuevo_valor, int valor_original){
-  //  int cant_bloques = (valor_original - nuevo_valor) / BLOCK_SIZE;
+//void decrementar(int nuevo_valor, int valor_original, char* ruta_tag){
+//    int cant_bloques = (valor_original - nuevo_valor) / BLOCK_SIZE;
+//    char* ruta_metadata = add_seg_ruta(ruta_tag, "/metadata.config");
+//    t_config* config = config_create(ruta_metadata);
+//    char **bloques = config_get_array_value(config, "BLOCKS");
+//    int cantidad = sizeof(bloques) / sizeof(bloques[0]);
 
 //}
 
