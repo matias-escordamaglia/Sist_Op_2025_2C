@@ -36,6 +36,8 @@ pthread_mutex_t mutex_bitmap;
 pthread_mutex_t mutex_dir_files; 
 pthread_mutex_t mutex_file_hash;
 pthread_mutex_t mutex_diccionary; 
+pthread_mutex_t mutex_dic_estado; 
+
 
 //dictionarys
 t_dictionary* file_tag_dic = NULL; 

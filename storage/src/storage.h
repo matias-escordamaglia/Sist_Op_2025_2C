@@ -46,7 +46,7 @@ extern pthread_mutex_t mutex_bitmap;
 extern pthread_mutex_t mutex_dir_files; 
 extern pthread_mutex_t mutex_file_hash;
 extern pthread_mutex_t mutex_diccionary; 
-
+extern pthread_mutex_t mutex_dic_estado; 
 //dictionarys
 extern t_dictionary* file_tag_dic ; 
 extern t_dictionary* dicc_estado_tag; 
@@ -91,6 +91,7 @@ char* crear_nombre_block(int valor, int cod);
 int encontrar_y_reservar_bloque();
 int buscar_primer_bloque_libre();
 int buscar_num_ultimo_bloque(char* ruta_logical_block);
+int obtener_estado_file_tag(char* key);
 
 
 
