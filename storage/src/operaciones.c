@@ -85,7 +85,7 @@ int truncar_archivo(char* file, char* tag, int nuevo_valor){
         incrementar(nuevo_valor, tamanio_archivo, ruta_L_blocks);
     }
     else {
-        //decrementar(nuevo_valor, tamanio_archivo);
+        decrementar(nuevo_valor, tamanio_archivo, ruta_tag);
     }
     t_config* config = config_create(ruta_metadata);
     config_set_value(config, "TAMAÑO", tag);//mofidicar
@@ -253,14 +253,62 @@ void incrementar(int nuevo_valor, int valor_original, char* ruta_logical_block){
  }
 
 
-//void decrementar(int nuevo_valor, int valor_original, char* ruta_tag){
-//    int cant_bloques = (valor_original - nuevo_valor) / BLOCK_SIZE;
-//    char* ruta_metadata = add_seg_ruta(ruta_tag, "/metadata.config");
-//    t_config* config = config_create(ruta_metadata);
-//    char **bloques = config_get_array_value(config, "BLOCKS");
-//    int cantidad = sizeof(bloques) / sizeof(bloques[0]);
+int decrementar(int nuevo_valor, int valor_original, char* ruta_tag){
+    int cant_eliminar_bloques = (valor_original - nuevo_valor) / BLOCK_SIZE;
+    char* ruta_L_blocks = add_seg_ruta(ruta_tag,"/logical_blocks");
+    char* ruta_metadata = add_seg_ruta(ruta_tag, "/metadata.config");
+    t_config* config = config_create(ruta_metadata);
+    char **bloques = config_get_array_value(config, "BLOCKS");
+    
+    
+    int cantidad_bloques = 0;
+    while (bloques[cantidad_bloques] != NULL) {
+        cantidad_bloques++;
+    }
+    
+    for (int pos = cantidad_bloques - 1; pos >= cantidad_bloques - cant_eliminar_bloques; pos--) {
+        char* nombre_bloque = crear_nombre_block(pos, 6);
+        char* ruta_L_block = add_seg_ruta(ruta_L_blocks, nombre_bloque);
+        
+        struct stat st;
+        if (stat(ruta_L_block, &st) == -1) {
+        log_error(logger, "Bloque lógico no asignado o inexistente");
+        return -1;
+        }
+        if (st.st_nlink == 1) { // verifica que solo hay un bloque logico asignado
+            FILE* f = fopen(ruta_L_block, "rb");
+            if (!f) {
+                log_error(logger, "No se pudo abrir el bloque");
+                return -1;
+            }
 
-//}
+            void* buffer = malloc(st.st_size);
+            if (!buffer) {
+                log_error(logger, "No se pudo reservar memoria");
+                fclose(f);
+                return -1;
+            }
+
+            fread(buffer, 1, st.st_size, f);
+            fclose(f);
+
+            // se calcula el hash del contenido
+            char* hash = crypto_md5(buffer, st.st_size);
+            free(buffer);
+
+            if (!hash) {
+                log_error(logger, "Error calculando hash MD5");
+                return -1;
+            }
+            int bloque_F = config_get_int_value(config_hash, hash);
+            liberar_bloque_reservado(bloque_F);
+        }
+        
+        // Desasociar el bloque lógico
+        unlink(ruta_L_block);
+    }
+    return 0;
+}
 
 int bloq_L_apuntan_bloq_F_0(char* ruta_logical_block){
     int k = 4; 
