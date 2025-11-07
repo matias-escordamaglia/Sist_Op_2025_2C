@@ -762,6 +762,7 @@ int asignar_bloque_logico(char* ruta_logical_block){
 
     return 0; 
 }
+
 void liberar_bloque_reservado(int nro_bloque) {
     //solo si no hay mas enlaces existentes
     pthread_mutex_lock(&mutex_bitmap);
@@ -896,4 +897,24 @@ int actualizar_dicc_estado(char* key_file_tag,int nuevo_estado){
     
     pthread_mutex_unlock(&mutex_dic_estado); 
     return 0;
+}
+int calcular_cant_bloq_log(char* file, char* tag){
+    char* ruta_files = add_seg_ruta(PUNTO_MONTAJE,"/files");
+    char* ruta_file = add_seg_ruta(ruta_files, file);          
+    char* ruta_tag  = add_seg_ruta(ruta_file, tag);
+    char* ruta_metadata = add_seg_ruta(ruta_tag, "/metadata.config");
+    t_config* config_tag = config_create(ruta_metadata);
+
+    int tamanio = config_get_int_value(config_tag, "TAMAÑO");
+    int cantidad_bloques = tamanio/BLOCK_SIZE; 
+
+    config_destroy(config_tag);
+    free(ruta_files);
+    free(ruta_file);  
+    free(ruta_tag);  
+    free(ruta_metadata);  
+    return cantidad_bloques;
+}
+int actualizar_metadata(){
+
 }

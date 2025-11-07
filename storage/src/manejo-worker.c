@@ -128,10 +128,15 @@ void* atender_conexion_worker(void* arg) {
                         case COMMIT:
                             estado = atender_commit(nombre_file,nombre_tag);
                             break;
+                        case WRITE:
+                            int bloque = (int)extraer_int(buffer_st,&offset);
+                            int tamanio_contenido ; 
+                            char* contenido = extraer_string_y_tamanio(buffer_st, &offset,&tamanio_contenido);
+                            estado = atender_escritura(nombre_file, nombre_tag,bloque,contenido,tamanio);
+                            free(contenido); 
+                            break;
                         case DELETE: 
                             //estado = atender_delete(nombre_file,nombre_tag);
-                            break;
-                        case WRITE:
                             break;
                         case READ: 
                             break;
@@ -306,6 +311,44 @@ int atender_tag(char* file, char* tag, char* file_destino,char* tag_destino){
 
 
     return estado; 
+}
+int atender_escritura(char* file, char* tag, int bloque, char* contenido,int tam_cont){
+    char* key_file_tag = crear_key_file_tag(file,tag); 
+
+    pthread_mutex_lock(&mutex_diccionary); 
+
+    pthread_mutex_t* mutex_file_tag = dictionary_get(file_tag_dic,key_file_tag);
+
+
+    if (mutex_file_tag == NULL) {
+        log_error(logger, "Error: Se intentó operar sobre un File:Tag no existente: %s", key_file_tag);
+        free(key_file_tag);
+        return -1; 
+    } 
+
+    pthread_mutex_lock(mutex_file_tag);
+    pthread_mutex_unlock(&mutex_diccionary); 
+
+    int estado_tag = obtener_estado_file_tag(key_file_tag); 
+    int cantidad_bloques = calcular_cant_bloq_log(file,tag);
+    int estado_write;
+
+    if (estado_tag == 0 ) { //commited 
+        log_error(logger, "Error-WRITE: Se intentó WRITE en un File:Tag en estado COMMITED: %s", key_file_tag);
+        estado_write = -1; 
+    }else if(bloque >= cantidad_bloques){
+        log_error(logger, "Error-WRITE: Se intentó WRITE en un bloque no existente de File:Tag : %s", key_file_tag);
+        estado_write = -1; 
+    }
+     else {
+        estado_write = escritura_bloque(file, tag, bloque,contenido,tam_cont);
+    }
+
+    pthread_mutex_unlock(mutex_file_tag);
+
+    free(key_file_tag);
+
+    return estado_write; 
 }
 //int atender_delete(char* file, char* tag){
     

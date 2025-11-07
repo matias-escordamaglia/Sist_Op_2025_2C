@@ -85,8 +85,8 @@ char* crear_key_file_tag(char* ,  char*);
 int lectura_metadata(char* );
 void finalizar_munmap();
 int asignar_bloque_logico(char* ruta_logical_block);
-void liberar_bloque_reservado(int nro_bloque);
-void ocupar_bloque_reservar(int nro_bloque) ;
+void liberar_bloque_reservado(int nro_bloque); //bitmap
+void ocupar_bloque_reservar(int nro_bloque) ; //bitmap
 char* crear_nombre_block(int valor, int cod);
 int encontrar_y_reservar_bloque();
 int buscar_primer_bloque_libre();
@@ -94,6 +94,8 @@ int buscar_num_ultimo_bloque(char* ruta_logical_block);
 int obtener_estado_file_tag(char* key);
 int anadir_a_dicc_estado(char* key);
 int actualizar_dicc_estado(char* key_file_tag,int nuevo_estado);
+int calcular_cant_bloq_log(char* file, char* tag);
+
 
 
 
