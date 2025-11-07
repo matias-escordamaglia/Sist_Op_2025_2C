@@ -27,7 +27,7 @@ void tag_file(char*, char*);
 int commit_tag(char* , char* );
 int escritura_bloque(char*, char*, int, char*);
 char* lectura_bloque(char*, char*, int);
-void eliminar_tag();
+int eliminar_tag(char*);
 
 
 int obtener_tamano(char*);
