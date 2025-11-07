@@ -106,7 +106,7 @@ void* atender_conexion_worker(void* arg) {
                     char* nombre_tag  = extraer_string(buffer_st,&offset);
 
                     log_info(logger_worker, "Aplicando RETARDO_OPERACION para OP: %d", operation);
-                    usleep(RETARDO_OPERACION * 1000);
+                    usleep(RETARDO_OPERACION * 100);
 
                     int estado = -1; 
 
@@ -177,6 +177,7 @@ int atender_create(char* file, char* tag){
     if (dictionary_has_key(file_tag_dic, key_file_tag)){
         log_error(logger, "Error: Se intentó operar sobre un File:Tag Existente: %s", key_file_tag);
         free(key_file_tag);
+        pthread_mutex_unlock(&mutex_diccionary); 
         return -1; 
     }else {
         estado = create(file,tag);
@@ -186,6 +187,7 @@ int atender_create(char* file, char* tag){
 
         }else{
             log_info(logger, "Error el crear File:Tag->%s",key_file_tag); 
+            pthread_mutex_unlock(&mutex_diccionary); 
             return estado; 
         }
         
