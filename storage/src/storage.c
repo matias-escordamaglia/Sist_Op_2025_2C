@@ -915,6 +915,4 @@ int calcular_cant_bloq_log(char* file, char* tag){
     free(ruta_metadata);  
     return cantidad_bloques;
 }
-int actualizar_metadata(){
-
-}
+//int actualizar_metadata(){}

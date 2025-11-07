@@ -232,7 +232,7 @@ int escritura_bloque(char* file, char* tag, int num_L_block, char* contenido,int
             free(ruta_L_block); 
             return -1;
         }
-        
+
 
         // escribo los datos en el bloque logico
         fwrite(contenido, 1, tamanio, f);
@@ -385,7 +385,59 @@ int bloq_L_apuntan_bloq_F_0(char* ruta_logical_block){
 
 
 // Funciones para tag_file
+void copiar_archivo(char* archivo_origen, char* archivo_destino) {
+    FILE* src = fopen(archivo_origen, "rb");   
+    FILE* dst = fopen(archivo_destino, "wb");  
+    if (!src || !dst) {                
+        log_error(logger, "Error abriendo archivos");
+        if (src) fclose(src);
+        if (dst) fclose(dst);
+        return;
+    }
 
+    char buffer[4096];                 
+    size_t bytes;
+        
+    while ((bytes = fread(buffer, 1, sizeof(buffer), src)) > 0) {
+        fwrite(buffer, 1, bytes, dst); 
+    }
+
+    fclose(src);
+    fclose(dst);
+}
+
+void copiar_directorio(char* dir_origen, char* dir_destino) {
+    mkdir(dir_destino, 0777);  
+    
+    DIR* dir = opendir(dir_origen);     
+    if (!dir) {
+        log_error(logger, "No se pudo abrir el directorio origen");
+        return;
+    }
+
+    struct dirent *entrada;         
+    char ruta_origen[1024]; 
+    char ruta_destino[1024];
+
+    while ((entrada = readdir(dir)) != NULL) {  
+        if (strcmp(entrada->d_name, ".") == 0 || strcmp(entrada->d_name, "..") == 0)
+            continue;                            
+
+        snprintf(ruta_origen, sizeof(ruta_origen), "%s/%s", dir_origen, entrada->d_name);
+        snprintf(ruta_destino, sizeof(ruta_destino), "%s/%s", dir_destino, entrada->d_name);
+
+        struct stat info;
+        stat(ruta_origen, &info);              
+
+        if (S_ISDIR(info.st_mode)) {
+            copiar_directorio(ruta_origen, ruta_destino); 
+        } else {
+            copiar_archivo(ruta_origen, ruta_destino);    
+        }
+    }
+
+    closedir(dir);
+}
 
 // funciones para eliminar_tag
 
