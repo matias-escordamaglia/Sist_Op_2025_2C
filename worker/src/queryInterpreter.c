@@ -38,7 +38,7 @@ void ejecutarOperacion(t_pedido_master_worker* pedido, char* const* instruccione
         }
 
         // Si fue END, cortamos ejecución (ya ejecutada)
-        Operation op; 
+        Operation op;
         char* params=NULL;
         if (detectar_operacion(linea, &op, &params) && op == END) {
             pedido->program_counter = i + 1;
@@ -71,12 +71,12 @@ bool ejecutar_linea(char* linea, uint32_t queryid) {
                 return false;
             }
 
-            int ok = ejecutar_create(&c); // en caso de retornar -1, es pq los parametros son invalidos
+            int ok = ejecutar_create(&c,queryid); // en caso de retornar -1, es pq los parametros son invalidos
 
-            if(ok != 1){
+            if(ok != 0){
               // el ok va a ser un entero, perteneciente a un enum, el cual query_control lo va a usar
               // para saber de que error estoy hablando.
-              finalizar_query_con_error(queryid, ok);
+              finalizar_query_con_error(ERROR_QUERY, ok);
               destruir_create(&c);
               return false;
             }
@@ -95,9 +95,9 @@ bool ejecutar_linea(char* linea, uint32_t queryid) {
                 return false;
             }
 
-            int ok = ejecutar_truncate(&tr);
+            int ok = ejecutar_truncate(&tr, queryid);
              if(ok != 1){
-              finalizar_query_con_error(queryid, ok);
+              finalizar_query_con_error(ERROR_QUERY, ok);
               destruir_truncate(&tr);
               return false;
             }
@@ -107,24 +107,22 @@ bool ejecutar_linea(char* linea, uint32_t queryid) {
             return true;
         }
         case WRITE: {
-            // t_write w = {0};
-            // if (!parsear_write_params(params, &w)) {
-            //     log_error(logger, "Sintaxis WRITE inválida: %s", linea);
-            //     return false;
-            // }
-            // log_info(logger, "VA A EJECUTAR EL WRITE");
+            t_write w = {0};
+            if (!parsear_write_params(params, &w)) {
+                log_error(logger, "Sintaxis WRITE inválida: %s", linea);
+                return false;
+            }
 
             // // Llama directo a memoria (asume query_id en pedido, ajusta si no)
-            // int ok = memoria_write(&w); 
-            // if (ok < 0) {
-            //     log_error(logger, "[WORKER] WRITE falló para %s:%s base=%u", w.nombre_archivo, w.tag, w.dir_base);
-            //     destruir_write(&w);
-            //     return false;
-            // }
+            int ok = memoria_write(&w, queryid);
+            if (ok < 0) {
+              finalizar_query_con_error(ERROR_QUERY, ok);
+              destruir_write(&w);
+              return false;
+            }
 
-            // // log_info(logger, "## Query %u: - Instrucción realizada: WRITE", pedido->query_id); // Log obligatorio sin params
-            // destruir_write(&w);
-            log_warning(logger, "READ aún no implementado: %s", linea);
+            // log_info(logger, "## Query %u: - Instrucción realizada: WRITE", pedido->query_id); // Log obligatorio sin params
+            destruir_write(&w);
             return true;
         }
         case READ: {
@@ -138,9 +136,9 @@ bool ejecutar_linea(char* linea, uint32_t queryid) {
                 log_error(logger, "Sintaxis TAG inválida: %s", linea);
                 return false;
             }
-            int ok = ejecutar_tag(&t);
+            int ok = ejecutar_tag(&t,queryid);
              if(ok != 1){
-              finalizar_query_con_error(queryid, ok);
+              finalizar_query_con_error(ERROR_QUERY, ok);
               destruir_tag(&t);
               return false;
             }
@@ -156,9 +154,9 @@ bool ejecutar_linea(char* linea, uint32_t queryid) {
                 log_error(logger, "Sintaxis COMMIT inválida: %s", linea);
                 return false;
             }
-            int code = ejecutar_commit(&c);                   // 1=OK, ≠1 = enum/código de error
+            int code = ejecutar_commit(&c,queryid);
             if (code != 1) {
-                finalizar_query_con_error(queryid, code);
+                finalizar_query_con_error(ERROR_QUERY, code);
                 destruir_create(&c);
                 return false;
             }
@@ -182,9 +180,9 @@ bool ejecutar_linea(char* linea, uint32_t queryid) {
             }
             c.op = DELETE;
 
-            int code = ejecutar_delete(&c);     // 1 = OK, ≠1 = enum/código de error
+            int code = ejecutar_delete(&c,queryid);     // 1 = OK, ≠1 = enum/código de error
             if (code != 1) {
-                finalizar_query_con_error(queryid, code);
+                finalizar_query_con_error(ERROR_QUERY, code);
                 destruir_create(&c);
                 return false;
             }
@@ -195,7 +193,6 @@ bool ejecutar_linea(char* linea, uint32_t queryid) {
             destruir_create(&c);
             return true;
         }
-        // ===== switch =====
         case END: {
             t_paquete* p = empaquetar_operacion_end(queryid);
 
@@ -217,22 +214,32 @@ bool ejecutar_linea(char* linea, uint32_t queryid) {
     }
 }
 
-void finalizar_query_con_error(uint32_t queryid, int error_code) {
-    // 1) Empaquetar <queryid, error_code>
-    t_paquete* paquete = empaquetar_operacion_fin_error(queryid, error_code);
+void finalizar_query_con_error(t_tipo_aviso_worker_master tipodeerror, int motivo) {
+    
+    char* error_code = storage_error_to_string(motivo);
+    t_paquete* paquete = empaquetar_operacion_fin_error(tipodeerror, error_code);
     if (!paquete) {
-        log_error(logger, "[WORKER] No pude empaquetar FIN-ERROR (q=%u, code=%d)", queryid, error_code);
         return;
     }
     // 2) Enviar a Master
     enviar_paquete(paquete, conexion_master);
-
-    log_info(logger, "## Query %u: FINALIZADA CON ERROR (code=%d)", queryid, error_code);
 }
 
+char* storage_error_to_string(int motivo) {
+    switch (motivo) {
+        case ERROR_OK:                     return "ERROR_OK";
+        case ERROR_FILE_TAG_INEXISTENTE:   return "ERROR_FILE_TAG_INEXISTENTE";
+        case ERROR_FILE_TAG_PREEXISTENTE:  return "ERROR_FILE_TAG_PREEXISTENTE";
+        case ERROR_ESPACIO_INSUFICIENTE:   return "ERROR_ESPACIO_INSUFICIENTE";
+        case ERROR_ESCRITURA_NO_PERMITIDA: return "ERROR_ESCRITURA_NO_PERMITIDA";
+        case ERROR_FUERA_DE_LIMITE:        return "ERROR_FUERA_DE_LIMITE";
+        case ERROR_DESCONOCIDO:            return "ERROR_DESCONOCIDO";
+        default:                           return "ERROR_DESCONOCIDO";
+    }
+}
 ///////////// EJECUCION DE INSTRUCCIONES ///////////////////////7
 
-int ejecutar_create(t_create* c) {
+int ejecutar_create(t_create* c, uint32_t query_id) {
 
     if (!c || !c->nombre_archivo || !c->tag) {
         log_error(logger, "[WORKER] CREATE con parámetros inválidos");
@@ -241,12 +248,12 @@ int ejecutar_create(t_create* c) {
 
     // Envío a Storage
     log_info(logger, "[STUB] Enviar a Storage: %s:%s", c->nombre_archivo, c->tag);
-    t_paquete* paquete = empaquetar_operacion_create(c->nombre_archivo, c->tag);
+    t_paquete* paquete = empaquetar_operacion_create(c->nombre_archivo, c->tag, query_id);
 
 	enviar_paquete(paquete, conexion_storage);
 
     int flag = recibir_respuesta_storage(conexion_storage, logger);
-    
+
     if (flag == 1) {
         log_info(logger, "[WORKER] Respuesta OK de Storage para CREATE %s:%s", c->nombre_archivo, c->tag);
     } else {
@@ -256,7 +263,7 @@ int ejecutar_create(t_create* c) {
     return flag;
 }
 
-int ejecutar_truncate(t_truncate* c) {
+int ejecutar_truncate(t_truncate* c,uint32_t queryid) {
 
      if (!c->nombre_archivo || !c->tag) {
         log_error(logger, "TRUNCATE con parametros invalidos: file=%p tag=%p", (void*)c->nombre_archivo, (void*)c->tag);
@@ -265,12 +272,12 @@ int ejecutar_truncate(t_truncate* c) {
 
     log_info(logger, "[STUB] Enviar a Storage: TRUNCATE %s:%s tam=%zu", c->nombre_archivo, c->tag, c->tam);
 
-    t_paquete* paquete = empaquetar_operacion_truncate(c->nombre_archivo, c->tag, c->tam);
+    t_paquete* paquete = empaquetar_operacion_truncate(c->nombre_archivo, c->tag, c->tam, queryid);
 
     enviar_paquete(paquete, conexion_storage);
 
     int flag = recibir_respuesta_storage(conexion_storage, logger);
-    
+
     if (flag == 1) {
         log_info(logger, "[WORKER] Respuesta OK de Storage para TRUNCATE %s:%s", c->nombre_archivo, c->tag);
     } else {
@@ -281,7 +288,7 @@ int ejecutar_truncate(t_truncate* c) {
     return flag;
 }
 
-int ejecutar_tag(t_tag* t) {
+int ejecutar_tag(t_tag* t, uint32_t queryid) {
     if (!t || !t->file_origen || !t->tag_origen || !t->file_dest || !t->tag_dest) {
         log_error(logger, "TAG parámetros inválidos: fo=%p to=%p fd=%p td=%p",
                   (void*)(t ? t->file_origen : NULL),
@@ -293,8 +300,8 @@ int ejecutar_tag(t_tag* t) {
 
     log_info(logger, "[STUB] Enviar a Storage: TAG %s:%s -> %s:%s", t->file_origen, t->tag_origen, t->file_dest, t->tag_dest);
 
-    t_paquete* paquete = empaquetar_operacion_tag(t->file_origen, t->tag_origen, t->file_dest, t->tag_dest);
-    
+    t_paquete* paquete = empaquetar_operacion_tag(t->file_origen, t->tag_origen, t->file_dest, t->tag_dest, queryid);
+
     enviar_paquete(paquete, conexion_storage);
 
     int flag = recibir_respuesta_storage(conexion_storage, logger);
@@ -307,7 +314,7 @@ int ejecutar_tag(t_tag* t) {
     return flag; // 1=OK, ≠1=error
 }
 
-int ejecutar_commit(t_create* c) {
+int ejecutar_commit(t_create* c, uint32_t queryid) {
     if (!c || !c->nombre_archivo || !c->tag) {
         log_error(logger, "[WORKER] COMMIT con parámetros inválidos");
         return -1;
@@ -315,7 +322,7 @@ int ejecutar_commit(t_create* c) {
 
     log_info(logger, "[STUB] Enviar a Storage: COMMIT %s:%s",  c->nombre_archivo, c->tag);
 
-    t_paquete* paquete = empaquetar_operacion_commit(c->nombre_archivo, c->tag);
+    t_paquete* paquete = empaquetar_operacion_commit(c->nombre_archivo, c->tag, queryid);
 
     enviar_paquete(paquete, conexion_storage);
 
@@ -329,15 +336,15 @@ int ejecutar_commit(t_create* c) {
     return flag; // 1=OK, ≠1=error
 }
 
-int ejecutar_delete(t_create* c) {
+int ejecutar_delete(t_create* c , uint32_t queryid) {
     if (!c || !c->nombre_archivo || !c->tag) {
         log_error(logger, "[WORKER] DELETE con parámetros inválidos");
         return -1;
-    }
+    };
 
     log_info(logger, "[STUB] Enviar a Storage: DELETE %s:%s", c->nombre_archivo, c->tag);
 
-    t_paquete* paquete = empaquetar_operacion_delete(c->nombre_archivo, c->tag);
+    t_paquete* paquete = empaquetar_operacion_delete(c->nombre_archivo, c->tag, queryid);
 
     enviar_paquete(paquete, conexion_storage);
 
