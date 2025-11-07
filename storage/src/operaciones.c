@@ -76,44 +76,72 @@ int create(char* nombre_file, char* nombre_tag) {
 }
 
 int truncar_archivo(char* file, char* tag, int nuevo_valor){
-    char* ruta_file = add_seg_ruta(PUNTO_MONTAJE, file);          
+    char* ruta_files = add_seg_ruta(PUNTO_MONTAJE, "/files");
+    char* ruta_file = add_seg_ruta(ruta_files, file);          
     char* ruta_tag  = add_seg_ruta(ruta_file, tag);          
     char* ruta_metadata = add_seg_ruta(ruta_tag, "/metadata.config");
     char* ruta_L_blocks = add_seg_ruta(ruta_tag,"/logical_blocks"); 
-    int tamanio_archivo = obtener_tamano(ruta_metadata);
+    t_config* config_tag = config_create(ruta_metadata);
+    int tamanio_archivo = config_get_int_value(config_tag,"TAMAÑO");
     if(nuevo_valor < tamanio_archivo){
         incrementar(nuevo_valor, tamanio_archivo, ruta_L_blocks);
     }
     else {
         //decrementar(nuevo_valor, tamanio_archivo);
     }
-    t_config* config = config_create(ruta_metadata);
-    config_set_value(config, "TAMAÑO", tag);//mofidicar
-    config_save(config);    
+    config_set_value(config_tag, "TAMAÑO", tag);//mofidicar
+    config_save(config_tag);
+    config_destroy(config_tag);  
+    free(ruta_files);
+    free(ruta_file);  
+    free(ruta_tag);  
+    free(ruta_metadata);  
+    free(ruta_L_blocks);  
+
     return 0;           
 } // falta desasignar 
 
-void tag_file(char* origen, char* destino){
-    copiar_directorio(origen, destino);
-    char* ruta_metadata = add_seg_ruta(destino, "/metadata.config");
-    t_config* config = config_create(ruta_metadata);
+int tag_file(char* origen, char* destino){
+    char* ruta_files = add_seg_ruta(PUNTO_MONTAJE, "/files");
+    char* ruta_tag_origen = add_seg_ruta(ruta_files, origen);          
+    char* ruta_tag_destino  = add_seg_ruta(ruta_files, destino);          
+    char* ruta_metadata = add_seg_ruta(ruta_tag_destino, "/metadata.config");
+    copiar_directorio(ruta_tag_origen, ruta_tag_destino);
+    t_config* config_tag = config_create(ruta_metadata);
     config_set_value(config, "ESTADO", "WORK_IN_PROGRESS");
+    config_save(config_tag);
+    config_destroy(config_tag);
+    free(ruta_files);
+    free(ruta_tag_origen);
+    free(ruta_tag_destino);
+    free(ruta_metadata);
+
+    return 0; 
 }
 
 
 int commit_tag(char* file, char* tag){
-    char* ruta_file = add_seg_ruta(PUNTO_MONTAJE, file);          
+    char* ruta_files = add_seg_ruta(PUNTO_MONTAJE,"/files");
+    char* ruta_file = add_seg_ruta(ruta_files, file);          
     char* ruta_tag  = add_seg_ruta(ruta_file, tag);
     char* ruta_metadata = add_seg_ruta(ruta_tag, "/metadata.config");
     char* ruta_L_blocks = add_seg_ruta(ruta_file,"/logical_blocks");
-    t_config* config = config_create(ruta_metadata);
-    char* estado = config_get_string_value(config, "ESTADO");
+    t_config* config_tag = config_create(ruta_metadata);
+    char* estado = config_get_string_value(config_tag, "ESTADO");
     if(strcmp(estado,"COMMITED") == 0){
         recorrer_logical_blocks(ruta_L_blocks, ruta_tag);   
-        config_set_value(config, "ESTADO", "COMMITED"); 
+        config_set_value(config_tag, "ESTADO", "COMMITED"); 
+        
     
     }
-    return 1;
+    config_save(config_tag);  
+    config_destroy(config_tag);
+    free(ruta_files);
+    free(ruta_file);  
+    free(ruta_tag);  
+    free(ruta_metadata);  
+    free(ruta_L_blocks);  
+    return 0;
 }
 
 int escritura_bloque(char* file, char* tag, int num_L_block, char* contenido){

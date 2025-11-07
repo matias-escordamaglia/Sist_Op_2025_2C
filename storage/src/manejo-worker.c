@@ -129,7 +129,7 @@ void* atender_conexion_worker(void* arg) {
                             estado = atender_commit(nombre_file,nombre_tag);
                             break;
                         case DELETE: 
-                            estado = atender_delete(nombre_file,nombre_tag);
+                            //estado = atender_delete(nombre_file,nombre_tag);
                             break;
                         case WRITE:
                             break;
@@ -144,6 +144,10 @@ void* atender_conexion_worker(void* arg) {
                     free(nombre_tag);
 
                  free(buffer_st); 
+                  if(estado==0)
+                    log_info(logger_worker,"OPERACIÓN EXITOSA");
+                    else
+                    log_info(logger_worker,"OPERACIÓN NO EXITOSA");
             break;
 
             default:
@@ -183,6 +187,7 @@ int atender_create(char* file, char* tag){
         estado = create(file,tag);
         if(estado==0){
             iniciar_mutex_file_tag(key_file_tag);
+            anadir_a_dicc_estado(key_file_tag); 
             log_info(logger,"File:Tag creado exitosamente: %s", key_file_tag);
 
         }else{
@@ -287,8 +292,8 @@ int atender_tag(char* file, char* tag, char* file_destino,char* tag_destino){
         return -1; 
     } 
     pthread_mutex_lock(mutex_file_tag);
-
-    int estado = commit_tag(file_tag_origen,file_tag_destino);
+    log_info(logger,"llegas esta acaaaaaaa");//+++++++++++++++++++++++++++++++++++++++++++++++++++
+    int estado = tag_file(file_tag_origen,file_tag_destino);
 
     iniciar_mutex_file_tag(key_file_tag_destino); 
 
@@ -302,6 +307,6 @@ int atender_tag(char* file, char* tag, char* file_destino,char* tag_destino){
 
     return estado; 
 }
-int atender_delete(char* file, char* tag){
+//int atender_delete(char* file, char* tag){
     
-}
+//}
