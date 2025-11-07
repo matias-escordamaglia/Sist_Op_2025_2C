@@ -218,7 +218,7 @@ int escritura_bloque(char* file, char* tag, int num_L_block, char* contenido,int
             free(ruta_F_block); 
             return -1; 
         }
-        
+
 
         FILE* f = fopen(ruta_L_block, "wb");
         if (!f) {
@@ -232,6 +232,7 @@ int escritura_bloque(char* file, char* tag, int num_L_block, char* contenido,int
             free(ruta_L_block); 
             return -1;
         }
+        
 
         // escribo los datos en el bloque logico
         fwrite(contenido, 1, tamanio, f);
