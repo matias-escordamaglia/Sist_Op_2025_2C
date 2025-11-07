@@ -53,6 +53,7 @@ void inicializar_listas_planificacion();
 uint64_t timestamp_actual_en_milisegundos();
 t_query* crear_nuevo_query(char* query_path, uint32_t prioridad, int conexion);
 t_elemento_cola* crear_nuevo_elemento(t_query* query);
+bool buscar_por_qid(t_list* lista, uint32_t qid);
 t_elemento_cola* buscar_y_remover_por_qid(t_list* lista, uint32_t qid);
 
 void *main_planificacion();
@@ -64,7 +65,8 @@ void intentar_asignaciones_prioridades();
 t_elemento_cola* obtener_query_mas_prioritaria_mas_antigua();
 t_elemento_cola* obtener_victima_desalojo(uint32_t prioridad_desalojador);
 void agregar_query_ordenada(t_list* lista, t_elemento_cola* elemento);
-uint32_t solicitar_desalojo_bloqueante(t_worker_conectado* worker_a_desalojar, uint32_t query_id);
+void procesar_asignacion_query_a_worker(t_elemento_cola* query_candidata, t_worker_conectado* worker_libre);
+
 
 
 void* main_aging(void* args);
