@@ -81,24 +81,53 @@ int truncar_archivo(char* file, char* tag, int nuevo_valor){
     char* ruta_tag  = add_seg_ruta(ruta_file, tag);          
     char* ruta_metadata = add_seg_ruta(ruta_tag, "/metadata.config");
     char* ruta_L_blocks = add_seg_ruta(ruta_tag,"/logical_blocks"); 
+
     t_config* config_tag = config_create(ruta_metadata);
+    if (config_tag == NULL) {
+        log_error(logger, "TRUNCATE: No se pudo abrir metadata: %s", ruta_metadata);
+        free(ruta_files);
+        free(ruta_file);  
+        free(ruta_tag);  
+        free(ruta_metadata);  
+        free(ruta_L_blocks);  
+
+        return -1;
+    }
+
     int tamanio_archivo = config_get_int_value(config_tag,"TAMAÑO");
-    if(nuevo_valor < tamanio_archivo){
-        incrementar(nuevo_valor, tamanio_archivo, ruta_L_blocks);
+    config_destroy(config_tag);
+
+    int estado = 0; 
+    if(nuevo_valor > tamanio_archivo){
+        log_info(logger, "TRUNCATE: Incrementando FILE:TAG: %s:%s",file,tag);
+        estado = incrementar(nuevo_valor, tamanio_archivo, ruta_L_blocks);
     }
-    else {
-        decrementar(nuevo_valor, tamanio_archivo, ruta_tag);
+    else if (nuevo_valor < tamanio_archivo) {
+        log_info(logger, "TRUNCATE: Decrementando FILE:TAG: %s:%s",file,tag);
+        estado = decrementar(nuevo_valor, tamanio_archivo, ruta_tag);
     }
-    config_set_value(config_tag, "TAMAÑO",nuevo_valor);
-    config_save(config_tag);
-    config_destroy(config_tag);  
+    if(estado==0){ 
+        t_config* config_final = config_create(ruta_metadata);
+        if (config_final) {
+            char buffer[20];
+            snprintf(buffer, sizeof(buffer), "%d", nuevo_valor);
+            config_set_value(config_final, "TAMAÑO", buffer);
+            config_save(config_final);
+            config_destroy(config_final);
+        } else {
+            log_error(logger, "TRUNCATE: ¡Crítico! No se pudo reabrir config para setear TAMAÑO.");
+            estado = -1;
+        }
+    }
+
+
     free(ruta_files);
     free(ruta_file);  
     free(ruta_tag);  
     free(ruta_metadata);  
     free(ruta_L_blocks);  
 
-    return 0;           
+    return estado;           
 } // falta desasignar 
 
 int tag_file(char* origen, char* destino){
@@ -125,7 +154,7 @@ int commit_tag(char* file, char* tag){
     char* ruta_file = add_seg_ruta(ruta_files, file);          
     char* ruta_tag  = add_seg_ruta(ruta_file, tag);
     char* ruta_metadata = add_seg_ruta(ruta_tag, "/metadata.config");
-    char* ruta_L_blocks = add_seg_ruta(ruta_file,"/logical_blocks");
+    char* ruta_L_blocks = add_seg_ruta(ruta_tag,"/logical_blocks");
     t_config* config_tag = config_create(ruta_metadata);
     char* estado = config_get_string_value(config_tag, "ESTADO");
     if(strcmp(estado,"WORK_IN_PROGRESS") == 0){
@@ -169,7 +198,7 @@ int escritura_bloque(char* file, char* tag, int num_L_block, char* contenido,int
     if (st.st_nlink == 2) { // verifica que solo hay un bloque logico asignado
 
         log_info(logger, "WRITE: Escritura directa (nlink==2)");
-
+        //log_contenido_legible(logger, "Contenido WRITE recibido", contenido, tamanio);
         usleep(RETARDO_ACCESO_BLOQUE * 1000);
 
         FILE* f = fopen(ruta_L_block, "r+b");
@@ -291,6 +320,7 @@ char* lectura_bloque(char* file, char* tag, int num_L_block, int* tamanio_leido 
     
     
     *tamanio_leido = (int)st.st_size;
+    log_contenido_legible(logger, "Contenido READ leido", buffer, st.st_size);
  
     return buffer;             
 }
@@ -377,11 +407,43 @@ int obtener_tamano(char* ruta) {
 
 // funciones para truncate
 
-void incrementar(int nuevo_valor, int valor_original, char* ruta_logical_block){
-    int cant_bloques = (nuevo_valor - valor_original) / BLOCK_SIZE;
-    for(int i = 0; i < cant_bloques; i++){
-        bloq_L_apuntan_bloq_F_0(ruta_logical_block);
+int incrementar(int nuevo_valor, int valor_original, char* ruta_logical_block){
+    int bloques_actuales = (int)ceil((double)valor_original / (double)BLOCK_SIZE);
+    int bloques_necesarios = (int)ceil((double)nuevo_valor / (double)BLOCK_SIZE);
+    int cant_bloques_a_agregar = bloques_necesarios - bloques_actuales;
+
+    if (cant_bloques_a_agregar <= 0) {
+        log_warning(logger, "TRUNCATE: Incremento no resultó en bloques nuevos.");
+        return 0; 
     }
+
+    int* bloques_fisicos_nuevos = malloc(cant_bloques_a_agregar * sizeof(int));
+    if (!bloques_fisicos_nuevos) {
+        log_error(logger, "TRUNCATE: Falló malloc para el array de bloques");
+        return -1;
+    }
+
+    int nuevo_bloque_f;
+
+    for(int i = 0; i < cant_bloques_a_agregar; i++){
+
+        int bloque_logico_a_crear = bloques_actuales + i;
+
+        nuevo_bloque_f = asignar_bloque_logico_especifico(ruta_logical_block,bloque_logico_a_crear);
+
+        if(nuevo_bloque_f<0){
+            rollback_falla_incrementar(bloques_fisicos_nuevos,i); 
+            free(bloques_fisicos_nuevos);
+            return -1; 
+        }
+
+        bloques_fisicos_nuevos[i]=nuevo_bloque_f;
+    }
+    ///////////////////////////////
+    //int estado_meta = actualizar_metadata_incremento(file, tag, bloques_fisicos_nuevos, cant_bloques_a_agregar);
+    
+    free(bloques_fisicos_nuevos);
+    return 0; 
 }
 
 
@@ -441,46 +503,6 @@ int decrementar(int nuevo_valor, int valor_original, char* ruta_tag){
     }
     return 0;
 }
-
-int bloq_L_apuntan_bloq_F_0(char* ruta_logical_block){
-    int k = 4; 
-    int bloque_fisico = 0;
-    char* nombre_block = crear_nombre_block(bloque_fisico, k); 
-    char* pre_ruta = add_seg_ruta("/physical_blocks",nombre_block);
-    char* ruta_F_block = add_seg_ruta(PUNTO_MONTAJE,pre_ruta);
-
-    int posicion = buscar_num_ultimo_bloque(ruta_logical_block);
-    int Q = 6; 
-    char* nombre_block_logic = crear_nombre_block(posicion, Q); 
-    char* ruta_L_block_final= add_seg_ruta(ruta_logical_block, nombre_block_logic);
-   
-    if (link(ruta_F_block, ruta_L_block_final) == -1) {
-        liberar_bloque_reservado(bloque_fisico);
-        log_error(logger, "No se pudo crear Hard Link BASE. Error: %s", strerror(errno));
-
-
-        free(nombre_block);
-        free(pre_ruta);
-        free(ruta_F_block); 
-        free(nombre_block_logic);
-        free(ruta_L_block_final);
-
-        return -1; 
-
-    }
-    log_info(logger, "Hard link creado: %s -> %s", ruta_L_block_final, ruta_F_block);
-
-
-    free(nombre_block);
-    free(pre_ruta);
-    free(ruta_F_block); 
-    free(nombre_block_logic);
-    free(ruta_L_block_final);
-
-    return 0;
-}
-
-
 
 // Funciones para tag_file
 void copiar_archivo(char* archivo_origen, char* archivo_destino) {
@@ -581,7 +603,7 @@ void eliminar_directorio(char* directorio) {
 void recorrer_logical_blocks(char* path_dir, char* ruta_tag) {
     DIR* dir = opendir(path_dir);  
     if (!dir) {
-        log_error(logger, "No se pudo abrir el directorio");
+        log_error(logger, "No se pudo abrir el directorio/eliminar1/");
         exit(EXIT_FAILURE);
     }
 
@@ -615,10 +637,10 @@ int procesar_bloque_logico(char* ruta_bloque, int contador) {
         return -1;
     }
 
-    printf("Bloque lógico: %s\n", ruta_bloque);
-    printf("Bloque físico (inodo): %ld\n", st.st_ino);
-    printf("Tamaño del bloque: %ld bytes\n", st.st_size);
-    printf("Cantidad de hard links: %ld\n", st.st_nlink);
+    log_info(logger,"Bloque lógico: %s\n", ruta_bloque);
+    log_info(logger,"Bloque físico (inodo): %ld\n", st.st_ino);
+    log_info(logger,"Tamaño del bloque: %ld bytes\n", st.st_size);
+    log_info(logger,"Cantidad de hard links: %ld\n", st.st_nlink);
 
     // se lee el contenido del bloque
     FILE* f = fopen(ruta_bloque, "rb");
@@ -643,35 +665,51 @@ int procesar_bloque_logico(char* ruta_bloque, int contador) {
 
     if (!hash) {
         log_error(logger, "Error calculando hash MD5");
+        free(buffer);
         return -1;
     }
 
-    printf("Hash del bloque: %s\n", hash);
-    
-    if(config_has_property(config_hash, hash) == 0){
+    log_info(logger,"Hash del bloque: %s\n", hash);
+
+    pthread_mutex_lock(&mutex_file_hash);
+
+    if(config_has_property(config_hash, hash) == 1){
         // hacer que el bloque logico apunte al bloque fisico ya asignado
-        int bloque_F = config_get_int_value(config_hash, hash);
-        char* nombre_bloque_F = crear_nombre_block(bloque_F, 4);
-        char* ruta_bloque_F = add_seg_ruta(PUNTO_MONTAJE, nombre_bloque_F);
+        int nro_bloque_fisico_actual = config_get_int_value(config_hash, hash);
+        char* nombre_bloque_F = crear_nombre_block(nro_bloque_fisico_actual, 4);
+        log_info(logger, "COMMIT: Hash %s encontrado. Re-enlazando a %s", hash, nombre_bloque_F);
+        char* ruta_files = add_seg_ruta(PUNTO_MONTAJE,"/files");
+        char* ruta_bloque_F = add_seg_ruta(ruta_files, nombre_bloque_F); //bloque existente
+
+        if (unlink(ruta_bloque) == -1) {
+            log_error(logger, "COMMIT: Error al unlink %s: %s", ruta_bloque, strerror(errno));
+        }
+
+
         if (link(ruta_bloque_F, ruta_bloque) == -1) {
 
-            liberar_bloque_reservado(bloque_F);
+            liberar_bloque_reservado(nro_bloque_fisico_actual);
             log_error(logger, "No se pudo crear Hard Link BASE. Error: %s", strerror(errno));
+            free(buffer); free(nombre_bloque_F); free(ruta_bloque_F); 
+            free(ruta_files); free(ruta_bloque_F); 
 
             return -1; 
-
         }
-        log_info(logger, "Hard link creado: %s -> %s", ruta_bloque, ruta_bloque_F);
-
+        liberar_bloque_si_no_se_usa(nro_bloque_fisico_actual);
+        free(nombre_bloque_F);
+        free(ruta_files);
+        free(ruta_bloque_F);
 
     } else {
         // agregar al config hash
-        int contador = 0;  
+        log_info(logger, "COMMIT: Hash %s no encontrado. Indexando bloque físico %d", hash, contador);
+        
         char* bloque_fisico = crear_nombre_block(contador++, 4);
         config_set_value(config_hash, hash, bloque_fisico);
         config_save(config_hash);
         free(bloque_fisico);
     }
+    pthread_mutex_unlock(&mutex_file_hash);
 
     free(hash);
     return 0;
@@ -701,6 +739,7 @@ void eliminar_block_metadata(char* ruta_tag, int posicion_bloq){
     config_set_value(config, "BLOCKS", nuevo_valor);
     config_save(config);
     config_destroy(config);
+    free(ruta_metadata);
 }
 
 

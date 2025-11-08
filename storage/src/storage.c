@@ -759,7 +759,39 @@ int asignar_bloque_logico(char* ruta_logical_block){
     free(nombre_block_logic);
     free(ruta_L_block_final);
 
-    return 0; 
+    return bloque_fisico; 
+}
+int asignar_bloque_logico_especifico(char* ruta_logical_block, int num_bloque_logico) {
+    
+    int k = 4; 
+    int bloque_fisico = encontrar_y_reservar_bloque(); 
+    if (bloque_fisico == -1) {
+        log_error(logger, "Espacio insuficiente en el bitmap");
+        return -1;
+    }
+    
+    char* nombre_block = crear_nombre_block(bloque_fisico, k); 
+    char* pre_ruta = add_seg_ruta("/physical_blocks", nombre_block);
+    char* ruta_F_block = add_seg_ruta(PUNTO_MONTAJE, pre_ruta);
+
+    int Q = 6; 
+    char* nombre_block_logic = crear_nombre_block(num_bloque_logico, Q); 
+    char* ruta_L_block_final = add_seg_ruta(ruta_logical_block, nombre_block_logic);
+
+    if (link(ruta_F_block, ruta_L_block_final) == -1) {
+        liberar_bloque_reservado(bloque_fisico); 
+        log_error(logger, "No se pudo crear Hard Link para %s. Error: %s", nombre_block_logic, strerror(errno));
+        free(nombre_block); free(pre_ruta); free(ruta_F_block); 
+        free(nombre_block_logic); free(ruta_L_block_final);
+        return -1; 
+    }
+    
+    log_info(logger, "Hard link creado: %s -> %s", nombre_block_logic, nombre_block);
+
+    free(nombre_block); free(pre_ruta); free(ruta_F_block); 
+    free(nombre_block_logic); free(ruta_L_block_final);
+
+    return bloque_fisico; 
 }
 
 void liberar_bloque_reservado(int nro_bloque) {
@@ -988,4 +1020,64 @@ int calcular_cant_bloq_log(char* file, char* tag){
     free(ruta_tag);  
     free(ruta_metadata);  
     return cantidad_bloques;
+}
+void rollback_falla_incrementar(int* bloques_fisicos_nuevos, int cant_exitosos) {
+    
+    log_warning(logger, "TRUNCATE: Falló el incremento. Revirtiendo %d bloques del bitmap...", cant_exitosos);
+
+    for (int i = 0; i < cant_exitosos; i++) {
+        int nro_bloque_a_liberar = bloques_fisicos_nuevos[i];
+        
+        log_debug(logger, "Rollback: Liberando bloque físico %d", nro_bloque_a_liberar);
+        
+        liberar_bloque_reservado(nro_bloque_a_liberar);
+    }
+
+    log_info(logger, "Rollback del bitmap completado.");
+}
+void log_contenido_legible(t_log* logger, const char* prefijo, char* contenido, int tamanio) {
+    
+    if (contenido == NULL) {
+        log_info(logger, "%s (Tamaño %d): [CONTENIDO NULO]", prefijo, tamanio);
+        return;
+    }
+    if (tamanio > MAX_LOG_TEXT_PREVIEW) {
+        
+        log_info(logger, "%s (Tamaño %d, mostrando %d): %.*s ...[truncado]",
+                 prefijo,                     // El mensaje
+                 tamanio,                     // El tamaño real
+                 MAX_LOG_TEXT_PREVIEW,        // El tamaño que mostramos
+                 MAX_LOG_TEXT_PREVIEW,        // El '.*' (cuántos bytes imprimir)
+                 contenido);                  // El buffer
+
+    } else {
+        
+        log_info(logger, "%s (Tamaño %d): %.*s",
+                 prefijo,                     // El mensaje
+                 tamanio,                     // El tamaño real
+                 tamanio,                     // El '.*' (cuántos bytes imprimir)
+                 contenido);                  // El buffer
+    }
+}
+void liberar_bloque_si_no_se_usa(int nro_bloque) {
+    char* nombre_block = crear_nombre_block(nro_bloque, 4);
+    char* pre_ruta = add_seg_ruta("/physical_blocks", nombre_block);
+    char* ruta_F_block = add_seg_ruta(PUNTO_MONTAJE, pre_ruta);
+
+    struct stat st_fisico;
+    if (stat(ruta_F_block, &st_fisico) == -1) {
+        log_error(logger, "Error en stat de %s al liberar: %s", ruta_F_block, strerror(errno));
+    } else {
+        // nlink == 1 significa que solo el propio archivo en /physical_blocks lo apunta.
+        // Nadie más lo está usando.
+        if (st_fisico.st_nlink == 1) {
+            log_info(logger, "COMMIT: Bloque %d (nlink=1) ya no se usa. Liberando en bitmap.", nro_bloque);
+            liberar_bloque_reservado(nro_bloque); // Libera en tu bitmap
+            // Opcional: unlink(ruta_F_block) para borrar el archivo físico
+        }
+    }
+
+    free(nombre_block);
+    free(pre_ruta);
+    free(ruta_F_block);
 }

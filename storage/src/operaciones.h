@@ -31,7 +31,7 @@ int eliminar_tag(char*,char*);
 
 
 int obtener_tamano(char*);
-void incrementar(int, int, char*);
+int incrementar(int, int, char*);
 int decrementar(int, int, char*);
 void copiar_archivo(char*, char*);
 void copiar_directorio(char*, char*);

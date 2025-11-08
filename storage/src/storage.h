@@ -1,5 +1,6 @@
 #ifndef STORAGE_H_
 #define STORAGE_H_
+#define MAX_LOG_TEXT_PREVIEW 256
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -80,7 +81,7 @@ void inicializar_semaforos();
 void iniciar_mutex_file_tag(char* );
 void eliminar_mutex_file_tag(char* );
 void cargar_estructuras_existentes(char* );
-void cargar_block_hash(char* );
+void cargar_block_hash(char* ); //config_create
 void cargar_bitmap(char* );
 void mapeo_dir_mutex_dinamic(char* );
 char* crear_key_file_tag(char* ,  char*);
@@ -99,6 +100,11 @@ int actualizar_dicc_estado(char* key_file_tag,int nuevo_estado);
 int calcular_cant_bloq_log(char* file, char* tag);
 int actualizar_metadata_bloque(char* file, char* tag, int num_L_block_a_cambiar, int nro_bloque_fisico_nuevo);
 char* join_string_array(char** array, char* separator); 
+void rollback_falla_incrementar(int* bloques_fisicos_nuevos, int cant_exitosos);
+int asignar_bloque_logico_especifico(char* ruta_logical_block, int num_bloque_logico);
+void log_contenido_legible(t_log* logger, const char* prefijo, char* contenido, int tamanio);
+void liberar_bloque_si_no_se_usa(int nro_bloque);
+
 
 
 

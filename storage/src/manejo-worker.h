@@ -27,6 +27,8 @@ int atender_tag(char* file, char* tag, char* file_destino,char* tag_destino);
 int atender_escritura(char* file, char* tag, int bloque, char* contenido,int tam);
 int atender_lectura(char* file, char* tag, int bloque_logico, int* tamanio_leido, char** contenido_salida);
 int atender_delete(char* file, char* tag); 
+const char* operation_to_string(Operation op);
+
 
 
 

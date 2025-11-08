@@ -10,7 +10,7 @@
 uint32_t extraer_uint32(void* stream, int* desplazamiento);
 int extraer_int(void* stream, int* desplazamiento);
 char* extraer_string(void* stream, int* offset);
-char* extraer_string_y_tamanio(void* stream, int* offset,int* tam);
+char* extraer_binario_y_tamanio(void* stream, int* offset,int* tam);
 
 
 t_prueba_conexion* desempaquetar_prueba_conexionV1(void* stream);

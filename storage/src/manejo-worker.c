@@ -87,6 +87,7 @@ void* atender_conexion_worker(void* arg) {
 
     // Bucle principal
     while (1) {
+        printf("----------------------------------------------------------------------------------\n");
         int cod_op = recibir_operacion(cliente_fd, logger_worker);
         if (cod_op == -1) {
             log_warning(logger_worker, "[WORKER] WORKER %u se desconectó (FD %d)", id_worker, cliente_fd);
@@ -105,12 +106,14 @@ void* atender_conexion_worker(void* arg) {
                     char* nombre_file = extraer_string(buffer_st,&offset); 
                     char* nombre_tag  = extraer_string(buffer_st,&offset);
 
-                    log_info(logger_worker, "Aplicando RETARDO_OPERACION para OP: %d", operation);
+                    //log_info(logger_worker, "Aplicando RETARDO_OPERACION para OP: %d", operation);
                     usleep(RETARDO_OPERACION * 100);
 
                     int estado = -1; 
                     char* contenido_salida;
                     int tamanio_leido;
+                    
+                log_info(logger_worker, "EJECUTANDO operación: %s", operation_to_string(operation));
 
                     switch (operation){
                         case  CREATE:
@@ -133,7 +136,8 @@ void* atender_conexion_worker(void* arg) {
                         case WRITE:
                             int bloque = (int)extraer_int(buffer_st,&offset);
                             int tamanio_contenido ; 
-                            char* contenido = extraer_string_y_tamanio(buffer_st, &offset,&tamanio_contenido);
+                            char* contenido = extraer_binario_y_tamanio(buffer_st, &offset,&tamanio_contenido);
+                            log_contenido_legible(logger_worker, "Contenido WRITE recibido", contenido, tamanio_contenido); 
                             estado = atender_escritura(nombre_file, nombre_tag,bloque,contenido,tamanio_contenido);
                             free(contenido); 
                             break;
@@ -194,6 +198,7 @@ void enviar_paquete_read(int estado,char* contenido_salida, int tamanio_leido,in
     insertar_int_a_paquete(paquete,estado);
     insertar_int_a_paquete(paquete,tamanio_leido);
     insertar_binario_a_paquete(paquete,contenido_salida,tamanio_leido);
+    log_contenido_legible(logger, "Contenido READ leido", contenido_salida, tamanio_leido);
     enviar_paquete(paquete,socket);
 }
 
@@ -442,4 +447,16 @@ int atender_delete(char* file, char* tag){
 
     return estado_borrado;  
     
+}
+const char* operation_to_string(Operation op) {
+    switch (op) {
+        case CREATE:   return "CREATE";
+        case TRUNCATE: return "TRUNCATE";
+        case TAG:      return "TAG";
+        case COMMIT:   return "COMMIT";
+        case WRITE:    return "WRITE";
+        case READ:     return "READ";
+        case DELETE:   return "DELETE";
+        default:       return "DESCONOCIDA";
+    }
 }
