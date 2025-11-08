@@ -89,7 +89,7 @@ int truncar_archivo(char* file, char* tag, int nuevo_valor){
     else {
         decrementar(nuevo_valor, tamanio_archivo, ruta_tag);
     }
-    config_set_value(config_tag, "TAMAÑO", tag);//mofidicar
+    config_set_value(config_tag, "TAMAÑO",nuevo_valor);
     config_save(config_tag);
     config_destroy(config_tag);  
     free(ruta_files);
@@ -128,7 +128,7 @@ int commit_tag(char* file, char* tag){
     char* ruta_L_blocks = add_seg_ruta(ruta_file,"/logical_blocks");
     t_config* config_tag = config_create(ruta_metadata);
     char* estado = config_get_string_value(config_tag, "ESTADO");
-    if(strcmp(estado,"COMMITED") == 0){
+    if(strcmp(estado,"WORK_IN_PROGRESS") == 0){
         recorrer_logical_blocks(ruta_L_blocks, ruta_tag);   
         config_set_value(config_tag, "ESTADO", "COMMITED"); 
         
@@ -145,6 +145,11 @@ int commit_tag(char* file, char* tag){
 }
 
 int escritura_bloque(char* file, char* tag, int num_L_block, char* contenido,int tamanio){
+
+    if(tamanio > BLOCK_SIZE){ 
+            log_error(logger, "ERROR WRITE: desbordamiento de bloque físico (Tamaño: %u)", tamanio);
+        return -1;
+    }
     char* nombre_L_block = crear_nombre_block(num_L_block, 6);
     char* key_file_tag = crear_key_file_tag(file,tag); 
     char* ruta_files = add_seg_ruta(PUNTO_MONTAJE, "/files");
@@ -156,135 +161,118 @@ int escritura_bloque(char* file, char* tag, int num_L_block, char* contenido,int
     struct stat st;
     if (stat(ruta_L_block, &st) == -1) {
         log_error(logger, "Bloque lógico no asignado o inexistente");
-        free(nombre_L_block); 
-        free(key_file_tag); 
-        free(ruta_files); 
-        free(ruta_file); 
-        free(ruta_tag); 
-        free(ruta_L_blocks); 
-        free(ruta_L_block); 
+
+        free(nombre_L_block); free(key_file_tag); free(ruta_files); free(ruta_file); 
+        free(ruta_tag); free(ruta_L_blocks); free(ruta_L_block);
         return -1;
     }
     if (st.st_nlink == 2) { // verifica que solo hay un bloque logico asignado
+
+        log_info(logger, "WRITE: Escritura directa (nlink==2)");
+
+        usleep(RETARDO_ACCESO_BLOQUE * 1000);
+
         FILE* f = fopen(ruta_L_block, "r+b");
         if (!f) {
             log_error(logger, "ERROR WRITE: no de puedo abrir el archivo: %s", ruta_L_block);
-            free(nombre_L_block); 
-            free(key_file_tag); 
-            free(ruta_files); 
-            free(ruta_file); 
-            free(ruta_tag); 
-            free(ruta_L_blocks); 
-            free(ruta_L_block); 
+            free(nombre_L_block); free(key_file_tag); free(ruta_files); free(ruta_file); 
+            free(ruta_tag); free(ruta_L_blocks); free(ruta_L_block); 
             return -1;
         }
-        if(tamanio<=BLOCK_SIZE){ 
-            fwrite(contenido, 1, tamanio, f);
-            fclose(f);
-            log_info(logger, "Escritura directa en el bloque físico de FILE:TAG : %s.", key_file_tag);
-        }else{
-            log_error(logger, "ERROR WRITE: desbordamiento de bloque físico FILE:TAG : %s",key_file_tag);
-            free(nombre_L_block); 
-            free(key_file_tag); 
-            free(ruta_files); 
-            free(ruta_file); 
-            free(ruta_tag); 
-            free(ruta_L_blocks); 
-            free(ruta_L_block);            
-            return -1;
-        }
-    } 
+        
+        fwrite(contenido, 1, tamanio, f);
+
+        fclose(f);
+
+        free(nombre_L_block); free(key_file_tag); free(ruta_files); free(ruta_file); 
+        free(ruta_tag); free(ruta_L_blocks); free(ruta_L_block); 
+        return 0; 
+    }
     else {
+        log_info(logger, "WRITE: Bloque compartido (nlink==%d). Aplicando COW.", (int)st.st_nlink);
         int k=4; 
         int bloque_fisico = encontrar_y_reservar_bloque(); 
         if (bloque_fisico == -1) {
             log_error(logger, "Espacio insuficiente en el bitmap");
-            // (Manejar el error, quizás devolver un código de error)
+
+            free(nombre_L_block); free(key_file_tag); free(ruta_files); free(ruta_file); 
+            free(ruta_tag); free(ruta_L_blocks); free(ruta_L_block); 
             return -1;
         }
         char* nombre_block = crear_nombre_block(bloque_fisico, k); 
         char* pre_ruta = add_seg_ruta("/physical_blocks",nombre_block);
         char* ruta_F_block = add_seg_ruta(PUNTO_MONTAJE,pre_ruta);
             
+        
+        usleep(RETARDO_ACCESO_BLOQUE * 1000);
+
+        FILE* f = fopen(ruta_F_block, "wb");
+        if (!f) {
+            log_error(logger, "ERROR al abrir el archivo %s",pre_ruta);
+            liberar_bloque_reservado(bloque_fisico); 
+            free(nombre_L_block); free(key_file_tag); free(ruta_files); free(ruta_file); free(ruta_tag); free(ruta_L_blocks); free(ruta_L_block);
+            free(nombre_block); free(pre_ruta); free(ruta_F_block);
+            return -1;
+        }
+        // escribo los datos en el bloque logico
+        fwrite(contenido, 1, tamanio, f);
+        fclose(f);
+
         unlink(ruta_L_block);
 
         if (link(ruta_F_block, ruta_L_block) == -1) {
 
             liberar_bloque_reservado(bloque_fisico);
-            log_error(logger, "No se pudo crear Hard Link.  Error: %s", strerror(errno));
-
-            free(nombre_block);
-            free(pre_ruta);
-            free(ruta_F_block); 
+            log_error(logger, "No se pudo crear Hard Link. Error: %s", strerror(errno));
+            free(nombre_L_block); free(key_file_tag); free(ruta_files); free(ruta_file); free(ruta_tag); free(ruta_L_blocks); free(ruta_L_block);
+            free(nombre_block); free(pre_ruta); free(ruta_F_block);
             return -1; 
         }
 
+        log_info(logger,"WRITE: COW finalizado. Bloque lógico %d ahora apunta a físico %d", num_L_block, bloque_fisico);
 
-        FILE* f = fopen(ruta_L_block, "wb");
-        if (!f) {
-            log_error(logger, "ERROR al abrir el archivo %s",pre_ruta);
-            free(nombre_L_block); 
-            free(key_file_tag); 
-            free(ruta_files); 
-            free(ruta_file); 
-            free(ruta_tag); 
-            free(ruta_L_blocks); 
-            free(ruta_L_block); 
-            return -1;
-        }
-
-
-        // escribo los datos en el bloque logico
-        fwrite(contenido, 1, tamanio, f);
-
-        fclose(f);
-
-        log_info(logger,"WRITE: Se reasignó el bloque lógico a un nuevo bloque físico.");
-
-        free(nombre_block);
-        free(pre_ruta);
-        free(ruta_F_block);
+        free(nombre_L_block); free(key_file_tag); free(ruta_files); free(ruta_file); free(ruta_tag); free(ruta_L_blocks); free(ruta_L_block);
+        free(nombre_block); free(pre_ruta); free(ruta_F_block);
+        return bloque_fisico;
     }
-
-    free(nombre_L_block); 
-    free(key_file_tag); 
-    free(ruta_files); 
-    free(ruta_file); 
-    free(ruta_tag); 
-    free(ruta_L_blocks); 
-    free(ruta_L_block); 
-
-    return 0;
-
 }
  
 
-char* lectura_bloque(char* file, char* tag, int num_L_block){
+char* lectura_bloque(char* file, char* tag, int num_L_block, int* tamanio_leido ){
     char* nombre_L_block = crear_nombre_block(num_L_block, 6);
-    char* ruta_file = add_seg_ruta(PUNTO_MONTAJE, file);          
+    char* ruta_files = add_seg_ruta(PUNTO_MONTAJE, "/files");
+    char* ruta_file = add_seg_ruta(ruta_files, file);          
     char* ruta_tag  = add_seg_ruta(ruta_file, tag);         
     char* ruta_L_blocks = add_seg_ruta(ruta_tag,"/logical_blocks");
     char* ruta_L_block = add_seg_ruta(ruta_L_blocks, nombre_L_block);
+
+    *tamanio_leido = 0;
 
     struct stat st;
 
     // se obtiene info del bloque lógico (y su bloque físico)
     if (stat(ruta_L_block, &st) == -1) {
-        log_error(logger, "Error en stat");
+        log_error(logger, "Error en stat de %s: %s", ruta_L_block, strerror(errno));
+        free(nombre_L_block); free(ruta_files); free(ruta_file); 
+        free(ruta_tag); free(ruta_L_blocks); free(ruta_L_block);
         return NULL;
     }
-
+    usleep(RETARDO_ACCESO_BLOQUE * 1000);
     // se lee el contenido del bloque
     FILE* f = fopen(ruta_L_block, "rb");
     if (!f) {
-        log_error(logger, "No se pudo abrir el bloque");
+        log_error(logger, "No se pudo abrir el bloque: %s", ruta_L_block);
+        free(nombre_L_block); free(ruta_files); free(ruta_file); 
+        free(ruta_tag); free(ruta_L_blocks); free(ruta_L_block);
         return NULL;
     }
 
-    char* buffer = malloc(st.st_size + 1); 
+    char* buffer = malloc(st.st_size); 
     if (!buffer) {
-        log_error(logger, "No se pudo reservar memoria");
+        log_error(logger, "No se pudo reservar memoria para el bloque");
         fclose(f);
+        free(nombre_L_block); free(ruta_files); free(ruta_file); 
+        free(ruta_tag); free(ruta_L_blocks); free(ruta_L_block);
         return NULL;
     }
 
@@ -292,15 +280,35 @@ char* lectura_bloque(char* file, char* tag, int num_L_block){
     fclose(f);
 
     if (bytes_leidos != st.st_size) {
-        log_error(logger, "Error al leer el bloque completo");
-        free(buffer);
+        log_error(logger, "Error al leer el bloque completo (leídos %zu de %ld)", bytes_leidos, st.st_size);
+        free(buffer); 
+        free(nombre_L_block); free(ruta_files); free(ruta_file); 
+        free(ruta_tag); free(ruta_L_blocks); free(ruta_L_block);
         return NULL;
     }
+    free(nombre_L_block); free(ruta_files); free(ruta_file); 
+    free(ruta_tag); free(ruta_L_blocks); free(ruta_L_block);
+    
+    
+    *tamanio_leido = (int)st.st_size;
  
     return buffer;             
 }
 
-int eliminar_tag(char* tag){
+int eliminar_tag(char* file, char* tag){
+    char* ruta_files = add_seg_ruta(PUNTO_MONTAJE, "/files");
+    char* ruta_file = add_seg_ruta(ruta_files, file);          
+    char* ruta_tag  = add_seg_ruta(ruta_file, tag); 
+    char* ruta_metadata = add_seg_ruta(ruta_tag, "/metadata.config");
+
+    t_config* config = config_create(ruta_metadata);
+    if (config == NULL) {
+        log_error(logger, "DELETE: No se pudo leer metadata de %s", ruta_metadata);
+        free(ruta_files);free(ruta_file);
+        free(ruta_tag);free(ruta_metadata);        
+        return -1;
+    }
+ ///////////////-----------------------------------desde aca
     char* ruta_L_blocks = add_seg_ruta(tag,"/logical_blocks");
     char **bloques = config_get_array_value(config, "BLOCKS");
     int cantidad_bloques = 0;
@@ -343,7 +351,7 @@ int eliminar_tag(char* tag){
         int bloque_F = config_get_int_value(config_hash, hash);
         liberar_bloque_reservado(bloque_F);
     }
-    eliminar_directorio(tag);
+    eliminar_directorio(ruta_tag);
     return 0;
 }
 

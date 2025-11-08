@@ -109,6 +109,8 @@ void* atender_conexion_worker(void* arg) {
                     usleep(RETARDO_OPERACION * 100);
 
                     int estado = -1; 
+                    char* contenido_salida;
+                    int tamanio_leido;
 
                     switch (operation){
                         case  CREATE:
@@ -132,18 +134,27 @@ void* atender_conexion_worker(void* arg) {
                             int bloque = (int)extraer_int(buffer_st,&offset);
                             int tamanio_contenido ; 
                             char* contenido = extraer_string_y_tamanio(buffer_st, &offset,&tamanio_contenido);
-                            estado = atender_escritura(nombre_file, nombre_tag,bloque,contenido,tamanio);
+                            estado = atender_escritura(nombre_file, nombre_tag,bloque,contenido,tamanio_contenido);
                             free(contenido); 
+                            break;
+                        case READ: 
+                            int bloque_logico = extraer_int(buffer_st,&offset);
+                            tamanio_leido=0; 
+                            contenido_salida = NULL;
+                            estado = atender_lectura(nombre_file,nombre_tag,bloque_logico,&tamanio_leido,&contenido_salida); 
                             break;
                         case DELETE: 
                             //estado = atender_delete(nombre_file,nombre_tag);
                             break;
-                        case READ: 
-                            break;
                         default:
                             break;
                         }
-                    enviar_estado_op(estado,cliente_fd);
+                    if(operation==READ){
+                        enviar_paquete_read(estado,contenido_salida,tamanio_leido,cliente_fd);
+                        free(contenido_salida);
+                    }
+                    else
+                        enviar_estado_op(estado,cliente_fd);
 
                     free(nombre_file);
                     free(nombre_tag);
@@ -178,6 +189,14 @@ void enviar_estado_op(int estado, int socket){
     insertar_int_a_paquete(paquete,estado);
     enviar_paquete(paquete,socket);
 }
+void enviar_paquete_read(int estado,char* contenido_salida, int tamanio_leido,int socket){
+    t_paquete* paquete = crear_paquete();
+    insertar_int_a_paquete(paquete,estado);
+    insertar_int_a_paquete(paquete,tamanio_leido);
+    insertar_binario_a_paquete(paquete,contenido_salida,tamanio_leido);
+    enviar_paquete(paquete,socket);
+}
+
 int atender_create(char* file, char* tag){
     char* key_file_tag = crear_key_file_tag(file,tag);  
     int estado; 
@@ -216,6 +235,7 @@ int atender_truncate(char* file, char* tag,int tamanio){
 
     if (mutex_file_tag == NULL) {
         log_error(logger, "Error: Se intentó operar sobre un File:Tag no existente: %s", key_file_tag);
+        pthread_mutex_unlock(&mutex_diccionary);
         free(key_file_tag);
         return -1; 
     } 
@@ -248,6 +268,7 @@ int atender_commit(char* file, char* tag){
     pthread_mutex_t* mutex_file_tag = dictionary_get(file_tag_dic,key_file_tag);
     if (mutex_file_tag == NULL) {
         log_error(logger, "Error: Se intentó operar sobre un File:Tag no existente: %s", key_file_tag);
+        pthread_mutex_unlock(&mutex_diccionary);
         free(key_file_tag);
         return -1; 
     } 
@@ -322,6 +343,7 @@ int atender_escritura(char* file, char* tag, int bloque, char* contenido,int tam
 
     if (mutex_file_tag == NULL) {
         log_error(logger, "Error: Se intentó operar sobre un File:Tag no existente: %s", key_file_tag);
+        pthread_mutex_unlock(&mutex_diccionary); 
         free(key_file_tag);
         return -1; 
     } 
@@ -329,20 +351,30 @@ int atender_escritura(char* file, char* tag, int bloque, char* contenido,int tam
     pthread_mutex_lock(mutex_file_tag);
     pthread_mutex_unlock(&mutex_diccionary); 
 
-    int estado_tag = obtener_estado_file_tag(key_file_tag); 
+    if (obtener_estado_file_tag(key_file_tag) == 0) { 
+            log_error(logger, "ERROR WRITE: No se puede escribir en un tag COMMITED: %s", key_file_tag);
+            pthread_mutex_unlock(mutex_file_tag);
+            free(key_file_tag);
+            return -1;
+    }
     int cantidad_bloques = calcular_cant_bloq_log(file,tag);
     int estado_write;
 
-    if (estado_tag == 0 ) { //commited 
-        log_error(logger, "Error-WRITE: Se intentó WRITE en un File:Tag en estado COMMITED: %s", key_file_tag);
-        estado_write = -1; 
-    }else if(bloque >= cantidad_bloques){
+   
+    if(bloque >= cantidad_bloques){
         log_error(logger, "Error-WRITE: Se intentó WRITE en un bloque no existente de File:Tag : %s", key_file_tag);
-        estado_write = -1; 
+        pthread_mutex_unlock(mutex_file_tag);
+        free(key_file_tag);
+        return -1;
     }
-     else {
-        estado_write = escritura_bloque(file, tag, bloque,contenido,tam_cont);
+     
+    estado_write = escritura_bloque(file, tag, bloque,contenido,tam_cont);
+    if (estado_write > 0) {
+        actualizar_metadata_bloque(file, tag, bloque, estado_write);
+        estado_write = 0; 
     }
+
+    
 
     pthread_mutex_unlock(mutex_file_tag);
 
@@ -350,6 +382,64 @@ int atender_escritura(char* file, char* tag, int bloque, char* contenido,int tam
 
     return estado_write; 
 }
-//int atender_delete(char* file, char* tag){
+int atender_lectura(char* file, char* tag, int bloque_logico, int* tamanio_leido, char** contenido_salida){
+    char* key_file_tag = crear_key_file_tag(file,tag);  
+    int estado_final; 
+    pthread_mutex_lock(&mutex_diccionary); 
+
+    pthread_mutex_t* mutex_file_tag = dictionary_get(file_tag_dic,key_file_tag);
+    if (mutex_file_tag == NULL) {
+        log_error(logger, "Error: Se intentó operar sobre un File:Tag no existente: %s", key_file_tag);
+        pthread_mutex_unlock(&mutex_diccionary);
+        free(key_file_tag);
+        *tamanio_leido = 0;
+        *contenido_salida = NULL;
+        return -1; 
+    } 
+    pthread_mutex_lock(mutex_file_tag);
+    pthread_mutex_unlock(&mutex_diccionary); 
+ 
+    char* lectura = lectura_bloque(file,tag,bloque_logico, tamanio_leido);
+    if (lectura == NULL) {
+        log_error(logger, "Falló lectura_bloque para %s", key_file_tag);
+        *contenido_salida = NULL;
+        estado_final = -1;
+    } else {
+        *contenido_salida = lectura;
+        estado_final = 0;
+    }
     
-//}
+    pthread_mutex_unlock(mutex_file_tag);
+    free(key_file_tag);
+
+    return estado_final;   
+}
+int atender_delete(char* file, char* tag){
+
+    char* key_file_tag = crear_key_file_tag(file,tag);  
+    pthread_mutex_lock(&mutex_diccionary); 
+
+    pthread_mutex_t* mutex_file_tag = dictionary_get(file_tag_dic,key_file_tag);
+    if (mutex_file_tag == NULL) {
+        log_error(logger, "Error: Se intentó operar sobre un File:Tag no existente: %s", key_file_tag);
+        pthread_mutex_unlock(&mutex_diccionary);
+        free(key_file_tag);
+        return -1; 
+    } 
+    dictionary_remove(file_tag_dic, key_file_tag);
+    pthread_mutex_unlock(&mutex_diccionary);
+
+    actualizar_dicc_estado(key_file_tag, -1);//modificar
+
+    pthread_mutex_lock(mutex_file_tag);
+ 
+    int estado_borrado = eliminar_tag(file,tag);
+    
+    pthread_mutex_unlock(mutex_file_tag);
+    pthread_mutex_destroy(mutex_file_tag);
+    free(mutex_file_tag);
+    free(key_file_tag);
+
+    return estado_borrado;  
+    
+}

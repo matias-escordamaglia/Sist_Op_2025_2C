@@ -536,7 +536,6 @@ void eliminar_mutex_file_tag(char* nombre){
     if(dictionary_has_key(file_tag_dic,nombre)==true){
         pthread_mutex_t* mutex_a_eliminar = (pthread_mutex_t*) dictionary_remove(file_tag_dic, nombre);
         pthread_mutex_destroy(mutex_a_eliminar);
-        pthread_mutex_destroy(mutex_a_eliminar);
     } 
 }
 void cargar_estructuras_existentes(char* super_block_path){
@@ -848,6 +847,81 @@ int buscar_num_ultimo_bloque(char* ruta_logical_block){
 
     return proximo_bloque;  
 }
+int actualizar_metadata_bloque(char* file, char* tag, int num_L_block_a_cambiar, int nro_bloque_fisico_nuevo) {
+    
+    char* ruta_files = add_seg_ruta(PUNTO_MONTAJE, "/files");
+    char* ruta_file = add_seg_ruta(ruta_files, file);
+    char* ruta_tag = add_seg_ruta(ruta_file, tag);
+    char* ruta_metadata = add_seg_ruta(ruta_tag, "/metadata.config");
+
+    t_config* config = config_create(ruta_metadata);
+    if (config == NULL) {
+        log_error(logger, "Error al abrir metadata para actualizar: %s", ruta_metadata);
+        free(ruta_files); free(ruta_file); free(ruta_tag); free(ruta_metadata);
+        return -1;
+    }
+
+    char** bloques_array = config_get_array_value(config, "BLOCKS");
+    if (bloques_array == NULL) {
+        log_error(logger, "Error al leer 'BLOCKS' de metadata: %s", ruta_metadata);
+        config_destroy(config);
+        free(ruta_files); free(ruta_file); free(ruta_tag); free(ruta_metadata);
+        return -1;
+    }
+
+    int array_size = 0;
+    while (bloques_array[array_size] != NULL) {
+        array_size++;
+    }
+
+    if (num_L_block_a_cambiar >= array_size) {
+        log_error(logger, "Error: num_L_block (%d) está fuera de rango (Tamaño: %d)", num_L_block_a_cambiar, array_size);
+        string_array_destroy(bloques_array);
+        config_destroy(config);
+        free(ruta_files); free(ruta_file); free(ruta_tag); free(ruta_metadata);
+        return -1;
+    }
+
+    free(bloques_array[num_L_block_a_cambiar]); 
+    
+    bloques_array[num_L_block_a_cambiar] = string_itoa(nro_bloque_fisico_nuevo);
+
+    char* joined_string = join_string_array(bloques_array, ","); 
+    char* final_array_string = string_from_format("[%s]", joined_string);
+
+    config_set_value(config, "BLOCKS", final_array_string);
+
+    config_save(config);
+
+    free(joined_string);
+    free(final_array_string);
+    string_array_destroy(bloques_array); 
+    config_destroy(config);
+    free(ruta_files); free(ruta_file); free(ruta_tag); free(ruta_metadata);
+
+    log_info(logger, "Metadata actualizada: Bloque lógico %d de %s:%s ahora apunta a físico %d",
+             num_L_block_a_cambiar, file, tag, nro_bloque_fisico_nuevo);
+    
+    return 0;
+}
+char* join_string_array(char** array, char* separator) {
+    
+    int size = string_array_size(array);
+    
+    if (size == 0) {
+        return string_new(); // Devuelve un string vacío
+    }
+
+    char* resultado = string_duplicate(array[0]);
+
+    for (int i = 1; i < size; i++) {
+        
+        string_append_with_format(&resultado, "%s%s", separator, array[i]);
+    }
+
+    return resultado;
+}
+
 int anadir_a_dicc_estado(char* key){
     int estado_op;
     pthread_mutex_lock(&mutex_dic_estado); 
@@ -915,4 +989,3 @@ int calcular_cant_bloq_log(char* file, char* tag){
     free(ruta_metadata);  
     return cantidad_bloques;
 }
-//int actualizar_metadata(){}

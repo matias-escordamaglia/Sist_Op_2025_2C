@@ -18,6 +18,11 @@ void insertar_string_a_paquete(t_paquete* paquete, char* string) {
     insertar_variable_a_paquete(paquete, &longitud, sizeof(uint32_t));
     insertar_variable_a_paquete(paquete, string, longitud);
 }
+void insertar_binario_a_paquete(t_paquete* paquete, char* string, int longitud){
+    insertar_variable_a_paquete(paquete, &longitud, sizeof(int));
+    insertar_variable_a_paquete(paquete, string, longitud);
+}
+
 
 void insertar_uint32_a_paquete(t_paquete* paquete, uint32_t valor) {
     insertar_variable_a_paquete(paquete, &valor, sizeof(uint32_t));

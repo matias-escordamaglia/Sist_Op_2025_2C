@@ -19,6 +19,8 @@
 #include "./utils/utils.h"
 #include <commons/bitarray.h>
 #include <commons/collections/dictionary.h>
+#include <commons/string.h>
+
 
 
 extern t_log *logger;
@@ -95,6 +97,9 @@ int obtener_estado_file_tag(char* key);
 int anadir_a_dicc_estado(char* key);
 int actualizar_dicc_estado(char* key_file_tag,int nuevo_estado);
 int calcular_cant_bloq_log(char* file, char* tag);
+int actualizar_metadata_bloque(char* file, char* tag, int num_L_block_a_cambiar, int nro_bloque_fisico_nuevo);
+char* join_string_array(char** array, char* separator); 
+
 
 
 

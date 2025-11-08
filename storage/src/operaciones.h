@@ -26,8 +26,8 @@ int truncar_archivo(char*, char*, int);
 int tag_file(char*, char*);
 int commit_tag(char* , char* );
 int escritura_bloque(char*, char*, int, char*,int);
-char* lectura_bloque(char*, char*, int);
-int eliminar_tag(char*);
+char* lectura_bloque(char*, char*, int,int*  );
+int eliminar_tag(char*,char*);
 
 
 int obtener_tamano(char*);
