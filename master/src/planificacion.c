@@ -708,58 +708,62 @@ void manejar_worker_desconectado(uint32_t worker_id, uint32_t query_id_ejecutand
 
     if (query_id_ejecutando >= 0) {
         t_elemento_cola* elemento = NULL;
+
+        LOCK(&mutex_estado_critico);
+
+        LOCK(&mutex_cola_exec);
+        elemento = buscar_y_remover_por_qid(cola_exec, query_id_ejecutando);
+        UNLOCK(&mutex_cola_exec);
         
-        bool elemento_encontrado = false;
-        uint32_t intentos = 0;
+        if (elemento != NULL) {
 
-        while(!elemento_encontrado) {
-
-            LOCK(&mutex_estado_critico);
-
-            LOCK(&mutex_cola_exec);
-            elemento = buscar_y_remover_por_qid(cola_exec, query_id_ejecutando);
-            UNLOCK(&mutex_cola_exec);
+            // Mover a EXIT
+            LOCK(&mutex_cola_exit);
+            list_add(cola_exit, elemento);
+            UNLOCK(&mutex_cola_exit);
             
-            if (elemento != NULL) {
-                
-                elemento_encontrado = true;
+            log_info(get_logger(), "Query %d movido a EXIT por desconexión de worker", 
+                    query_id_ejecutando);
+            
+            
+            notificar_error_a_query_control(elemento->query->conexion);
+        } else {
+            LOCK(&mutex_cola_ready);
+            bool encontrado = buscar_por_qid(cola_ready, query_id_ejecutando);
+            UNLOCK(&mutex_cola_ready);
 
-                // Mover a EXIT
-                LOCK(&mutex_cola_exit);
-                list_add(cola_exit, elemento);
-                UNLOCK(&mutex_cola_exit);
-                
-                log_info(get_logger(), "Query %d movido a EXIT por desconexión de worker", 
-                        query_id_ejecutando);
-                
-                
-                notificar_error_a_query_control(elemento->query->conexion);
+            if (elemento != NULL)
+            {
+                log_error(get_logger(), "ERROR FALTAL; se esperaba que la query de id %d estuviese en EXEC pero " +
+                    "se encontró en READY", query_id_ejecutando);
+
+                while(true) {
+                    printf("ERROR FATAL DE PLANIFICACION");
+                    sleep(5);
+                }
+            } else if(buscar_por_qid(query_id_ejecutando)) {
+                log_warning(get_logger(), "RACE CONDITION; se esperaba que la query de id %d estuviese en EXEC pero " +
+                    "se encontró en EXIT" , query_id_ejecutando);
+
             } else {
-                usleep(500000);
-                
-                log_warning(get_logger(), "ATENCIÓN: Intentando buscar nuevamente");
-                intentos++;
+                log_error(get_logger(), "ERROR FALTAL; se esperaba que la query de id %d estuviese en EXEC pero " +
+                    "no se encontró en ninguna lista", query_id_ejecutando);
 
-                if(intentos % 12 == 0){
-                    LOCK(&mutex_cola_exec);
-                    elemento = buscar_y_remover_por_qid(cola_exec, query_id_ejecutando);
-                    UNLOCK(&mutex_cola_exec);
-
-                    if(elemento!=NULL) {
-                        log_error(get_logger(), "ABORTAR!! RACE CONDITION ERROR: En desalojo debía encontrarse en EXECUTE, 
-                                            pero estaba en READY");
-                    }
+                while(true) {
+                    printf("ERROR FATAL DE PLANIFICACION");
+                    sleep(5);
                 }
             }
-            UNLOCK(&mutex_estado_critico);
-        }
+            
+        }    
+        
+        UNLOCK(&mutex_estado_critico);
 
     }
     
-    // Marcar worker como desconectado y hacer wait a la cantidad de workers libres
+    // Marcar worker como desconectado
     marcar_worker_desconectado(worker_id);
-    sem_wait(cant_workers_libres);
-
+    //sem_wait(cant_workers_libres); <-- puede que no vaya aquí ya que se le hizo wait al asignarle un query
     
 }
 
@@ -786,10 +790,6 @@ void manejar_query_control_desconectado(uint32_t query_id_activo) {
             
         } else {
             // Buscar en EXEC
-
-            // TODO INMINENTE : Queda revisar el caso en el que se desconecta Query Control; revisar
-            // que puede justo haber desconexión de worker y que haya problema en esa otra desconexión porque el elemento
-            // no estaba más en la cola en la que debía estar
             LOCK(&mutex_cola_exec);
             elemento = buscar_y_remover_por_qid(cola_exec, query_id_activo);
             UNLOCK(&mutex_cola_exec);
@@ -802,7 +802,6 @@ void manejar_query_control_desconectado(uint32_t query_id_activo) {
                 
                 UNLOCK(&mutex_estado_critico);
 
-                // TODO : Rework inminente
                 t_respuesta_desalojo respuesta = solicitar_desalojo_bloqueante(worker_a_desalojar, query_id_activo);
 
                 LOCK(&mutex_estado_critico);
@@ -880,15 +879,7 @@ void manejar_query_control_desconectado(uint32_t query_id_activo) {
 
                     case DESALOJO_WORKER_DESCONECTADO:
                         
-                        elemento
-
-                        if(en_exit){
-                            
-                        }
-
-                        log_warning(get_logger(), 
-                                "Worker seleccionado en planificacion desconectado. Buscando nuevo candidato",
-                                respuesta.query_id_actual);
+                        // TODO
                         
                         
 
@@ -902,16 +893,7 @@ void manejar_query_control_desconectado(uint32_t query_id_activo) {
                             sleep(5);
                         }
                 }
-                
-                LOCK(&mutex_cola_exit);
-                list_add(cola_exit, elemento);
-                UNLOCK(&mutex_cola_exit);
-                
-                // Liberar worker
-                sem_post(cant_workers_libres);
-                
-                log_info(get_logger(), "Query %d cancelado y worker %d desalojado", 
-                        query_id_activo, worker_id);
+
             }
         }
     }
