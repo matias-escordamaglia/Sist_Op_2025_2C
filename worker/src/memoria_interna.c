@@ -147,29 +147,56 @@ void recorrido_iniciar(segmento_acceso* seg, uint32_t base, uint32_t tam, uint32
     seg->bytes_en_pagina = (seg->bytes_restantes < capacidad) ? seg->bytes_restantes : capacidad;
 }
 
+t_tabla_paginas* encontrar_tabla_de_entrada(t_entrada_pagina* entrada) {
+    if (!entrada) return NULL;
+    for (int i = 0; i < list_size(lista_global_tablas); i++) {
+        t_tabla_paginas* tabla = (t_tabla_paginas*) list_get(lista_global_tablas, i);
+        for (int j = 0; j < list_size(tabla->paginas_proceso); j++) {
+            if (list_get(tabla->paginas_proceso, j) == entrada) {
+                return tabla;
+            }
+        }
+    }
+    return NULL;
+}
+
 t_entrada_pagina* asegurar_pagina_presente(t_tabla_paginas* tabla, uint32_t nro_pagina, uint32_t id_query) {
     t_entrada_pagina* e = get_entry(tabla, nro_pagina);
-    if (e && e->presente) {
-        // Caso 1: La página ya está presente en memoria interna, no necesitamos cargar nada desde Storage
-        return e;
-    }
+    if (e && e->presente) return e;
 
-    // Caso 2: Page miss - La página no está presente
-    // log_miss(id_query, tabla->file, tabla->tag, nro_pagina);
-
+    // log obligatorio)
+    log_info(logger, "Query %u: - Memoria Miss - File: %s - Tag: %s - Pagina: %u", id_query, tabla->file, tabla->tag, nro_pagina);
+    
     t_entrada_pagina* victima = NULL;
     int marco = asignar_marco_o_reemplazar(&victima, id_query);
     if (marco < 0) return NULL;
 
     if (victima) {
-        // Este bloque se ejecuta solo si se realizó un reemplazo (memoria llena)
-        if (victima->modificado) {
-            //if (escribir_pagina_a_storage(victima, id_query) < 0) return NULL;
-        }
-        // liberar_marco_de_victima(victima, id_query);
-        // log_reemplazo(id_query, victima, tabla, nro_pagina);
-    } else {
-        // Marco libre asignado, no se necesitó reemplazo
+    // === Se ejecutó reemplazo ===
+    // (A) Si estaba modificada → sobreescribir
+    if (victima->modificado) {
+        // if (escribir_pagina_a_storage(victima, id_query) < 0) {
+        //     devolver_marco(marco);
+        //     return NULL;
+        // }
+    }
+
+     t_tabla_paginas* v_tabla = encontrar_tabla_de_entrada(victima);
+        char* v_file = v_tabla ? v_tabla->file : "(desconocido)";
+        char* v_tag  = v_tabla ? v_tabla->tag  : "(desconocido)";
+
+
+    
+    // log obligatorio
+    log_info(logger, "## Query %u: Se reemplaza la página %s:%s/%u por la %s:%s/%u",
+                 id_query, v_file, v_tag, (unsigned)victima->nro_pagina, tabla->file, tabla->tag, (unsigned)nro_pagina);
+
+    // log obligatorio
+    log_info(logger, "Query %u: Se libera el Marco: %u perteneciente al - File: %s - Tag: %s",
+                 id_query, (unsigned)victima->marco_num, v_file, v_tag);
+
+    // Si tenés una función extra para liberar la víctima (ej: set presente=false, etc.)
+    // liberar_marco_de_victima(victima, id_query);
     }
 
     // Cargar la página desde Storage (común a ambos casos de miss), cargo pq la pegina que quiero no esta en Memoria interna.
@@ -179,7 +206,6 @@ t_entrada_pagina* asegurar_pagina_presente(t_tabla_paginas* tabla, uint32_t nro_
     // }
 
     e = indico_entrada_presente(tabla, nro_pagina, marco);
-    // log_add(id_query, tabla->file, tabla->tag, nro_pagina, (uint32_t)marco);
     return e;
 }
 t_entrada_pagina* indico_entrada_presente(t_tabla_paginas* tabla, uint32_t nro_pagina, int marco) {

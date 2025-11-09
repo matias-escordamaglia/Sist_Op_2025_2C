@@ -110,14 +110,27 @@ typedef enum MotivoMasterWorker{
 typedef enum TipoAvisoMasterWorker{
     FINALIZACION_QUERY, // cuando ejecuto un "END"
     NUEVA_LECTURA, //lo mando al ejecutar un "READ"
-    DEVOLUCION_X_INTERRUPCION // tengo que devoler esto, cuando master me mande en "MotivoMasterWorker"
+    DEVOLUCION_X_INTERRUPCION, // tengo que devoler esto, cuando master me mande en "MotivoMasterWorker"
+    RESPUESTA_SIG_QUERY,
     // : INTERRUPCION , entonces devuelvo "DEVOLUCION_X_INTERRUPCION".
+    DESALOJO_QUERY_DIFERENTE_RESPUESTA,
+    ERROR_QUERY
 } t_tipo_aviso_worker_master;
 
 typedef enum TipoAvisoMasterQuery{
     LECTURA_QUERY,
     QUERY_FINALIZADO
 } t_motivo_aviso_master_query;
+
+typedef enum {
+    ERROR_OK = 0, 
+    ERROR_FILE_TAG_INEXISTENTE, 
+    ERROR_FILE_TAG_PREEXISTENTE, 
+    ERROR_ESPACIO_INSUFICIENTE, 
+    ERROR_ESCRITURA_NO_PERMITIDA,
+    ERROR_FUERA_DE_LIMITE,
+    ERROR_DESCONOCIDO
+} t_storage_error_code;
 
 
 // ------------------------------------------------------------------------------------------
