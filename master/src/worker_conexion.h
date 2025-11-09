@@ -6,10 +6,13 @@
 #include <stdint.h>
 #include <pthread.h>
 #include <unistd.h>
+#include <time.h>
+#include <errno.h>
 #include <signal.h>
 #include <commons/log.h>
 #include <commons/string.h>
 #include <commons/config.h>
+#include <commons/collections/dictionary.h>
 
 #include "./utils/utils.h"
 #include "./utils/empaquetar.h"
@@ -20,11 +23,18 @@
 
 
 void* manejar_worker(void* arg);
+void alta_aviso_confirmacion(t_motivo_pedido_master_worker motivo_pedido, uint32_t query_id, uint32_t id_worker, uint32_t dato_extra);
 
+void agregar_siguiente_query_a_enviar(t_query* query, t_worker_conectado* worker_libre, t_confirmacion_pedido* conf);
+void agregar_pedido_interrupcion(t_worker_conectado* worker, uint32_t query_id, t_confirmacion_pedido* conf);
+bool enviar_siguiente_pedido(t_worker_conectado* worker, t_pedido_master_worker* sig_pedido);
+void* tratar_siguientes_pedidos_a_enviar_worker(void* _);
+bool asignar_query_a_worker(t_query* query, t_worker_conectado* worker);
 
-void agregar_siguiente_query_a_enviar(t_query* query, t_worker_conectado* worker_libre);
-bool enviar_siguiente_query(t_worker_conectado* worker, t_pedido_master_worker* sig_pedido);
-void* tratar_siguientes_queries_a_enviar(void* _);
+void inicializar_sistema_confirmaciones();
+
+t_respuesta_desalojo solicitar_desalojo_bloqueante(t_worker_conectado* worker, uint32_t query_id_esperado);
+bool dato_es_query_diferente(uint32_t dato, uint32_t query_id_esperado);
 
 
 #endif /* WORKER_CONEXION_H_ */

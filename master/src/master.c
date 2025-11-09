@@ -29,7 +29,7 @@ int main(int argc, char** argv) {
     iniciar_semaforos();
     iniciar_worker_manager();
 
-    pthread_create(&hilo_pedidos_a_enviar_worker, NULL, tratar_siguientes_queries_a_enviar, NULL);
+    pthread_create(&hilo_pedidos_a_enviar_worker, NULL, tratar_siguientes_pedidos_a_enviar_worker, NULL);
     pthread_detach(hilo_pedidos_a_enviar_worker);
     
     pthread_create(&hilo_planificacion, NULL, main_planificacion, NULL);

@@ -13,6 +13,7 @@
 #include <commons/log.h>
 #include <commons/config.h>
 #include <commons/collections/list.h>
+#include <commons/bitarray.h>
 
 
 
@@ -95,7 +96,9 @@ typedef enum Operation{
     COMMIT,
     FLUSH,
     DELETE,
-    END
+    END,
+    RESPONSE = 100,
+    FIN_ERROR,
 } Operation;
 
 
@@ -107,14 +110,27 @@ typedef enum MotivoMasterWorker{
 typedef enum TipoAvisoMasterWorker{
     FINALIZACION_QUERY, // cuando ejecuto un "END"
     NUEVA_LECTURA, //lo mando al ejecutar un "READ"
-    DEVOLUCION_X_INTERRUPCION // tengo que devoler esto, cuando master me mande en "MotivoMasterWorker"
+    DEVOLUCION_X_INTERRUPCION, // tengo que devoler esto, cuando master me mande en "MotivoMasterWorker"
+    RESPUESTA_SIG_QUERY,
     // : INTERRUPCION , entonces devuelvo "DEVOLUCION_X_INTERRUPCION".
+    DESALOJO_QUERY_DIFERENTE_RESPUESTA,
+    ERROR_QUERY
 } t_tipo_aviso_worker_master;
 
 typedef enum TipoAvisoMasterQuery{
     LECTURA_QUERY,
     QUERY_FINALIZADO
 } t_motivo_aviso_master_query;
+
+typedef enum {
+    ERROR_OK = 0, 
+    ERROR_FILE_TAG_INEXISTENTE, 
+    ERROR_FILE_TAG_PREEXISTENTE, 
+    ERROR_ESPACIO_INSUFICIENTE, 
+    ERROR_ESCRITURA_NO_PERMITIDA,
+    ERROR_FUERA_DE_LIMITE,
+    ERROR_DESCONOCIDO
+} t_storage_error_code;
 
 
 // ------------------------------------------------------------------------------------------
@@ -183,6 +199,42 @@ typedef struct {
     char* file_dest;
     char* tag_dest;
 } t_tag;
+
+typedef struct {
+    char*  file;
+    char*  tag;
+    size_t dir_base;
+    uint8_t* data;
+    size_t len;
+} t_write;
+
+// Struct para entrada de página
+typedef struct {
+    int marco_num;
+    bool presente;
+    bool modificado;
+    bool bit_uso;
+    int nro_pagina;
+    time_t ultimo_acceso;
+} t_entrada_pagina;
+
+// Struct para tabla de File:Tag
+typedef struct {
+    char* tag;
+    t_list* paginas_proceso;
+    char* file;
+    int tam_file;
+} t_tabla_paginas;
+
+// Global
+typedef struct {
+    uint32_t pagina;
+    uint32_t offset_en_pagina;
+    uint32_t bytes_en_pagina;
+    uint32_t offset_en_buffer;
+    uint32_t bytes_restantes; 
+} segmento_acceso;
+
 
 // ------------------------------------------------------------------------------------------
 // -- Funciones --
