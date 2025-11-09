@@ -181,7 +181,7 @@ void intentar_asignaciones_fifo() {
             continue;
         }
         
-        procesar_asignacion_query_a_worker(t_query* mas_antiguo, t_worker_conectado* worker_libre);
+        procesar_asignacion_query_a_worker(mas_antiguo, worker_libre);
 
         UNLOCK(&mutex_estado_critico);
         
@@ -218,11 +218,12 @@ void intentar_asignaciones_prioridades() {
             break; // No hay queries en ready
         }
 
+        t_worker_conectado* worker_libre = obtener_worker_libre();
         
         // 2. Verificar si hay worker libre
         if (sem_trywait(cant_workers_libres) == 0) {
 
-            t_worker_conectado* worker_libre = obtener_worker_libre();
+            
             
             if (worker_libre == NULL || !worker_libre->worker_conectado) {
                 sem_post(cant_workers_libres);
@@ -235,7 +236,7 @@ void intentar_asignaciones_prioridades() {
             UNLOCK(&mutex_cola_ready);
             
             
-            procesar_asignacion_query_a_worker(t_query* query_candidata, t_worker_conectado* worker_libre);
+            procesar_asignacion_query_a_worker(query_candidata, worker_libre);
 
             log_info(get_logger(), 
                     "Query %d (prioridad=%d, PC=%d) asignado a Worker %d", 
@@ -296,7 +297,7 @@ void intentar_asignaciones_prioridades() {
                 agregar_query_ordenada(cola_ready, query_victima);
                 UNLOCK(&mutex_cola_ready);
 
-                procesar_asignacion_query_a_worker(t_query* query_candidata, t_worker_conectado* worker_libre);
+                procesar_asignacion_query_a_worker(query_candidata, worker_libre);
                 
                 log_info(get_logger(), 
                             "Desalojo completado: Query %d ejecutándose, Query %d en READY (PC=%d)",
@@ -330,8 +331,7 @@ void intentar_asignaciones_prioridades() {
             case DESALOJO_WORKER_DESCONECTADO:
                 
                 log_warning(get_logger(), 
-                        "Worker seleccionado en planificacion desconectado. Buscando nuevo candidato",
-                        respuesta.query_id_actual);
+                        "Worker seleccionado en planificacion desconectado. Buscando nuevo candidato");
                 
                 LOCK(&mutex_cola_ready);
                 agregar_query_ordenada(cola_ready, query_candidata);
@@ -449,9 +449,8 @@ void procesar_asignacion_query_a_worker(t_elemento_cola* query_candidata, t_work
             list_add(cola_exec, query_candidata);
         UNLOCK(&mutex_cola_exec);
     } else {
-        log_error(get_logger(), "Asignación falló: bloqueando sistema ya que no es un error cubierto
-            por las indicaciones del enunciado. Query id: %d - Worker que se quería 
-                asignar: %d", query_candidata->query->query_id , worker_libre->id_worker);
+        log_error(get_logger(), "Asignación falló: bloqueando sistema ya que no es un error cubierto por las indicaciones del enunciado. Query id: %d - Worker que se quería asignar: %d", 
+                query_candidata->query->query_id , worker_libre->id_worker);
                 
         while(true) {
             printf("ERROR FATAL AL ASIGNAR");
@@ -732,22 +731,22 @@ void manejar_worker_desconectado(uint32_t worker_id, uint32_t query_id_ejecutand
             bool encontrado = buscar_por_qid(cola_ready, query_id_ejecutando);
             UNLOCK(&mutex_cola_ready);
 
-            if (elemento != NULL)
+            if (encontrado)
             {
-                log_error(get_logger(), "ERROR FALTAL; se esperaba que la query de id %d estuviese en EXEC pero " +
-                    "se encontró en READY", query_id_ejecutando);
+                log_error(get_logger(), "ERROR FALTAL; se esperaba que la query de id %d estuviese en EXEC pero se encontró en READY", 
+                    query_id_ejecutando);
 
                 while(true) {
                     printf("ERROR FATAL DE PLANIFICACION");
                     sleep(5);
                 }
-            } else if(buscar_por_qid(query_id_ejecutando)) {
-                log_warning(get_logger(), "RACE CONDITION; se esperaba que la query de id %d estuviese en EXEC pero " +
-                    "se encontró en EXIT" , query_id_ejecutando);
+            } else if(buscar_por_qid(cola_exit, query_id_ejecutando)) {
+                log_warning(get_logger(), "RACE CONDITION; se esperaba que la query de id %d estuviese en EXEC pero se encontró en EXIT", 
+                query_id_ejecutando);
 
             } else {
-                log_error(get_logger(), "ERROR FALTAL; se esperaba que la query de id %d estuviese en EXEC pero " +
-                    "no se encontró en ninguna lista", query_id_ejecutando);
+                log_error(get_logger(), "ERROR FALTAL; se esperaba que la query de id %d estuviese en EXEC pero no se encontró en ninguna lista", 
+                    query_id_ejecutando);
 
                 while(true) {
                     printf("ERROR FATAL DE PLANIFICACION");

@@ -3,6 +3,9 @@
 #define LIBERACION_WORKER_SIN_EVENTO false
 #define LIBERACION_WORKER_CON_EVENTO true
 
+pthread_mutex_t mutex_confirmaciones = PTHREAD_MUTEX_INITIALIZER;
+
+t_dictionary* confirmaciones_por_worker;
 
 void* manejar_worker(void* arg) {
 
@@ -63,15 +66,15 @@ void* manejar_worker(void* arg) {
 
             char key[32];
             sprintf(key, "%u", id_worker);
-            pthread_mutex_lock(&mutex_confirmaciones);
+            LOCK(&mutex_confirmaciones);
             t_confirmacion_pedido* conf = dictionary_get(confirmaciones_por_worker, key);
             if (conf != NULL && conf->tipo_pedido == INTERRUPCION) {
-                conf->respuesta_desalojo.resultado = DESALOJO_WORKER_DESCONECTADO;
+                conf->dato_respuesta = 0;  
                 conf->respuesta_recibida = false;
                 sem_post(&conf->sem_respuesta);
                 log_warning(get_logger(), "Worker se desconectó durante desalojo pendiente");
             }
-            pthread_mutex_unlock(&mutex_confirmaciones);
+            UNLOCK(&mutex_confirmaciones);
 
             query_id = get_worker_qid(id_worker);
             enviar_evento_planificacion(EVENTO_WORKER_DESCONECTADO, id_worker, query_id, VALOR_NULO_EVENTO);
@@ -144,28 +147,27 @@ void* manejar_worker(void* arg) {
                 /*
                 case ERROR (desde worker; hay que finalizar el query)
                 */
-                case DESALOJO_QUERY_DIFERENTE_RESPUESTA: {
+                case DESALOJO_QUERY_DIFERENTE_RESPUESTA: 
                         
-                        uint32_t query_id_real = atoi(aviso->argumento);
+                    uint32_t query_id_real = atoi(aviso->argumento);
                         
-                        char key[32];
-                        sprintf(key, "%u", id_worker);
+                    char key[32];
+                    sprintf(key, "%u", id_worker);
+                    
+                    LOCK(&mutex_confirmaciones);
+                    t_confirmacion_pedido* conf = dictionary_get(confirmaciones_por_worker, key);
+                    if (conf != NULL && conf->tipo_pedido == INTERRUPCION) {
+                        conf->dato_respuesta = query_id_real;
+                        conf->respuesta_recibida = true;
+                        sem_post(&conf->sem_respuesta);
                         
-                        pthread_mutex_lock(&mutex_confirmaciones);
-                        t_confirmacion_pedido* conf = dictionary_get(confirmaciones_por_worker, key);
-                        if (conf != NULL && conf->tipo_pedido == INTERRUPCION) {
-                            conf->respuesta_desalojo.resultado = DESALOJO_QUERY_DIFERENTE;
-                            conf->respuesta_desalojo.query_id_actual = query_id_real;
-                            conf->respuesta_recibida = true;
-                            sem_post(&conf->sem_respuesta);
-                            
-                            log_warning(get_logger(), 
-                                       "[DESALOJO] Worker %u tiene Query %d (esperábamos %d)", 
-                                       id_worker, query_id_real, conf->query_id);
-                        }
-                        pthread_mutex_unlock(&mutex_confirmaciones);
-                        break;
+                        log_warning(get_logger(), 
+                                    "[DESALOJO] Worker %u tiene Query %d (esperábamos %d)", 
+                                    id_worker, query_id_real, conf->query_id);
                     }
+                    UNLOCK(&mutex_confirmaciones);
+                    break;
+                    
 
 
                 default:
@@ -191,10 +193,6 @@ void* manejar_worker(void* arg) {
     -------------------------------------------------------------------------------------- */
 
 t_queue* cola_envio_pedidos;
-
-t_dictionary* confirmaciones_por_worker;
-
-pthread_mutex_t mutex_confirmaciones = PTHREAD_MUTEX_INITIALIZER;
 
 void agregar_siguiente_query_a_enviar(t_query* query, t_worker_conectado* worker_libre, t_confirmacion_pedido* conf) {
 
@@ -422,39 +420,54 @@ t_respuesta_desalojo solicitar_desalojo_bloqueante(t_worker_conectado* worker, u
     conf->respuesta_recibida = false;
     conf->worker_id = worker->id_worker;
     conf->query_id = query_id_esperado;
-    conf->tipo_pedido = INTERRUPCION;  // ✅ Usar INTERRUPCION
+    conf->tipo_pedido = INTERRUPCION;
     conf->dato_respuesta = 0;
     
-    // Encolar (reusar función existente)
     agregar_pedido_interrupcion(worker, query_id_esperado, conf);
     
     log_info(get_logger(), "[DESALOJO] Esperando confirmación de Worker %u...", worker->id_worker);
     
-    // Esperar con timeout
+    // Esperar con timeout y reintentos
     struct timespec timeout;
-    clock_gettime(CLOCK_REALTIME, &timeout);
-    timeout.tv_sec += 5;
-
     int resultado;
     int reintentos = 0;
-    const int MAX_REINTENTOS = 5;
+    const int MAX_REINTENTOS = 3;
     bool exito = false;
 
     t_respuesta_desalojo respuesta_final;
 
     do {
+        clock_gettime(CLOCK_REALTIME, &timeout);
+        timeout.tv_sec += 5;
+        
         resultado = sem_timedwait(&conf->sem_respuesta, &timeout);
         
-        if (resultado == 0 && conf->respuesta_recibida) {
+        if (resultado == 0) {
             
-            respuesta_final.resultado = DESALOJO_EXITOSO;
-            respuesta_final.pc = conf->dato_respuesta;
-            respuesta_final.query_id_actual = query_id_esperado;
-            
-            log_info(get_logger(), "[DESALOJO] Worker %u confirmó con PC=%d (reintento %d)", 
-                    worker->id_worker, respuesta_final.pc, reintentos);
-            exito = true;
-            break;
+            if (conf->respuesta_recibida && conf->dato_respuesta > 0) {
+
+                if (dato_es_query_diferente(conf->dato_respuesta, query_id_esperado)) {
+                    respuesta_final.resultado = DESALOJO_QUERY_DIFERENTE;
+                    respuesta_final.query_id_actual = conf->dato_respuesta;
+                    respuesta_final.pc = 0;
+                    log_warning(get_logger(), "[DESALOJO] Worker %u tiene Query %d diferente", 
+                               worker->id_worker, conf->dato_respuesta);
+                } else {
+                    respuesta_final.resultado = DESALOJO_EXITOSO;
+                    respuesta_final.pc = conf->dato_respuesta;  // Es el PC
+                    respuesta_final.query_id_actual = query_id_esperado;
+                    log_info(get_logger(), "[DESALOJO] Worker %u confirmó con PC=%d", 
+                            worker->id_worker, respuesta_final.pc);
+                }
+                exito = true;
+                break;
+                
+            } else if (!conf->respuesta_recibida) {
+                respuesta_final.resultado = DESALOJO_WORKER_DESCONECTADO;
+                log_warning(get_logger(), "[DESALOJO] Worker %u se desconectó", worker->id_worker);
+                exito = true;
+                break;
+            }
             
         } else if (resultado == -1 && errno == ETIMEDOUT) {
             reintentos++;
@@ -462,20 +475,14 @@ t_respuesta_desalojo solicitar_desalojo_bloqueante(t_worker_conectado* worker, u
                     worker->id_worker, reintentos, MAX_REINTENTOS);
             
             // Verificación crítica
-            if (worker->worker_conectado) {
-                log_error(get_logger(), "INCONSISTENCIA: Worker %d no responde pero Master cree que está conectado (reintento %d)", 
-                        worker->id_worker, reintentos);
-                marcar_worker_desconectado(worker->id_worker);
-                sem_wait(cant_workers_libres);
+            if (!worker->worker_conectado) {
+                log_error(get_logger(), "Worker %d se desconectó (detectado en timeout %d)", 
+                         worker->id_worker, reintentos);
+                respuesta_final.resultado = DESALOJO_WORKER_DESCONECTADO;
+                exito = true;
+                break;
             }
-            
-            if (reintentos < MAX_REINTENTOS) {
-                clock_gettime(CLOCK_REALTIME, &timeout);
-                timeout.tv_sec += 5;
-            }
-            
         } else {
-            // Error fatal, se sale del bucle
             break;
         }
         
@@ -485,11 +492,15 @@ t_respuesta_desalojo solicitar_desalojo_bloqueante(t_worker_conectado* worker, u
     if (!exito) {
         if (resultado == -1 && errno == ETIMEDOUT) {
             respuesta_final.resultado = DESALOJO_TIMEOUT;
-            log_error(get_logger(), "[DESALOJO] TIMEOUT FINAL Worker %u después de %d reintentos", 
-                    worker->id_worker, MAX_REINTENTOS);
+            log_error(get_logger(), "[DESALOJO] TIMEOUT FINAL Worker %u", worker->id_worker);
+            
+            if (worker->worker_conectado) {
+                log_error(get_logger(), "INCONSISTENCIA CRÍTICA: Worker %d no responde", worker->id_worker);
+                marcar_worker_desconectado(worker->id_worker);
+                sem_wait(cant_workers_libres);
+            }
         } else {
             respuesta_final.resultado = DESALOJO_ERROR_FATAL;
-            log_error(get_logger(), "[DESALOJO] ERROR FATAL Worker %u", worker->id_worker);
         }
     }
     
@@ -504,4 +515,13 @@ t_respuesta_desalojo solicitar_desalojo_bloqueante(t_worker_conectado* worker, u
     free(conf);
     
     return respuesta_final;
+}
+
+bool dato_es_query_diferente(uint32_t dato, uint32_t query_id_esperado) {
+
+    if (dato == query_id_esperado) {
+        return false;
+    }
+    
+    return false;
 }

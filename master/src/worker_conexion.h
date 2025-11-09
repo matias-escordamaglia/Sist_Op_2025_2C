@@ -33,5 +33,8 @@ bool asignar_query_a_worker(t_query* query, t_worker_conectado* worker);
 
 void inicializar_sistema_confirmaciones();
 
+t_respuesta_desalojo solicitar_desalojo_bloqueante(t_worker_conectado* worker, uint32_t query_id_esperado);
+bool dato_es_query_diferente(uint32_t dato, uint32_t query_id_esperado);
+
 
 #endif /* WORKER_CONEXION_H_ */
