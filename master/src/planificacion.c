@@ -10,6 +10,8 @@ pthread_mutex_t mutex_cola_exit = PTHREAD_MUTEX_INITIALIZER;
 
 pthread_mutex_t mutex_estado_critico = PTHREAD_MUTEX_INITIALIZER;
 
+int tiempo_aging_ms;
+
 void inicializar_listas_planificacion() {
     if (cola_ready == NULL)
     {
@@ -36,8 +38,6 @@ uint64_t timestamp_actual_en_milisegundos() {
 t_query* crear_nuevo_query(char* query_path, uint32_t prioridad, int conexion) {
     t_query* nuevo_query = crear_query(query_path, prioridad, conexion);
 
-    // TODO REPETIDO 1 hilo con temporizador para aging posiblemente
-    //inicializar_temporizador_query(nuevo_query);
     t_elemento_cola* nuevo_elemento = crear_nuevo_elemento(nuevo_query);
 
     LOCK(&mutex_cola_ready);
@@ -45,8 +45,7 @@ t_query* crear_nuevo_query(char* query_path, uint32_t prioridad, int conexion) {
         log_info(get_logger(), "Se crea nuevo Query con ID (%d) - Estado: READY", nuevo_query->query_id);
     UNLOCK(&mutex_cola_ready);
 
-    //TODO REVISAR ESTOS 0s
-    enviar_evento_planificacion(EVENTO_NUEVA_QUERY, -1, nuevo_query->query_id, 0);
+    enviar_evento_planificacion(EVENTO_NUEVA_QUERY, VALOR_NULO_EVENTO, nuevo_query->query_id, 0);
 
     return nuevo_query;
 }
@@ -55,8 +54,9 @@ t_elemento_cola* crear_nuevo_elemento(t_query* query) {
     t_elemento_cola* nuevo_elemento = malloc(sizeof(t_elemento_cola));
 
     nuevo_elemento->query = query;
-    //TODO REPETIDO 1: Aquí seguro vaya un temporizador u algún hilo para lo de aging si es que está activo
     nuevo_elemento->tiempo_llegada = timestamp_actual_en_milisegundos();
+    nuevo_elemento->prioridad_efectiva = query->prioridad;
+    nuevo_elemento->ultimo_aging = nuevo_elemento->tiempo_llegada;
 
     return nuevo_elemento;
     
@@ -75,6 +75,20 @@ t_elemento_cola* buscar_y_remover_por_qid(t_list* lista, uint32_t qid) {
         }
     }
     return NULL;
+}
+
+bool buscar_por_qid(t_list* lista, uint32_t qid) {
+    if (lista == NULL || list_is_empty(lista)) {
+        return false;
+    }
+    
+    for (int i = 0; i < list_size(lista); i++) {
+        t_elemento_cola* elemento = list_get(lista, i);
+        if (elemento != NULL && elemento->query != NULL && elemento->query->query_id == qid) {
+            return true;
+        }
+    }
+    return false;
 }
 
 t_elemento_cola* obtener_mas_antiguo(t_list* cola) {
@@ -96,7 +110,6 @@ t_elemento_cola* obtener_mas_antiguo(t_list* cola) {
 
 
 void *main_planificacion() {
-    //Iniciar semaforos corto plazo -> iniciar_sem_cp();
 
     inicializar_listas_planificacion();
     inicializar_cola_eventos();
@@ -142,24 +155,22 @@ void intentar_asignaciones_fifo() {
 
         t_elemento_cola* mas_antiguo = NULL;
         
-        // Obtener query de forma atómica
         LOCK(&mutex_cola_ready);
         if (list_is_empty(cola_ready)) {
             UNLOCK(&mutex_cola_ready);
-            sem_post(cant_workers_libres); // Devolver worker
+            sem_post(cant_workers_libres);
             break;
         }
         mas_antiguo = obtener_mas_antiguo(cola_ready);
         list_remove_element(cola_ready, mas_antiguo);
         UNLOCK(&mutex_cola_ready);
         
-        // Obtener worker y verificar que siga conectado
         t_worker_conectado* worker_libre = obtener_worker_libre();
 
         LOCK(&mutex_estado_critico);
 
         if (worker_libre == NULL || !(worker_libre->worker_conectado)) {
-            // Worker se desconectó entre tanto, devolver query a ready
+
             LOCK(&mutex_cola_ready);
             list_add_in_index(cola_ready, 0, mas_antiguo); // Al frente para FIFO
             UNLOCK(&mutex_cola_ready);
@@ -170,11 +181,7 @@ void intentar_asignaciones_fifo() {
             continue;
         }
         
-        agregar_siguiente_query_a_enviar(mas_antiguo->query, worker_libre);
-        
-        LOCK(&mutex_cola_exec);
-        list_add(cola_exec, mas_antiguo);
-        UNLOCK(&mutex_cola_exec);
+        procesar_asignacion_query_a_worker(mas_antiguo, worker_libre);
 
         UNLOCK(&mutex_estado_critico);
         
@@ -185,6 +192,12 @@ void intentar_asignaciones_fifo() {
 
 
 void planificar_por_prioridades() {
+
+    pthread_t hilo_aging;
+
+    pthread_create(&hilo_aging, NULL, main_aging, NULL);
+    pthread_detach(hilo_aging);
+
     while(true) {
         sem_wait(sem_trabajo_planificacion);
         intentar_asignaciones_prioridades();
@@ -192,7 +205,413 @@ void planificar_por_prioridades() {
 }
 
 void intentar_asignaciones_prioridades() {
-    // TODO Similar a FIFO pero ordenando por prioridad
+    LOCK(&mutex_estado_critico);
+    
+    while (true) {
+        
+        verificar_y_aplicar_aging_si_corresponde();
+        
+        // 1. Obtener query MÁS ANTIGUO de mayor prioridad en READY
+        t_elemento_cola* query_candidata = obtener_query_mas_prioritaria_mas_antigua();
+        
+        if (query_candidata == NULL) {
+            break; // No hay queries en ready
+        }
+
+        t_worker_conectado* worker_libre = obtener_worker_libre();
+        
+        // 2. Verificar si hay worker libre
+        if (sem_trywait(cant_workers_libres) == 0) {
+
+            
+            
+            if (worker_libre == NULL || !worker_libre->worker_conectado) {
+                sem_post(cant_workers_libres);
+                break;
+            }
+            
+
+            LOCK(&mutex_cola_ready);
+            list_remove_element(cola_ready, query_candidata);
+            UNLOCK(&mutex_cola_ready);
+            
+            
+            procesar_asignacion_query_a_worker(query_candidata, worker_libre);
+
+            log_info(get_logger(), 
+                    "Query %d (prioridad=%d, PC=%d) asignado a Worker %d", 
+                    query_candidata->query->query_id,
+                    query_candidata->prioridad_efectiva,
+                    query_candidata->query->program_count,
+                    worker_libre->id_worker);
+            
+            continue; // Se analiza nuevamente por si hay más asignaciones posibles
+        }
+        
+
+        // 3. NO HAY WORKERS LIBRES - buscar víctima para desalojar
+        t_elemento_cola* query_victima = obtener_victima_desalojo(query_candidata->prioridad_efectiva);
+        
+        if (query_victima == NULL) {
+            break;
+        }
+        
+        // 4. DESALOJAR
+        log_info(get_logger(), 
+                "Desalojo: Query %d (p=%d, antigüedad=%ld) desalojará a Query %d (p=%d, antigüedad=%ld)",
+                query_candidata->query->query_id,
+                query_candidata->prioridad_efectiva,
+                query_candidata->tiempo_llegada,
+                query_victima->query->query_id,
+                query_victima->prioridad_efectiva,
+                query_victima->tiempo_llegada);
+        
+
+        LOCK(&mutex_cola_ready);
+        list_remove_element(cola_ready, query_candidata);
+        UNLOCK(&mutex_cola_ready);
+        
+
+        LOCK(&mutex_cola_exec);
+        list_remove_element(cola_exec, query_victima);
+        UNLOCK(&mutex_cola_exec);
+        
+
+        t_worker_conectado* worker_a_desalojar = 
+            obtener_worker_por_query_id(query_victima->query->query_id);
+
+        UNLOCK(&mutex_estado_critico);
+        
+    
+        t_respuesta_desalojo respuesta = solicitar_desalojo_bloqueante(worker_a_desalojar, query_victima->query->query_id);
+
+        LOCK(&mutex_estado_critico);
+
+
+        switch (respuesta.resultado) {
+            case DESALOJO_EXITOSO:
+                
+                query_victima->query->program_count = respuesta.pc;
+                
+                LOCK(&mutex_cola_ready);
+                agregar_query_ordenada(cola_ready, query_victima);
+                UNLOCK(&mutex_cola_ready);
+
+                procesar_asignacion_query_a_worker(query_candidata, worker_libre);
+                
+                log_info(get_logger(), 
+                            "Desalojo completado: Query %d ejecutándose, Query %d en READY (PC=%d)",
+                            query_candidata->query->query_id,
+                            query_victima->query->query_id,
+                            respuesta.pc);
+                continue; 
+                
+            case DESALOJO_QUERY_DIFERENTE:
+                
+                log_warning(get_logger(), 
+                        "Race condition: Worker tiene Query %d, devolviendo ambas a READY",
+                        respuesta.query_id_actual);
+                
+                LOCK(&mutex_cola_ready);
+                agregar_query_ordenada(cola_ready, query_candidata);
+                agregar_query_ordenada(cola_ready, query_victima);
+                UNLOCK(&mutex_cola_ready);
+                
+                continue;
+                
+            case DESALOJO_TIMEOUT:
+
+                log_error(get_logger(), "Desalojo falló: resultado=%d", respuesta.resultado);
+                
+                while(true) {
+                    printf("ERROR EN DESALOJO, worker tardó demasiado en responder y se llegó al TIMEOUT");
+                    sleep(5);
+                }
+
+            case DESALOJO_WORKER_DESCONECTADO:
+                
+                log_warning(get_logger(), 
+                        "Worker seleccionado en planificacion desconectado. Buscando nuevo candidato");
+                
+                LOCK(&mutex_cola_ready);
+                agregar_query_ordenada(cola_ready, query_candidata);
+                agregar_query_ordenada(cola_ready, query_victima);
+                UNLOCK(&mutex_cola_ready);
+
+                continue;
+
+            case DESALOJO_ERROR_FATAL:
+                log_error(get_logger(), "Desalojo falló: resultado=%d", respuesta.resultado);
+                
+                while(true) {
+                    printf("ERROR FATAL EN DESALOJO");
+                    sleep(5);
+                }
+        }
+    }
+    
+    UNLOCK(&mutex_estado_critico);
+}
+
+
+
+// Obtener query más prioritaria, en caso de empate el más antiguo (FIFO)
+t_elemento_cola* obtener_query_mas_prioritaria_mas_antigua() {
+    LOCK(&mutex_cola_ready);
+    
+    if (list_is_empty(cola_ready)) {
+        UNLOCK(&mutex_cola_ready);
+        return NULL;
+    }
+    
+    t_elemento_cola* mejor = list_get(cola_ready, 0);
+    
+    for (int i = 1; i < list_size(cola_ready); i++) {
+        t_elemento_cola* actual = list_get(cola_ready, i);
+        
+        if (actual->prioridad_efectiva < mejor->prioridad_efectiva) {
+            mejor = actual;
+        }
+        
+        else if (actual->prioridad_efectiva == mejor->prioridad_efectiva &&
+                 actual->tiempo_llegada < mejor->tiempo_llegada) {
+            mejor = actual;
+        }
+    }
+    
+    UNLOCK(&mutex_cola_ready);
+    return mejor;
+}
+
+
+t_elemento_cola* obtener_victima_desalojo(uint32_t prioridad_desalojador) {
+    LOCK(&mutex_cola_exec);
+    
+    if (list_is_empty(cola_exec)) {
+        UNLOCK(&mutex_cola_exec);
+        return NULL;
+    }
+    
+    t_elemento_cola* victima = NULL;
+    
+    for (int i = 0; i < list_size(cola_exec); i++) {
+        t_elemento_cola* actual = list_get(cola_exec, i);
+        
+        
+        if (actual->prioridad_efectiva > prioridad_desalojador) {
+            if (victima == NULL) {
+                victima = actual;
+            }
+            
+            else if (actual->prioridad_efectiva > victima->prioridad_efectiva) {
+                victima = actual;
+            }
+            
+            else if (actual->prioridad_efectiva == victima->prioridad_efectiva &&
+                     actual->tiempo_llegada < victima->tiempo_llegada) {
+                victima = actual;
+            }
+        }
+    }
+    
+    UNLOCK(&mutex_cola_exec);
+    return victima;
+}
+
+// Insertar ordenado: primero por prioridad, luego por antigüedad
+void agregar_query_ordenada(t_list* lista, t_elemento_cola* elemento) {
+    
+    int posicion = list_size(lista);
+    
+    for (int i = 0; i < list_size(lista); i++) {
+        t_elemento_cola* actual = list_get(lista, i);
+        
+        if (elemento->prioridad_efectiva < actual->prioridad_efectiva) {
+            posicion = i;
+            break;
+        }
+        else if (elemento->prioridad_efectiva == actual->prioridad_efectiva &&
+                 elemento->tiempo_llegada < actual->tiempo_llegada) {
+            posicion = i;
+            break;
+        }
+    }
+    
+    list_add_in_index(lista, posicion, elemento);
+    elemento->tiempo_llegada = timestamp_actual_en_milisegundos();
+}
+
+void procesar_asignacion_query_a_worker(t_elemento_cola* query_candidata, t_worker_conectado* worker_libre) {
+    if (asignar_query_a_worker(query_candidata->query, worker_libre)) {
+        asociar_qid_a_worker(query_candidata->query->query_id, worker_libre);
+
+        LOCK(&mutex_cola_exec);
+            list_add(cola_exec, query_candidata);
+        UNLOCK(&mutex_cola_exec);
+    } else {
+        log_error(get_logger(), "Asignación falló: bloqueando sistema ya que no es un error cubierto por las indicaciones del enunciado. Query id: %d - Worker que se quería asignar: %d", 
+                query_candidata->query->query_id , worker_libre->id_worker);
+                
+        while(true) {
+            printf("ERROR FATAL AL ASIGNAR");
+            sleep(5);
+        }
+    }
+}
+
+
+
+/*-------------------------------AGING-----------------------------------*/
+
+void* main_aging(void* args) {
+    tiempo_aging_ms = config_get_int_value(get_config(), "TIEMPO_AGING");
+    
+    if (tiempo_aging_ms == 0) {
+        log_info(get_logger(), "Aging deshabilitado (TIEMPO_AGING = 0)");
+        return NULL;
+    }
+    
+    log_info(get_logger(), "Aging habilitado: intervalo de %d ms", tiempo_aging_ms);
+
+    int cant_veces_aging_loop = 0;
+    
+    while (true) {
+        
+        dormir_milisegundos(tiempo_aging_ms);
+        
+        bool puede_desalojar_ahora = aplicar_aging_inteligente();
+        
+        if (puede_desalojar_ahora) {
+            log_info(get_logger(), "Se inició evento de Aging");
+            enviar_evento_planificacion(EVENTO_AGING_OCURRIDO, 
+                                       VALOR_NULO_EVENTO, 
+                                       VALOR_NULO_EVENTO, 
+                                       VALOR_NULO_EVENTO);
+        }
+        cant_veces_aging_loop++;
+        log_info(get_logger(), "Veces loop: %d", cant_veces_aging_loop);
+    }
+    return NULL;
+}
+
+/*
+Separa en segundos y microsegundos para la estructura timeval.
+EJ: 2500 milisegundos serán 2 tv_sec y 500000 tv_usec
+*/
+void dormir_milisegundos(int tiempo_aging_ms) {
+    struct timeval tv;
+    tv.tv_sec = tiempo_aging_ms / 1000;
+    tv.tv_usec = (tiempo_aging_ms % 1000) * 1000;
+    select(0, NULL, NULL, NULL, &tv);
+
+}
+
+bool aplicar_aging_inteligente() {
+    LOCK(&mutex_estado_critico);
+    
+    // Obtener la MENOR prioridad (número mayor) en ejecución
+    uint32_t umbral_desalojo = UINT32_MAX;
+    
+    LOCK(&mutex_cola_exec);
+    if (!list_is_empty(cola_exec)) {
+        for (int i = 0; i < list_size(cola_exec); i++) {
+            t_elemento_cola* en_exec = list_get(cola_exec, i);
+            if (en_exec->prioridad_efectiva < umbral_desalojo) {
+                umbral_desalojo = en_exec->prioridad_efectiva;
+            }
+        }
+    }
+    UNLOCK(&mutex_cola_exec);
+    
+    bool puede_desalojar_ahora = false;
+    uint64_t ahora = timestamp_actual_en_milisegundos();
+    
+    LOCK(&mutex_cola_ready);
+    for (int i = 0; i < list_size(cola_ready); i++) {
+        t_elemento_cola* elemento = list_get(cola_ready, i);
+        
+        uint64_t tiempo_desde_ultimo = ahora - elemento->ultimo_aging;
+        uint32_t intervalos_nuevos = tiempo_desde_ultimo / tiempo_aging_ms;
+        
+        if (intervalos_nuevos > 0) {
+            uint32_t prioridad_anterior = elemento->prioridad_efectiva;
+            uint32_t nueva_prioridad = prioridad_anterior;
+            
+            if (nueva_prioridad >= intervalos_nuevos) {
+                nueva_prioridad -= intervalos_nuevos;
+            } else {
+                nueva_prioridad = 0;
+            }
+            
+            if (nueva_prioridad != prioridad_anterior) {
+                elemento->prioridad_efectiva = nueva_prioridad;
+                elemento->ultimo_aging = ahora;
+                
+                // Verificar si CRUZÓ el umbral de desalojo
+                bool antes_no_podia = (prioridad_anterior >= umbral_desalojo);
+                bool ahora_si_puede = (nueva_prioridad < umbral_desalojo);
+                
+                if (antes_no_podia && ahora_si_puede) {
+                    log_info(get_logger(), 
+                            "Aging RELEVANTE: Query %d (%d->%d) ahora puede desalojar (umbral=%d)", 
+                            elemento->query->query_id,
+                            prioridad_anterior,
+                            nueva_prioridad,
+                            umbral_desalojo);
+                    puede_desalojar_ahora = true;
+                } else {
+                    log_debug(get_logger(), 
+                            "Aging: Query %d prioridad %d -> %d (sin impacto)", 
+                            elemento->query->query_id,
+                            prioridad_anterior,
+                            nueva_prioridad);
+                }
+            }
+        }
+    }
+    UNLOCK(&mutex_cola_ready);
+    
+    UNLOCK(&mutex_estado_critico);
+    
+    return puede_desalojar_ahora;
+}
+
+void verificar_y_aplicar_aging_si_corresponde() {
+    
+    if (tiempo_aging_ms == 0) {
+        return;
+    }
+    
+    uint64_t ahora = timestamp_actual_en_milisegundos();
+    
+    LOCK(&mutex_cola_ready);
+    for (int i = 0; i < list_size(cola_ready); i++) {
+        t_elemento_cola* elemento = list_get(cola_ready, i);
+        
+        uint64_t tiempo_desde_ultimo = ahora - elemento->ultimo_aging;
+        uint32_t intervalos_nuevos = tiempo_desde_ultimo / tiempo_aging_ms;
+        
+        if (intervalos_nuevos > 0) {
+            uint32_t nueva_prioridad = elemento->prioridad_efectiva;
+            
+            if (nueva_prioridad >= intervalos_nuevos) {
+                nueva_prioridad -= intervalos_nuevos;
+            } else {
+                nueva_prioridad = 0;
+            }
+            
+            if (nueva_prioridad != elemento->prioridad_efectiva) {
+                log_debug(get_logger(), 
+                         "Aging durante desalojo: Query %d %d -> %d", 
+                         elemento->query->query_id,
+                         elemento->prioridad_efectiva,
+                         nueva_prioridad);
+                elemento->prioridad_efectiva = nueva_prioridad;
+                elemento->ultimo_aging = ahora;
+            }
+        }
+    }
+    UNLOCK(&mutex_cola_ready);
 }
 
 
@@ -245,6 +664,12 @@ void* manejar_eventos_planificacion(void* args) {
                 despertar_planificador = true;
                 sem_post(cant_workers_libres);
                 break;
+
+            case EVENTO_AGING_OCURRIDO:
+                // Aumento de prioridad por aging, despertar planificador
+                log_debug(get_logger(), "Aging relevante ocurrió, reevaluando");
+                despertar_planificador = true;
+                break;
         }
         
         if (despertar_planificador) {
@@ -278,20 +703,19 @@ void enviar_evento_planificacion(t_tipo_evento tipo, uint32_t worker_id, uint32_
 
 void manejar_worker_desconectado(uint32_t worker_id, uint32_t query_id_ejecutando) {
 
-    LOCK(&mutex_estado_critico);
-
     log_info(get_logger(), "Worker %d desconectado", worker_id);
 
     if (query_id_ejecutando >= 0) {
         t_elemento_cola* elemento = NULL;
-        
+
+        LOCK(&mutex_estado_critico);
 
         LOCK(&mutex_cola_exec);
         elemento = buscar_y_remover_por_qid(cola_exec, query_id_ejecutando);
         UNLOCK(&mutex_cola_exec);
         
         if (elemento != NULL) {
-            
+
             // Mover a EXIT
             LOCK(&mutex_cola_exit);
             list_add(cola_exit, elemento);
@@ -302,14 +726,43 @@ void manejar_worker_desconectado(uint32_t worker_id, uint32_t query_id_ejecutand
             
             
             notificar_error_a_query_control(elemento->query->conexion);
-        }
+        } else {
+            LOCK(&mutex_cola_ready);
+            bool encontrado = buscar_por_qid(cola_ready, query_id_ejecutando);
+            UNLOCK(&mutex_cola_ready);
+
+            if (encontrado)
+            {
+                log_error(get_logger(), "ERROR FALTAL; se esperaba que la query de id %d estuviese en EXEC pero se encontró en READY", 
+                    query_id_ejecutando);
+
+                while(true) {
+                    printf("ERROR FATAL DE PLANIFICACION");
+                    sleep(5);
+                }
+            } else if(buscar_por_qid(cola_exit, query_id_ejecutando)) {
+                log_warning(get_logger(), "RACE CONDITION; se esperaba que la query de id %d estuviese en EXEC pero se encontró en EXIT", 
+                query_id_ejecutando);
+
+            } else {
+                log_error(get_logger(), "ERROR FALTAL; se esperaba que la query de id %d estuviese en EXEC pero no se encontró en ninguna lista", 
+                    query_id_ejecutando);
+
+                while(true) {
+                    printf("ERROR FATAL DE PLANIFICACION");
+                    sleep(5);
+                }
+            }
+            
+        }    
+        
+        UNLOCK(&mutex_estado_critico);
+
     }
     
-    // Marcar worker como desconectado y hacer wait a la cantidad de workers libres
+    // Marcar worker como desconectado
     marcar_worker_desconectado(worker_id);
-    sem_wait(cant_workers_libres);
-
-    UNLOCK(&mutex_estado_critico);
+    //sem_wait(cant_workers_libres); <-- puede que no vaya aquí ya que se le hizo wait al asignarle un query
     
 }
 
@@ -346,18 +799,100 @@ void manejar_query_control_desconectado(uint32_t query_id_activo) {
                 t_worker_conectado* worker_a_desalojar = obtener_worker_por_query_id(query_id_activo);
                 uint32_t worker_id = worker_a_desalojar->id_worker; 
                 
-                //TODO enviar_desalojo_a_worker(worker_id);
-            
+                UNLOCK(&mutex_estado_critico);
+
+                t_respuesta_desalojo respuesta = solicitar_desalojo_bloqueante(worker_a_desalojar, query_id_activo);
+
+                LOCK(&mutex_estado_critico);
                 
-                LOCK(&mutex_cola_exit);
-                list_add(cola_exit, elemento);
-                UNLOCK(&mutex_cola_exit);
-                
-                // Liberar worker
-                sem_post(cant_workers_libres);
-                
-                log_info(get_logger(), "Query %d cancelado y worker %d desalojado", 
-                        query_id_activo, worker_id);
+
+                switch (respuesta.resultado) {
+                    case DESALOJO_EXITOSO:
+                        
+                        LOCK(&mutex_cola_exit);
+                        list_add(cola_exit, elemento);
+                        UNLOCK(&mutex_cola_exit);
+                        
+                        // Liberar worker
+                        sem_post(cant_workers_libres);
+                        
+                        log_info(get_logger(), "Query %d cancelado y worker %d desalojado", 
+                                query_id_activo, worker_id);
+                        break; 
+                        
+                    case DESALOJO_QUERY_DIFERENTE:
+                        
+                        log_warning(get_logger(), 
+                                "Race condition: Worker tiene Query %d en vez de %d; buscando en más lugares",
+                                respuesta.query_id_actual, query_id_activo);
+                        
+                        
+
+                        LOCK(&mutex_cola_ready);
+                        elemento = buscar_y_remover_por_qid(cola_ready, query_id_activo);
+                        UNLOCK(&mutex_cola_ready);
+                        
+
+                        if(elemento != NULL){
+
+                            LOCK(&mutex_cola_exit);
+                            list_add(cola_exit, elemento);
+                            UNLOCK(&mutex_cola_exit);
+
+                            log_warning(get_logger(), "Query %d se encontró en READY, se pasa a EXIT", 
+                                query_id_activo);
+
+                            break;
+                        }
+
+                        LOCK(&mutex_cola_exit);
+                            bool en_exit = buscar_por_qid(cola_exit, query_id_activo);
+                        UNLOCK(&mutex_cola_exit);
+
+                        if(en_exit) {
+                            
+                            log_warning(get_logger(), "Query %d se encontró en EXIT, ya había finalizado", 
+                            query_id_activo);
+                            
+                            break;
+                        }
+
+
+                        log_error(get_logger(), "Desalojo falló: resultado=%d", respuesta.resultado);
+                        
+                        while(true) {
+                            printf("ERROR FATAL EN MASTER AL BUSCAR QUERY ID: %d EN WORKER ID: %d",query_id_activo, worker_id);
+                            sleep(5);
+                        }
+                        
+                        
+                        
+                    case DESALOJO_TIMEOUT:
+
+                        log_error(get_logger(), "Desalojo falló: resultado=%d", respuesta.resultado);
+                        
+                        while(true) {
+                            printf("ERROR EN DESALOJO POR DESONEXIÓN, worker tardó demasiado en responder y se llegó al TIMEOUT");
+                            sleep(5);
+                        }
+
+                    case DESALOJO_WORKER_DESCONECTADO:
+                        
+                        // TODO
+                        
+                        
+
+                        break;
+
+                    case DESALOJO_ERROR_FATAL:
+                        log_error(get_logger(), "Desalojo falló: resultado=%d", respuesta.resultado);
+                        
+                        while(true) {
+                            printf("ERROR FATAL EN DESALOJO");
+                            sleep(5);
+                        }
+                }
+
             }
         }
     }
