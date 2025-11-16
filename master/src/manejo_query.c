@@ -108,7 +108,6 @@ bool mandar_lectura_a_query_con_id(char* string_crudo, uint32_t id_query) {
     free(file_tag);
     free(lectura);
     free(aviso_lectura);
-    free(string_crudo);
 
     return true;
     
@@ -147,13 +146,31 @@ bool separar_string(char* input, char** file_tag, char** lectura) {
     return true;
 }
 
-void notificar_error_a_query_control(int conexion_query) {
+void notificar_error_desconexion_a_query_control(int conexion_query) {
 
     t_aviso_master_query* aviso_error = malloc(sizeof(t_aviso_master_query));
 
     aviso_error->motivo = QUERY_FINALIZADO;
     aviso_error->file_tag = "No se debe leer esto (file:tag desde master)";
-    aviso_error->mensaje = "Error"; 
+    aviso_error->mensaje = "ERROR; worker se desconectó durante la ejecución"; 
+
+    t_paquete* paquete = empaquetar_aviso_master_query(aviso_error);
+
+    enviar_paquete(paquete, conexion_query);
+
+    log_info(get_logger(), "[MANEJO_QUERY] Aviso de finalizacion enviado a Query");
+
+    free(aviso_error);
+
+}
+
+void notificar_finalizacion_especial_a_query_control(int conexion_query, char* mensaje_personalizado) {
+
+    t_aviso_master_query* aviso_error = malloc(sizeof(t_aviso_master_query));
+
+    aviso_error->motivo = QUERY_FINALIZADO;
+    aviso_error->file_tag = "No se debe leer esto (file:tag desde master)";
+    aviso_error->mensaje = mensaje_personalizado; 
 
     t_paquete* paquete = empaquetar_aviso_master_query(aviso_error);
 
@@ -173,7 +190,7 @@ void notificar_finalizacion_a_query_control(uint32_t query_id) {
 
     aviso_error->motivo = QUERY_FINALIZADO;
     aviso_error->file_tag = "No se debe leer esto (file:tag desde master)";
-    aviso_error->mensaje = "Ejecucion exitosa"; 
+    aviso_error->mensaje = "Ejecucion exitosa!!"; 
 
     t_paquete* paquete = empaquetar_aviso_master_query(aviso_error);
 

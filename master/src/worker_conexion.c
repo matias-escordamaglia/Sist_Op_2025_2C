@@ -122,7 +122,7 @@ void* manejar_worker(void* arg) {
 
                     //TODO: Revisar si esta funcion va aquí o hay que modificar esta lógica
                     //Acordarse del caso desalojo por desconexion query
-                    //worker_libera_query(id_worker, query_id, program_counter);
+                    //worker_libera_query_finalizado(id_worker, query_id, program_counter);
 
                     alta_aviso_confirmacion(INTERRUPCION, query_id, id_worker, program_counter);
 
@@ -132,21 +132,22 @@ void* manejar_worker(void* arg) {
                     program_counter = atoi(aviso->argumento);
                     query_id = get_worker_qid(id_worker);
 
-                    worker_libera_query(id_worker, query_id, program_counter);
+                    worker_libera_query_finalizado(id_worker, query_id, program_counter);
                     notificar_finalizacion_a_query_control(query_id);
 
+
+                    /*Está la confirmación para el caso en el que se quiera pedir una interrupción pero la
+                    misma justo finalizaba*/
                     alta_aviso_confirmacion(INTERRUPCION, query_id, id_worker, -1);
 
                     break;
 
                 case RESPUESTA_SIG_QUERY: 
-                    // TODO : Revisar si hay que agregar lógica previamente
                     
+                    //TODO Falta caso en el que el pedido falló
                     alta_aviso_confirmacion(PEDIDO_QUERY, -1, id_worker, -1);
 
-                /*
-                case ERROR (desde worker; hay que finalizar el query)
-                */
+                
                 case DESALOJO_QUERY_DIFERENTE_RESPUESTA: 
                         
                     uint32_t query_id_real = atoi(aviso->argumento);
@@ -168,11 +169,22 @@ void* manejar_worker(void* arg) {
                     UNLOCK(&mutex_confirmaciones);
                     break;
                     
+                case ERROR_QUERY:
 
+                    query_id = get_worker_qid(id_worker);
+
+                    char* mensaje_error = aviso->argumento;
+
+                    worker_libera_query_finalizado(id_worker, query_id, -1);
+                    notificar_finalizacion_especial_a_query_control(query_id, mensaje_error);
+
+                    break;
 
                 default:
                     break;
                 }
+
+                liberar_aviso_completo(aviso);
 
                 break;
                 
@@ -184,6 +196,11 @@ void* manejar_worker(void* arg) {
 
     close(cliente_fd);
     return NULL;
+}
+
+void liberar_aviso_completo(t_aviso_worker_master* aviso) {
+    free(aviso->argumento);
+    free(aviso);
 }
 
 
@@ -463,9 +480,19 @@ t_respuesta_desalojo solicitar_desalojo_bloqueante(t_worker_conectado* worker, u
                 break;
                 
             } else if (!conf->respuesta_recibida) {
-                respuesta_final.resultado = DESALOJO_WORKER_DESCONECTADO;
-                log_warning(get_logger(), "[DESALOJO] Worker %u se desconectó", worker->id_worker);
-                exito = true;
+                
+                if (!worker->worker_conectado) {
+                    respuesta_final.resultado = DESALOJO_WORKER_DESCONECTADO;
+                    log_warning(get_logger(), "[DESALOJO] Worker %u se desconectó", worker->id_worker);
+                    exito = true;
+                } else {
+                    log_error(get_logger(), "[DESALOJO] se llegó a punto muerto en el código, revisar camino del caso de uso");
+                    while(true) {
+                        printf("ERROR FATAL EN DESALOJO");
+                        sleep(5);
+                    }
+                }
+                
                 break;
             }
             

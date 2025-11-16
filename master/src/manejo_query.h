@@ -22,7 +22,8 @@ void* manejar_query(void* arg);
 
 bool mandar_lectura_a_query_con_id(char* string_crudo, uint32_t id_query);
 bool separar_string(char* input, char** file_tag, char** lectura);
-void notificar_error_a_query_control(int conexion_query);
+void notificar_error_desconexion_a_query_control(int conexion_query);
+void notificar_finalizacion_especial_a_query_control(int conexion_query, char* mensaje_personalizado);
 void notificar_finalizacion_a_query_control(uint32_t query_id);
 
 

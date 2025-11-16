@@ -110,7 +110,8 @@ typedef enum TipoAvisoMasterWorker{
     DEVOLUCION_X_INTERRUPCION, // tengo que devoler esto, cuando master me mande en "MotivoMasterWorker"
     RESPUESTA_SIG_QUERY,
     // : INTERRUPCION , entonces devuelvo "DEVOLUCION_X_INTERRUPCION".
-    DESALOJO_QUERY_DIFERENTE_RESPUESTA
+    DESALOJO_QUERY_DIFERENTE_RESPUESTA,
+    ERROR_QUERY
 } t_tipo_aviso_worker_master;
 
 typedef enum TipoAvisoMasterQuery{

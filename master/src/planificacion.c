@@ -725,7 +725,7 @@ void manejar_worker_desconectado(uint32_t worker_id, uint32_t query_id_ejecutand
                     query_id_ejecutando);
             
             
-            notificar_error_a_query_control(elemento->query->conexion);
+            notificar_error_desconexion_a_query_control(elemento->query->conexion);
         } else {
             LOCK(&mutex_cola_ready);
             bool encontrado = buscar_por_qid(cola_ready, query_id_ejecutando);
@@ -768,139 +768,160 @@ void manejar_worker_desconectado(uint32_t worker_id, uint32_t query_id_ejecutand
 
 void manejar_query_control_desconectado(uint32_t query_id_activo) {
 
-    LOCK(&mutex_estado_critico);
+    LOCK(&mutex_cola_exit);
+    bool encontrado = buscar_por_qid(cola_exit, query_id_activo);
+    UNLOCK(&mutex_cola_exit);
 
-    log_info(get_logger(), "Query Control %d desconectado", query_id_activo);
-    
-    if (query_id_activo >= 0) {
-        t_elemento_cola* elemento = NULL;
+    if(!encontrado) {
+        LOCK(&mutex_estado_critico);
+
+        log_info(get_logger(), "Query Control %d desconectado", query_id_activo);
         
-        // Buscar en READY primero
-        LOCK(&mutex_cola_ready);
-        elemento = buscar_y_remover_por_qid(cola_ready, query_id_activo);
-        UNLOCK(&mutex_cola_ready);
-        
-        if (elemento != NULL) {
-            // Estaba en ready, simplemente cancelar
+        if (query_id_activo >= 0) {
+            t_elemento_cola* elemento = NULL;
             
-            LOCK(&mutex_cola_exit);
-            list_add(cola_exit, elemento);
-            UNLOCK(&mutex_cola_exit);
-            
-        } else {
-            // Buscar en EXEC
-            LOCK(&mutex_cola_exec);
-            elemento = buscar_y_remover_por_qid(cola_exec, query_id_activo);
-            UNLOCK(&mutex_cola_exec);
+            // Buscar en READY primero
+            LOCK(&mutex_cola_ready);
+            elemento = buscar_y_remover_por_qid(cola_ready, query_id_activo);
+            UNLOCK(&mutex_cola_ready);
             
             if (elemento != NULL) {
-                // Estaba ejecutándose, desalojar worker
+                // Estaba en ready, simplemente cancelar
                 
-                t_worker_conectado* worker_a_desalojar = obtener_worker_por_query_id(query_id_activo);
-                uint32_t worker_id = worker_a_desalojar->id_worker; 
+                LOCK(&mutex_cola_exit);
+                list_add(cola_exit, elemento);
+                UNLOCK(&mutex_cola_exit);
                 
-                UNLOCK(&mutex_estado_critico);
-
-                t_respuesta_desalojo respuesta = solicitar_desalojo_bloqueante(worker_a_desalojar, query_id_activo);
-
-                LOCK(&mutex_estado_critico);
+            } else {
+                // Buscar en EXEC
+                LOCK(&mutex_cola_exec);
+                elemento = buscar_y_remover_por_qid(cola_exec, query_id_activo);
+                UNLOCK(&mutex_cola_exec);
                 
+                if (elemento != NULL) {
+                    // Estaba ejecutándose, desalojar worker
+                    
+                    t_worker_conectado* worker_a_desalojar = obtener_worker_por_query_id(query_id_activo);
+                    uint32_t worker_id = worker_a_desalojar->id_worker; 
+                    
+                    UNLOCK(&mutex_estado_critico);
 
-                switch (respuesta.resultado) {
-                    case DESALOJO_EXITOSO:
-                        
-                        LOCK(&mutex_cola_exit);
-                        list_add(cola_exit, elemento);
-                        UNLOCK(&mutex_cola_exit);
-                        
-                        // Liberar worker
-                        sem_post(cant_workers_libres);
-                        
-                        log_info(get_logger(), "Query %d cancelado y worker %d desalojado", 
-                                query_id_activo, worker_id);
-                        break; 
-                        
-                    case DESALOJO_QUERY_DIFERENTE:
-                        
-                        log_warning(get_logger(), 
-                                "Race condition: Worker tiene Query %d en vez de %d; buscando en más lugares",
-                                respuesta.query_id_actual, query_id_activo);
-                        
-                        
+                    t_respuesta_desalojo respuesta = solicitar_desalojo_bloqueante(worker_a_desalojar, query_id_activo);
 
-                        LOCK(&mutex_cola_ready);
-                        elemento = buscar_y_remover_por_qid(cola_ready, query_id_activo);
-                        UNLOCK(&mutex_cola_ready);
-                        
+                    LOCK(&mutex_estado_critico);
+                    
+                    bool en_exit = false;
 
-                        if(elemento != NULL){
-
+                    switch (respuesta.resultado) {
+                        case DESALOJO_EXITOSO:
+                            
                             LOCK(&mutex_cola_exit);
                             list_add(cola_exit, elemento);
                             UNLOCK(&mutex_cola_exit);
+                            
+                            // Liberar worker
+                            sem_post(cant_workers_libres);
+                            
+                            log_info(get_logger(), "Query %d cancelado y worker %d desalojado", 
+                                    query_id_activo, worker_id);
+                            break; 
+                            
+                        case DESALOJO_QUERY_DIFERENTE:
+                            
+                            log_warning(get_logger(), 
+                                    "Race condition: Worker tiene Query %d en vez de %d; buscando en más lugares",
+                                    respuesta.query_id_actual, query_id_activo);
+                            
+                            
 
-                            log_warning(get_logger(), "Query %d se encontró en READY, se pasa a EXIT", 
+                            LOCK(&mutex_cola_ready);
+                            elemento = buscar_y_remover_por_qid(cola_ready, query_id_activo);
+                            UNLOCK(&mutex_cola_ready);
+                            
+
+                            if(elemento != NULL){
+
+                                LOCK(&mutex_cola_exit);
+                                list_add(cola_exit, elemento);
+                                UNLOCK(&mutex_cola_exit);
+
+                                log_warning(get_logger(), "Query %d se encontró en READY, se pasa a EXIT", 
+                                    query_id_activo);
+
+                                break;
+                            }
+
+                            LOCK(&mutex_cola_exit);
+                                en_exit = buscar_por_qid(cola_exit, query_id_activo);
+                            UNLOCK(&mutex_cola_exit);
+
+                            if(en_exit) {
+                                
+                                log_warning(get_logger(), "Query %d se encontró en EXIT, ya había finalizado", 
                                 query_id_activo);
+                                
+                                break;
+                            }
 
-                            break;
-                        }
 
-                        LOCK(&mutex_cola_exit);
-                            bool en_exit = buscar_por_qid(cola_exit, query_id_activo);
-                        UNLOCK(&mutex_cola_exit);
-
-                        if(en_exit) {
+                            log_error(get_logger(), "Desalojo falló: resultado=%d", respuesta.resultado);
                             
-                            log_warning(get_logger(), "Query %d se encontró en EXIT, ya había finalizado", 
-                            query_id_activo);
+                            while(true) {
+                                printf("ERROR FATAL EN MASTER AL BUSCAR QUERY ID: %d EN WORKER ID: %d",query_id_activo, worker_id);
+                                sleep(5);
+                            }
                             
-                            break;
-                        }
+                            
+                            
+                        case DESALOJO_TIMEOUT:
 
+                            log_error(get_logger(), "Desalojo falló: resultado=%d", respuesta.resultado);
+                            
+                            while(true) {
+                                printf("ERROR EN DESALOJO, worker tardó demasiado en responder y se llegó al TIMEOUT");
+                                sleep(5);
+                            }
 
-                        log_error(get_logger(), "Desalojo falló: resultado=%d", respuesta.resultado);
-                        
-                        while(true) {
-                            printf("ERROR FATAL EN MASTER AL BUSCAR QUERY ID: %d EN WORKER ID: %d",query_id_activo, worker_id);
-                            sleep(5);
-                        }
-                        
-                        
-                        
-                    case DESALOJO_TIMEOUT:
+                        case DESALOJO_WORKER_DESCONECTADO:
+                            
+                            LOCK(&mutex_cola_exit);
+                                en_exit = buscar_por_qid(cola_exit, query_id_activo);
+                            UNLOCK(&mutex_cola_exit);
 
-                        log_error(get_logger(), "Desalojo falló: resultado=%d", respuesta.resultado);
-                        
-                        while(true) {
-                            printf("ERROR EN DESALOJO POR DESONEXIÓN, worker tardó demasiado en responder y se llegó al TIMEOUT");
-                            sleep(5);
-                        }
+                            if(en_exit) {
+                                
+                                log_warning(get_logger(), "Query %d se encontró en EXIT, ya había finalizado", 
+                                query_id_activo);
+                                
+                                break;
+                            }
 
-                    case DESALOJO_WORKER_DESCONECTADO:
-                        
-                        // TODO
-                        
-                        
+                            log_error(get_logger(), "Desalojo falló: resultado=%d", respuesta.resultado);
+                            
+                            while(true) {
+                                printf("ERROR FATAL EN MASTER AL BUSCAR QUERY ID: %d EN WORKER ID: %d",query_id_activo, worker_id);
+                                sleep(5);
+                            }
+                            
 
-                        break;
+                        case DESALOJO_ERROR_FATAL:
+                            log_error(get_logger(), "Desalojo falló: resultado=%d", respuesta.resultado);
+                            
+                            while(true) {
+                                printf("ERROR FATAL EN DESALOJO");
+                                sleep(5);
+                            }
+                    }
 
-                    case DESALOJO_ERROR_FATAL:
-                        log_error(get_logger(), "Desalojo falló: resultado=%d", respuesta.resultado);
-                        
-                        while(true) {
-                            printf("ERROR FATAL EN DESALOJO");
-                            sleep(5);
-                        }
                 }
-
             }
         }
-    }
 
-    UNLOCK(&mutex_estado_critico);
+        UNLOCK(&mutex_estado_critico);
+    }
 }
 
-void worker_libera_query(uint32_t worker_id, uint32_t query_id, uint32_t pc) {
+void worker_libera_query_finalizado(uint32_t worker_id, uint32_t query_id, uint32_t pc) {
     LOCK(&mutex_estado_critico);
     
     t_elemento_cola* elemento = NULL;
@@ -915,7 +936,11 @@ void worker_libera_query(uint32_t worker_id, uint32_t query_id, uint32_t pc) {
         list_add(cola_exit, elemento);
         UNLOCK(&mutex_cola_exit);
         
-        log_info(get_logger(), "Query %d completado por worker %d", query_id, worker_id);
+        if(pc != -1) {
+            log_info(get_logger(), "Query %d completado por worker %d", query_id, worker_id);
+        } else {
+            log_warning(get_logger(), "Query %d finalizado con error por worker %d", query_id, worker_id);
+        }
     }
 
     establecer_worker_desalojado(worker_id);
