@@ -144,8 +144,8 @@ void* manejar_worker(void* arg) {
 
                 case RESPUESTA_SIG_QUERY: 
                     
-                    //TODO Falta caso en el que el pedido falló
-                    alta_aviso_confirmacion(PEDIDO_QUERY, -1, id_worker, -1);
+                    uint32_t resultado = atoi(aviso->argumento);
+                    alta_aviso_confirmacion(PEDIDO_QUERY, -1, id_worker, resultado);
 
                 
                 case DESALOJO_QUERY_DIFERENTE_RESPUESTA: 
@@ -362,8 +362,20 @@ bool asignar_query_a_worker(t_query* query, t_worker_conectado* worker) {
 
         if (resultado == 0 && conf->respuesta_recibida) {
             
-            exito_asignacion = true;
-            break;
+            switch (conf->dato_respuesta) {
+                case OK:
+                    exito_asignacion = true;
+                    break;
+
+                case ERROR:
+                    exito_asignacion = false;
+                    break;
+                
+                default:
+                    log_error(get_logger(), "ERROR EN CONFIRMACION: se recibió una respuesta inesperada desde worker");
+                    break;
+            }
+            
 
         } else if (resultado == -1 && errno == ETIMEDOUT) {
             log_error(get_logger(), "[ASIGNACION] TIMEOUT esperando Worker %u; reintentando...", worker->id_worker);

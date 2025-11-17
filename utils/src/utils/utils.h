@@ -81,7 +81,7 @@ void crear_buffer(t_paquete* paquete);
 // -- Enums --
 // ------------------------------------------------------------------------------------------
 
-typedef enum {
+typedef enum ResultadoOKError{
     OK,
     ERROR,
 } t_resultado_operacion_default;
