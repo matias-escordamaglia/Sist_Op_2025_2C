@@ -120,9 +120,11 @@ void* manejar_worker(void* arg) {
                     program_counter = atoi(aviso->argumento);
                     query_id = get_worker_qid(id_worker);
 
-                    //TODO: Revisar si esta funcion va aquí o hay que modificar esta lógica
-                    //Acordarse del caso desalojo por desconexion query
-                    //worker_libera_query_finalizado(id_worker, query_id, program_counter);
+                    /*
+                    La lógica de reubicar los querys de las colas está en la planificación ya, tanto para el caso
+                    de query_desconectado como el de desalojo por algoritmo
+                    */
+                    establecer_worker_desalojado(id_worker);
 
                     alta_aviso_confirmacion(INTERRUPCION, query_id, id_worker, program_counter);
 
