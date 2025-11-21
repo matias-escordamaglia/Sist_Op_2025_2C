@@ -76,6 +76,13 @@ void* recibir_buffer(int* size, int socket_cliente);
 void* recibir_buffer_con_logger(int* size, int socket_cliente, t_log* logger);
 void crear_buffer(t_paquete* paquete);
 
+/** 
+* @brief Transforma un Int a un Char*
+* @param valor Número a convertir a String
+* @return char*
+*/
+char* convertir_int_a_string(int valor);
+
 
 // ------------------------------------------------------------------------------------------
 // -- Enums --

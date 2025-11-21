@@ -112,7 +112,22 @@ void* manejar_worker(void* arg) {
                 {
                 case NUEVA_LECTURA:
                     char* lectura = aviso->argumento;
-                    mandar_lectura_a_query_con_id(lectura, get_worker_qid(id_worker));
+                    uint32_t query_id_actual = get_worker_qid(id_worker);
+
+                    int intentos = 0;
+                    while (query_id_actual == -1 && intentos < 10) {
+                        log_warning(get_logger(), "[RACE CONDITION] Worker %d envió lectura pero figura sin QID. Reintento (%d/10)...", id_worker, intentos+1);
+                        usleep(100000);
+                        
+                        query_id_actual = get_worker_qid(id_worker);
+                        intentos++;
+                    }
+
+                    if (query_id_actual == -1) {
+                        log_error(get_logger(), "ERROR: Se recibió lectura del Worker %d pero sigue sin QID asignado tras reintentos.", id_worker);
+                    } else {
+                        mandar_lectura_a_query_con_id(lectura, query_id_actual);
+                    }
 
                     break;
                     
@@ -148,6 +163,8 @@ void* manejar_worker(void* arg) {
                     
                     uint32_t resultado = atoi(aviso->argumento);
                     alta_aviso_confirmacion(PEDIDO_QUERY, -1, id_worker, resultado);
+
+                    break;
 
                 
                 case DESALOJO_QUERY_DIFERENTE_RESPUESTA: 
@@ -309,7 +326,7 @@ void* tratar_siguientes_pedidos_a_enviar_worker(void* _) {
 
 
         if (enviar_siguiente_pedido(worker, pedido)) {
-            log_info(get_logger(), "[ENVIO] Pedido enviado a Worker %u. Quien lo llamó esperará confirmación.", 
+            log_info(get_logger(), "[ENVIO] Pedido enviado a Worker %u", 
                      worker->id_worker);
         } else {
             log_error(get_logger(), "[ERROR] Falló el envío a Worker %u", worker->id_worker);
@@ -377,6 +394,8 @@ bool asignar_query_a_worker(t_query* query, t_worker_conectado* worker) {
                     log_error(get_logger(), "ERROR EN CONFIRMACION: se recibió una respuesta inesperada desde worker");
                     break;
             }
+
+            break;
             
 
         } else if (resultado == -1 && errno == ETIMEDOUT) {
@@ -418,6 +437,20 @@ void alta_aviso_confirmacion(t_motivo_pedido_master_worker motivo_pedido, uint32
     LOCK(&mutex_confirmaciones);
         t_confirmacion_pedido* conf = dictionary_get(confirmaciones_por_worker, key);
         if (conf != NULL && conf->tipo_pedido == motivo_pedido) {
+
+            if (motivo_pedido == PEDIDO_QUERY && dato_extra == OK) { 
+                t_worker_conectado* worker = obtener_worker_por_id_uso_externo(id_worker);
+                if (worker) {
+                    
+                    asociar_qid_a_worker(conf->query_id, worker); 
+                    
+                    log_info(get_logger(), "[DEBUG] Race Condition evitada: QID %d asociado a Worker %d al recibir confirmación", 
+                            conf->query_id, id_worker);
+                } else {
+                    log_error(get_logger(), "ERROR; no se encontró dato worker pese a que se llama desde un worker");
+                }
+            }
+
             conf->respuesta_recibida = true;
             conf->dato_respuesta = dato_extra;
             sem_post(&conf->sem_respuesta);

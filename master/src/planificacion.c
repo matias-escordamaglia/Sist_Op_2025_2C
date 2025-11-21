@@ -441,9 +441,11 @@ void agregar_query_ordenada(t_list* lista, t_elemento_cola* elemento) {
     elemento->tiempo_llegada = timestamp_actual_en_milisegundos();
 }
 
+//
 void procesar_asignacion_query_a_worker(t_elemento_cola* query_candidata, t_worker_conectado* worker_libre) {
     if (asignar_query_a_worker(query_candidata->query, worker_libre)) {
-        asociar_qid_a_worker(query_candidata->query->query_id, worker_libre);
+
+        //en worker_conexion.c se hace la asignación una vez llega la confirmación allí
 
         LOCK(&mutex_cola_exec);
             list_add(cola_exec, query_candidata);

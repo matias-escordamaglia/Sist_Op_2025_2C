@@ -11,7 +11,7 @@ void* manejar_query(void* arg) {
     uint32_t confirmacion = HANDSHAKE_OK;
     send(cliente_fd, &confirmacion, sizeof(uint32_t), 0);
 
-    t_query* query;
+    t_query* query = NULL;
     
     while (1) {
         int cod_op = recibir_operacion(cliente_fd, get_logger());
@@ -82,14 +82,25 @@ bool mandar_lectura_a_query_con_id(char* string_crudo, uint32_t id_query) {
         printf("FILE:TAG: %s\n", file_tag);
         printf("Lectura: %s\n", lectura);
        
-    } else {
+    } else {        
         printf("Error al separar el string\n");
+        free(file_tag);
+        free(lectura);
         return false;
     }
 
     t_aviso_master_query* aviso_lectura = malloc(sizeof(t_aviso_master_query));
 
     t_query* query = obtener_query_por_id_uso_externo(id_query);
+    
+
+    if(query == NULL) {
+        log_error(get_logger(), "[MANEJO_QUERY] Error: No se encontró query ID %d", id_query);
+        free(file_tag);
+        free(lectura);
+        free(aviso_lectura);
+        return false;
+    }
 
     aviso_lectura->motivo = LECTURA_QUERY;
     aviso_lectura->file_tag = file_tag;
@@ -98,6 +109,9 @@ bool mandar_lectura_a_query_con_id(char* string_crudo, uint32_t id_query) {
     t_paquete* paquete = empaquetar_aviso_master_query(aviso_lectura);
     if (!paquete) {
         log_error(get_logger(), "[MANEJO_QUERY] No se pudo empaquetar el aviso a query");
+        free(file_tag);
+        free(lectura);
+        free(aviso_lectura);
         return false;
     }
 

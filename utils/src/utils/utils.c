@@ -396,3 +396,14 @@ void establecer_datos_para_prueba_conexion() {
         }
     }
 }
+
+char* convertir_int_a_string(int valor) {
+
+    char* str = malloc(12 * sizeof(char)); 
+    
+    if (str == NULL) return NULL;
+
+    snprintf(str, 12, "%d", valor);
+
+    return str;
+}
