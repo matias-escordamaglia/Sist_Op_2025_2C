@@ -113,7 +113,7 @@ bool ejecutar_linea(char* linea, uint32_t queryid) {
                 return false;
             }
 
-            // // Llama directo a memoria (asume query_id en pedido, ajusta si no)
+            // Llama directo a memoria (asume query_id en pedido, ajusta si no)
             int ok = memoria_write(&w, queryid);
             if (ok < 0) {
               finalizar_query_con_error(ERROR_QUERY, ok);
@@ -126,9 +126,40 @@ bool ejecutar_linea(char* linea, uint32_t queryid) {
             return true;
         }
         case READ: {
-            // TODO: parsear y ejecutar READ <file>:<tag> <offset|bloque> <tamanio>
-            log_warning(logger, "READ aún no implementado: %s", linea);
-            return false;
+            t_write r = {0};
+            if (!parsear_write_params(params, &r)) {
+                log_error(logger, "Sintaxis READ inválida: %s", linea);
+                return false;
+            }
+
+            // 1. Preparamos un buffer para recibir los datos leídos desde memoria
+            void* buffer_leido = malloc(r.len);
+            if (!buffer_leido) {
+                log_error(logger, "Fallo malloc en READ");
+                destruir_write(&r);
+                return false;
+            }
+            // Inicializo en 0 por seguridad
+            memset(buffer_leido, 0, r.len); 
+
+            // 2. Llamada a memoria (igual que write, pero pasando el buffer vacio para llenar)
+            int ok = memoria_read(&r, buffer_leido, queryid);
+            
+            if (ok < 0) {
+                finalizar_query_con_error(ERROR_QUERY, ok);
+                free(buffer_leido);
+                destruir_write(&r);
+                return false;
+            }
+
+            enviar_lectura_a_master(r.file, r.tag, buffer_leido, r.len, queryid);
+            // Log obligatorio
+            log_info(logger, "## Query %u: - Instrucción realizada: READ", queryid);
+
+            // Limpieza
+            free(buffer_leido);
+            destruir_write(&r);
+            return true;
         }
         case TAG: {
             t_tag t = {0};
@@ -150,6 +181,7 @@ bool ejecutar_linea(char* linea, uint32_t queryid) {
         case COMMIT: {
             //aplicar FLUSH
             t_create c = {0};
+            flush_file_tag_en_memoria(c.nombre_archivo, c.tag, queryid);
             if (!parsear_create_params(params, &c)) {
                 log_error(logger, "Sintaxis COMMIT inválida: %s", linea);
                 return false;
@@ -168,12 +200,23 @@ bool ejecutar_linea(char* linea, uint32_t queryid) {
             return true;
         }
         case FLUSH: {
-            // TODO: parsear/ejecutar FLUSH <file>:<tag>
-            log_warning(logger, "FLUSH aún no implementado: %s", linea);
-            return false;
+            t_create c = {0}; 
+            if (!parsear_create_params(params, &c)) {
+                log_error(logger, "Sintaxis FLUSH inválida: %s", linea);
+                return false;
+            }
+
+            flush_file_tag_en_memoria(c.nombre_archivo, c.tag, queryid);
+            
+            log_info(logger, "## Query %u: - Instrucción realizada: FLUSH", queryid);
+
+            // 4. Limpieza
+            destruir_create(&c);
+            return true;
         }
         case DELETE: {
             t_create c = {0};
+            flush_file_tag_en_memoria(c.nombre_archivo, c.tag, queryid);
             if (!parsear_create_params(params, &c)) {
                 log_error(logger, "Sintaxis DELETE inválida: %s", linea);
                 return false;
@@ -212,6 +255,47 @@ bool ejecutar_linea(char* linea, uint32_t queryid) {
             log_error(logger, "Operacion no soportada: %d", op);
             return false;
     }
+}
+void flush_file_tag_en_memoria(char* file, char* tag, uint32_t id_query) {
+    pthread_mutex_lock(&mutex_mem);
+
+    t_tabla_paginas* tabla = buscar_en_lista_global(file, tag);
+
+    if (tabla == NULL) {
+        pthread_mutex_unlock(&mutex_mem);
+        return;
+    }
+
+    int cantidad_paginas = list_size(tabla->paginas_proceso);
+
+    for (int i = 0; i < cantidad_paginas; i++) {
+        t_entrada_pagina* entrada = (t_entrada_pagina*)list_get(tabla->paginas_proceso, i);
+
+        if (entrada->presente && entrada->modificado) {
+            if (escribir_pagina_a_storage(entrada, id_query) == 0) {
+                entrada->modificado = false;
+            } else {
+                log_error(logger, "Query %u: Error al hacer FLUSH de página %u", id_query, entrada->nro_pagina);
+            }
+        }
+    }
+
+    pthread_mutex_unlock(&mutex_mem);
+}
+
+void enviar_lectura_a_master(char* file, char* tag, void* contenido, uint32_t tamanio, uint32_t query_id) {
+    t_paquete* paquete = crear_paquete();
+    
+    // Opción recomendada (Protocolo custom):
+    insertar_uint32_a_paquete(paquete, NUEVA_LECTURA);
+    insertar_uint32_a_paquete(paquete, query_id);
+    insertar_string_a_paquete(paquete, file);
+    insertar_string_a_paquete(paquete, tag);
+    
+    insertar_bytes_a_paquete(paquete, contenido, tamanio);
+
+    enviar_paquete(paquete, conexion_master);
+    eliminar_paquete(paquete);
 }
 
 void finalizar_query_con_error(t_tipo_aviso_worker_master tipodeerror, int motivo) {
