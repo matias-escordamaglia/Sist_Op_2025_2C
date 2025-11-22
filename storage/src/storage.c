@@ -53,11 +53,6 @@ int main(int argc, char **argv)
     
     char* archivo_superBlock_path = argv[2];
     char* archivo_config_path = argv[1];
-    char* nombre_m = argv[0]; 
-
-    printf("esto es nomb: %s\n", nombre_m);
-    printf("esto es config: %s\n", archivo_config_path);
-    printf("esto es SB %s\n", archivo_superBlock_path);
 
     t_log* log_temp = log_create("temp.log","STORAGE",true,LOG_LEVEL_INFO); 
     config = iniciar_config(log_temp,archivo_config_path);
@@ -74,10 +69,10 @@ int main(int argc, char **argv)
 
     server_fd_general = iniciar_servidor(NULL, PUERTO_ESCUCHA, logger);
     if (server_fd_general == -1)
-    {
-        log_error(logger, "No se pudo iniciar el servidor general. Terminando.");
-        return EXIT_FAILURE;
-    }
+        {
+            log_error(logger, "No se pudo iniciar el servidor general. Terminando.");
+            return EXIT_FAILURE;
+        }
 
     int *server_fd_copy = malloc(sizeof(int));
     *server_fd_copy = server_fd_general;
@@ -723,14 +718,20 @@ int asignar_bloque_logico(char* ruta_logical_block){
     int bloque_fisico = encontrar_y_reservar_bloque(); 
     if (bloque_fisico == -1) {
         log_error(logger, "Espacio insuficiente en el bitmap");
-        // (Manejar el error, quizás devolver un código de error)
-        return -1;
+        return ERROR_ESPACIO_INSUFICIENTE;
     }
     char* nombre_block = crear_nombre_block(bloque_fisico, k); 
     char* pre_ruta = add_seg_ruta("/physical_blocks",nombre_block);
     char* ruta_F_block = add_seg_ruta(PUNTO_MONTAJE,pre_ruta);
 //encontrar numero de bloque logico a esta ruta
     int posicion = buscar_num_ultimo_bloque(ruta_logical_block);
+    if(posicion<0){
+        free(nombre_block);
+        free(pre_ruta);
+        free(ruta_F_block);
+        liberar_bloque_reservado(bloque_fisico); 
+        return ERROR_DESCONOCIDO; 
+    }
     int Q = 6; 
     char* nombre_block_logic = crear_nombre_block(posicion, Q); 
     char* ruta_L_block_final= add_seg_ruta(ruta_logical_block, nombre_block_logic);
@@ -747,7 +748,7 @@ int asignar_bloque_logico(char* ruta_logical_block){
         free(nombre_block_logic);
         free(ruta_L_block_final);
 
-        return -1; 
+        return ERROR_DESCONOCIDO; 
 
     }
     log_info(logger, "Hard link creado: %s -> %s", ruta_L_block_final, ruta_F_block);
@@ -767,7 +768,7 @@ int asignar_bloque_logico_especifico(char* ruta_logical_block, int num_bloque_lo
     int bloque_fisico = encontrar_y_reservar_bloque(); 
     if (bloque_fisico == -1) {
         log_error(logger, "Espacio insuficiente en el bitmap");
-        return -1;
+        return ERROR_ESPACIO_INSUFICIENTE;
     }
     
     char* nombre_block = crear_nombre_block(bloque_fisico, k); 
@@ -783,7 +784,7 @@ int asignar_bloque_logico_especifico(char* ruta_logical_block, int num_bloque_lo
         log_error(logger, "No se pudo crear Hard Link para %s. Error: %s", nombre_block_logic, strerror(errno));
         free(nombre_block); free(pre_ruta); free(ruta_F_block); 
         free(nombre_block_logic); free(ruta_L_block_final);
-        return -1; 
+        return ERROR_DESCONOCIDO; 
     }
     
     log_info(logger, "Hard link creado: %s -> %s", nombre_block_logic, nombre_block);
@@ -828,7 +829,7 @@ int encontrar_y_reservar_bloque() {
 
     int bloque_libre = buscar_primer_bloque_libre(BA_bitmap);
 
-    if (bloque_libre != -1) {
+    if (bloque_libre > 0) {
         bitarray_set_bit(BA_bitmap, bloque_libre);
     }
 
@@ -846,7 +847,7 @@ int buscar_primer_bloque_libre() {
     }
 
     log_error(logger, "No se encontró espacio libre en el bitmap.");
-    return -1; 
+    return ERROR_ESPACIO_INSUFICIENTE; 
 }
 int buscar_num_ultimo_bloque(char* ruta_logical_block){
  // ruta_logical_block es ".../files/FILE/TAG/logical_blocks"
@@ -854,7 +855,7 @@ int buscar_num_ultimo_bloque(char* ruta_logical_block){
     char* ultimo_slash = strrchr(ruta_logical_block, '/');
     if (ultimo_slash == NULL) {
         log_error(logger, "Ruta inválida: %s", ruta_logical_block);
-        return -1;
+        return ERROR_DESCONOCIDO;
     }
 
     char* ruta_tag = strndup(ruta_logical_block, ultimo_slash - ruta_logical_block);
@@ -866,7 +867,7 @@ int buscar_num_ultimo_bloque(char* ruta_logical_block){
         log_error(logger, "No se pudo leer metadata en: %s", ruta_metadata);
         free(ruta_tag);
         free(ruta_metadata);
-        return -1; 
+        return ERROR_DESCONOCIDO; 
     }
 
     int tamaño = config_get_int_value(temp, "TAMAÑO");
@@ -890,7 +891,7 @@ int actualizar_metadata_bloque(char* file, char* tag, int num_L_block_a_cambiar,
     if (config == NULL) {
         log_error(logger, "Error al abrir metadata para actualizar: %s", ruta_metadata);
         free(ruta_files); free(ruta_file); free(ruta_tag); free(ruta_metadata);
-        return -1;
+        return ERROR_DESCONOCIDO;
     }
 
     char** bloques_array = config_get_array_value(config, "BLOCKS");
@@ -898,7 +899,7 @@ int actualizar_metadata_bloque(char* file, char* tag, int num_L_block_a_cambiar,
         log_error(logger, "Error al leer 'BLOCKS' de metadata: %s", ruta_metadata);
         config_destroy(config);
         free(ruta_files); free(ruta_file); free(ruta_tag); free(ruta_metadata);
-        return -1;
+        return ERROR_DESCONOCIDO;
     }
 
     int array_size = 0;
@@ -911,7 +912,7 @@ int actualizar_metadata_bloque(char* file, char* tag, int num_L_block_a_cambiar,
         string_array_destroy(bloques_array);
         config_destroy(config);
         free(ruta_files); free(ruta_file); free(ruta_tag); free(ruta_metadata);
-        return -1;
+        return ERROR_FUERA_DE_LIMITE;
     }
 
     free(bloques_array[num_L_block_a_cambiar]); 
@@ -995,7 +996,7 @@ int actualizar_dicc_estado(char* key_file_tag,int nuevo_estado){
     if(!dictionary_has_key(dicc_estado_tag, key_file_tag)){
         log_error(logger, "Error: Se intentó actualizar un estado no existente: %s", key_file_tag);
         pthread_mutex_unlock(&mutex_dic_estado);
-        return -1;
+        return ERROR_FILE_TAG_INEXISTENTE;
     }
     intptr_t estado_ptr = (intptr_t)nuevo_estado; 
     dictionary_put(dicc_estado_tag, key_file_tag, (void*)(intptr_t)estado_ptr);
