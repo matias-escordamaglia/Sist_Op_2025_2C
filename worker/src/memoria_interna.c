@@ -9,7 +9,6 @@ t_bitarray* bitmap_marcos;
 char* algoritmo_reemplazo;
 uint32_t retardo_memoria;
 int puntero_clock_;
-pthread_mutex_t mutex_mem = PTHREAD_MUTEX_INITIALIZER;
 t_list* lista_global_tablas;
 
 void iniciar_memoria_interna(t_config *config) {
@@ -56,6 +55,10 @@ void free_tabla(void *elem) {
     free(tabla);
 }
 
+int memoria_read(t_write* r, void* buffer_destino, uint32_t id_query) {
+    return acceder_memoria(r->file, r->tag, r->dir_base, buffer_destino, r->len, false, id_query);
+}
+
 int memoria_write(t_write* w, uint32_t id_query) {
     return acceder_memoria(w->file, w->tag,(uint32_t)w->dir_base, (void*)w->data, (uint32_t)w->len,true, id_query);
 }
@@ -89,7 +92,14 @@ int acceder_memoria(char* file, char* tag,uint32_t dir_base, void *buffer, uint3
             marcar_modificada(entrada);
             // log_escritura(id_query, df, (char*)buffer + seg.offset_en_buffer, (int)seg.bytes_en_pagina);
         } else {
-            // reservado para READ en el futuro
+
+            void* origen = (char*)memoria_interna + df;
+            void* destino = (char*)buffer + seg.offset_en_buffer;
+            
+            memcpy(destino, origen, seg.bytes_en_pagina);
+
+            log_info(logger, "Query %u: Acción: LEER - Dirección Física: %u - Tamaño leido: %u", 
+                     id_query, df, seg.bytes_en_pagina);
         }
         //habria que agregar que para cualquier acceso a la pagina se actualice el tiempo de ultimo uso para el LRU
 
@@ -172,13 +182,12 @@ t_entrada_pagina* asegurar_pagina_presente(t_tabla_paginas* tabla, uint32_t nro_
     if (marco < 0) return NULL;
 
     if (victima) {
-    // === Se ejecutó reemplazo ===
     // (A) Si estaba modificada → sobreescribir
     if (victima->modificado) {
-        // if (escribir_pagina_a_storage(victima, id_query) < 0) {
-        //     devolver_marco(marco);
-        //     return NULL;
-        // }
+        if (escribir_pagina_a_storage(victima, id_query) < 0) {
+             devolver_marco(marco);
+             return NULL;
+        }
     }
 
      t_tabla_paginas* v_tabla = encontrar_tabla_de_entrada(victima);
@@ -196,18 +205,131 @@ t_entrada_pagina* asegurar_pagina_presente(t_tabla_paginas* tabla, uint32_t nro_
                  id_query, (unsigned)victima->marco_num, v_file, v_tag);
 
     // Si tenés una función extra para liberar la víctima (ej: set presente=false, etc.)
-    // liberar_marco_de_victima(victima, id_query);
+    liberar_marco_de_victima(victima, id_query);
     }
 
     // Cargar la página desde Storage (común a ambos casos de miss), cargo pq la pegina que quiero no esta en Memoria interna.
-    // if (cargar_pagina_desde_storage(tabla, nro_pagina, marco, id_query) < 0) {
-    //     devolver_marco(marco);
-    //     return NULL;
-    // }
+    if (cargar_pagina_desde_storage(tabla, nro_pagina, marco, id_query) < 0) {
+        devolver_marco(marco);
+        return NULL;
+    }
 
     e = indico_entrada_presente(tabla, nro_pagina, marco);
     return e;
 }
+
+int escribir_pagina_a_storage(t_entrada_pagina* victima, uint32_t id_query) {
+   
+    // 1. Identificar a quién pertenece la víctima
+    t_tabla_paginas* tabla_owner = encontrar_tabla_de_entrada(victima);
+    if (!tabla_owner) {
+        log_info(logger, "Error: Intento de SWAP OUT de pagina huérfana (marco %d)", victima->marco_num);
+        return -1;
+    }
+
+    // 2. Calcular dirección física real en el malloc grande
+    uint32_t offset_memoria = victima->marco_num * tam_pagina;
+    void* contenido_pagina = (char*)memoria_interna + offset_memoria;
+
+    t_paquete* paquete = crear_paquete(); 
+    insertar_uint32_a_paquete(paquete, WRITE);
+    insertar_string_a_paquete(paquete, tabla_owner->file);
+    insertar_string_a_paquete(paquete, tabla_owner->tag);
+    insertar_uint32_a_paquete(paquete, victima->nro_pagina);
+
+    // IMPORTANTE: Usar inserción binaria, NO string
+    insertar_bytes_a_paquete(paquete, contenido_pagina, tam_pagina); 
+
+    insertar_uint32_a_paquete(paquete, id_query); // Para logs del Storage
+
+    // 4. Enviar y liberar
+    enviar_paquete(paquete, conexion_storage);
+    eliminar_paquete(paquete);
+
+    int respuesta = recibir_operacion(conexion_storage, logger);
+    
+    if (respuesta != OK) {
+        log_error(logger, "Query %u: Fallo al persistir pagina %u en Storage. Codigo: %d", id_query, victima->nro_pagina, respuesta);
+        if(respuesta == MENSAJE) {
+             char* err_msg = recibir_y_devolver_mensaje(conexion_storage, logger);
+             free(err_msg);
+        }
+        return -1;
+    }
+    
+    // Si responde con un mensaje de exito, consumirlo para limpiar el buffer del socket
+    if(respuesta == MENSAJE) {
+        char* msg = recibir_y_devolver_mensaje(conexion_storage, logger);
+        free(msg);
+    }
+    return 0;
+}
+
+int cargar_pagina_desde_storage(t_tabla_paginas* tabla, uint32_t nro_pagina, int marco_asignado, uint32_t id_query) {
+    
+    // 1. Armar paquete READ
+    // Protocolo: OP_CODE | FILE | TAG | NRO_PAGINA | ID_QUERY
+    t_paquete* paquete = crear_paquete();
+    insertar_uint32_a_paquete(paquete, READ);
+    insertar_string_a_paquete(paquete, tabla->file);
+    insertar_string_a_paquete(paquete, tabla->tag);
+    insertar_uint32_a_paquete(paquete, nro_pagina);
+    insertar_uint32_a_paquete(paquete, id_query);
+
+    enviar_paquete(paquete, conexion_storage);
+    eliminar_paquete(paquete);
+
+    // 2. Recibir respuesta
+    int op_code = recibir_operacion(conexion_storage, logger);
+    
+    // Manejo de errores del Storage
+    if (op_code != RESPONSE) { // Asumiendo que RESPONSE es el codigo de "acá van los datos"
+        log_error(logger, "Query %u: Storage no entregó bloque %u. OpCode: %d", id_query, nro_pagina, op_code);
+        return -1;
+    }
+
+    // 3. Recibir el buffer binario
+    int size_recibido = 0;
+    void* stream_datos = recibir_buffer(&size_recibido, conexion_storage);
+
+    // Validar consistencia
+    if (size_recibido != tam_pagina) {
+        log_error(logger, "Query %u: Tamaño corrupto desde Storage. Recibido: %d, Esperado: %u", 
+                  id_query, size_recibido, tam_pagina);
+        free(stream_datos);
+        return -1;
+    }
+
+    // 4. Escribir en Memoria Interna
+    uint32_t offset_memoria = marco_asignado * tam_pagina;
+    // Copiamos directo al malloc global
+    memcpy((char*)memoria_interna + offset_memoria, stream_datos, tam_pagina);
+    
+    free(stream_datos);
+
+    // Log obligatorio Memoria Add (segun enunciado pag 18)
+    log_info(logger, "Query %u: Memoria Add - File: %s - Tag: %s - Pagina: %u - Marco: %u",
+             id_query, tabla->file, tabla->tag, nro_pagina, marco_asignado);
+
+    return 0;
+}
+
+
+
+void liberar_marco_de_victima(t_entrada_pagina* victima, uint32_t id_query) {
+    if (!victima) return;
+
+    victima->presente = false;
+    victima->modificado = false;
+    victima->marco_num = -1;
+}
+
+void devolver_marco(int marco) {
+    bitarray_clean_bit(bitmap_marcos, marco); 
+    
+    log_info(logger, "Se devolvió el marco %d por error en carga", marco);
+}
+
 t_entrada_pagina* indico_entrada_presente(t_tabla_paginas* tabla, uint32_t nro_pagina, int marco) {
     t_entrada_pagina* e = get_entry(tabla, nro_pagina);
     
@@ -257,7 +379,7 @@ int asignar_marco_o_reemplazar(t_entrada_pagina** victima, uint32_t id_query) {
             *victima = reemplazar_pagina_clock();
         } else {
             // Manejo de error
-            log_error(logger, "Algoritmo de reemplazo '%s' no soportado.", algoritmo_reemplazo);
+            log_info(logger, "Algoritmo de reemplazo '%s' no soportado.", algoritmo_reemplazo);
             return -1;
         }
 

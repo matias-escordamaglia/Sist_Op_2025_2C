@@ -8,3 +8,4 @@ uint8_t* MEM               = NULL;
 size_t   TAM_PAGINA        = 4096;
 int      RETARDO_MEMORIA_MS= 5;  
 int block_size = 1;
+pthread_mutex_t mutex_mem = PTHREAD_MUTEX_INITIALIZER;
