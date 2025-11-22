@@ -32,6 +32,11 @@ void insertar_int_a_paquete(t_paquete* paquete, int valor) {
     insertar_variable_a_paquete(paquete, &valor, sizeof(int));
 }
 
+void insertar_bytes_a_paquete(t_paquete* paquete, void* datos, int tamanio) {
+    paquete->buffer->stream = realloc(paquete->buffer->stream, paquete->buffer->size + tamanio);
+    memcpy(paquete->buffer->stream + paquete->buffer->size, datos, tamanio);
+    paquete->buffer->size += tamanio;
+}
 
 t_paquete* empaquetar_para_prueba_conexion(t_prueba_conexion* prueba) {
     t_paquete* paquete = crear_paquete();

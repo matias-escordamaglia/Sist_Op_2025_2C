@@ -6,6 +6,7 @@
 #include <dirent.h>
 #include <stdint.h>
 #include <stddef.h> 
+#include <pthread.h>
 
 
 extern int conexion_storage;
@@ -16,6 +17,7 @@ extern uint8_t* MEM;                  // único malloc
 extern size_t   TAM_PAGINA;
 extern int      RETARDO_MEMORIA_MS;
 extern int block_size;
+extern pthread_mutex_t mutex_mem;
 
 
 #endif /*UTILSWORKER_H*/

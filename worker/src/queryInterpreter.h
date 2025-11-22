@@ -37,6 +37,8 @@ int ejecutar_commit(t_create* c,uint32_t queryid);
 int ejecutar_delete(t_create* c, uint32_t queryid);
 void finalizar_query_con_error(t_tipo_aviso_worker_master tipodeerror, int motivo);
 char* storage_error_to_string(int motivo);
-
+void destruir_write(t_write* w);
+void destruir_create(t_create* c);
+void destruir_tag(t_tag* t);
 
 #endif // QUERYINTERPRETER_H
