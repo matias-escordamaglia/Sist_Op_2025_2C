@@ -341,7 +341,7 @@ int atender_commit(char* file, char* tag, int query_id){
     pthread_mutex_lock(mutex_file_tag);
     pthread_mutex_unlock(&mutex_diccionary); 
 
-    if (obtener_estado_file_tag(key_file_tag) == 0) {
+    if (obtener_estado_file_tag(key_file_tag) == 0) {//cambiar esto para cualquier negativo en caso de error
         log_warning(logger, "Warning: Se intentó COMMIT sobre un tag ya commiteado: %s", key_file_tag);
         pthread_mutex_unlock(mutex_file_tag);
         free(key_file_tag);

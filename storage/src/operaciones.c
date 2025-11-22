@@ -159,13 +159,10 @@ int commit_tag(char* file, char* tag){
     char* ruta_metadata = add_seg_ruta(ruta_tag, "/metadata.config");
     char* ruta_L_blocks = add_seg_ruta(ruta_tag,"/logical_blocks");
     t_config* config_tag = config_create(ruta_metadata);
-    char* estado = config_get_string_value(config_tag, "ESTADO");
-    if(strcmp(estado,"WORK_IN_PROGRESS") == 0){
+
         recorrer_logical_blocks(ruta_L_blocks, ruta_tag);   
         config_set_value(config_tag, "ESTADO", "COMMITED"); 
         
-    
-    }
     config_save(config_tag);  
     config_destroy(config_tag);
     free(ruta_files);
