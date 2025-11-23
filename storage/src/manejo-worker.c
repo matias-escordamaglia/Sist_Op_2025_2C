@@ -308,13 +308,15 @@ int atender_tag(char* file, char* tag, char* file_destino,char* tag_destino, int
         return ERROR_FILE_TAG_INEXISTENTE; 
     } 
     pthread_mutex_lock(mutex_file_tag);
-    log_info(logger,"llegas esta acaaaaaaa");//+++++++++++++++++++++++++++++++++++++++++++++++++++
     int estado = tag_file(file_tag_origen,file_tag_destino);
 
-    if(estado==0)
-        log_info(logger,"##%u - Tag creado %s",query_id,key_file_tag); 
+    if(estado==0){
+        log_info(logger,"##%u - Tag creado %s",query_id,key_file_tag_destino); 
+        iniciar_mutex_file_tag(key_file_tag_destino); 
+        anadir_a_dicc_estado(key_file_tag_destino); 
 
-    iniciar_mutex_file_tag(key_file_tag_destino); 
+    }
+
 
     pthread_mutex_unlock(mutex_file_tag);
     pthread_mutex_unlock(&mutex_diccionary); 
@@ -348,11 +350,15 @@ int atender_commit(char* file, char* tag, int query_id){
         return ERROR_NO_CRITICO; ///no es error pero no se puedo commitear 
     }
     int estado = commit_tag(file,tag);
-    int estado_dic ;
+
+    int estado_dic = 1; ;
     if(estado==0){
         estado_dic = actualizar_dicc_estado(key_file_tag,0); 
     }
     pthread_mutex_unlock(mutex_file_tag);
+
+    free(key_file_tag);
+
     if(estado==0 && estado_dic == 0){ 
         log_info(logger,"##%u - Commit de File:Tag %s", query_id,key_file_tag);
         return 0; 

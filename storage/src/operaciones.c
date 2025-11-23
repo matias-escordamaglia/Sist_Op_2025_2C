@@ -134,20 +134,85 @@ int tag_file(char* origen, char* destino){
     char* ruta_files = add_seg_ruta(PUNTO_MONTAJE, "/files");
     char* ruta_tag_origen = add_seg_ruta(ruta_files, origen);          
     char* ruta_tag_destino  = add_seg_ruta(ruta_files, destino);          
-    char* ruta_metadata = add_seg_ruta(ruta_tag_destino, "/metadata.config");
-
-    copiar_directorio(ruta_tag_origen, ruta_tag_destino);
-
-    t_config* config_tag = config_create(ruta_metadata);
-    config_set_value(config, "ESTADO", "WORK_IN_PROGRESS");
-    config_save(config_tag);
     
-    config_destroy(config_tag);
-    free(ruta_files);
-    free(ruta_tag_origen);
-    free(ruta_tag_destino);
-    free(ruta_metadata);
+    if (mkdir(ruta_tag_destino, 0777) == -1) {
+        log_error(logger, "TAG: Error creando directorio destino");
+        free(ruta_files); free(ruta_tag_origen); free(ruta_tag_destino);
+        
+        return ERROR_DESCONOCIDO;
+    }
+    char* ruta_blocks_origen = add_seg_ruta(ruta_tag_origen, "/logical_blocks");
+    char* ruta_blocks_destino = add_seg_ruta(ruta_tag_destino, "/logical_blocks");
+    ;
+    if (mkdir(ruta_blocks_destino, 0777) == -1) {
+        log_error(logger, "TAG: Error creando directorio destino");
+        borrar_directorio(ruta_tag_destino);
+        free(ruta_files); free(ruta_tag_origen); free(ruta_tag_destino);
+        free(ruta_blocks_destino); free(ruta_blocks_origen);
+        return ERROR_DESCONOCIDO;
+    }
+    char* ruta_metadata_origen = add_seg_ruta(ruta_tag_origen, "/metadata.config");
+    char* ruta_metadata_destino = add_seg_ruta(ruta_tag_destino, "/metadata.config");
+    copiar_archivo(ruta_metadata_origen,ruta_metadata_destino);
 
+    if (duplicar_enlaces_bloques(ruta_tag_origen, ruta_tag_destino)<0) {
+        log_error(logger, "TAG: Error al duplicar enlaces");
+        borrar_directorio(ruta_tag_destino);
+        borrar_directorio(ruta_blocks_destino);
+        free(ruta_files); free(ruta_tag_origen); free(ruta_tag_destino);
+        free(ruta_blocks_destino); free(ruta_blocks_origen);
+        free(ruta_metadata_destino); free(ruta_metadata_origen); 
+        return ERROR_DESCONOCIDO; 
+    };
+
+    t_config* config_tag_destino = config_create(ruta_metadata_destino);
+    if(config_tag_destino) {
+        config_set_value(config_tag_destino, "ESTADO", "WORK_IN_PROGRESS");
+        config_save(config_tag_destino);
+        config_destroy(config_tag_destino);
+    }
+
+    free(ruta_files); free(ruta_tag_origen); free(ruta_tag_destino);
+    free(ruta_blocks_destino); free(ruta_blocks_origen);
+    free(ruta_metadata_destino); free(ruta_metadata_origen); 
+    return 0; 
+}
+int duplicar_enlaces_bloques(char* ruta_tag_origen, char* ruta_tag_destino){
+    char* ruta_physical_blocks = add_seg_ruta(PUNTO_MONTAJE, "/physical_blocks");
+    char* ruta_metadata_origen = add_seg_ruta(ruta_tag_origen, "/metadata.config");
+    char* ruta_logical_blocks_destino= add_seg_ruta(ruta_tag_destino,"/logical_blocks");
+    t_config* config_metadata_origen = config_create(ruta_metadata_origen);
+    char** blocks_array = config_get_array_value(config_metadata_origen, "BLOCKS");
+
+    int i = 0;
+
+    while(blocks_array[i] != NULL) {
+        int nro_fisico_actual = atoi(blocks_array[i]);
+        
+        char* nombre_L_block_dest = crear_nombre_block(i, 6);
+        char* ruta_L_block_destino = add_seg_ruta(ruta_logical_blocks_destino, nombre_L_block_dest);
+
+        char* nombre_bloque_fisico_origen =  crear_nombre_block(nro_fisico_actual,4); 
+        char* ruta_F_block_origen = add_seg_ruta(ruta_physical_blocks,nombre_bloque_fisico_origen);
+
+        if (link(ruta_F_block_origen, ruta_L_block_destino) == -1) {
+            log_error(logger, "No se pudo crear Hard Link para %s. Error: %s", nombre_L_block_dest, strerror(errno));
+            free(nombre_L_block_dest); free(nombre_bloque_fisico_origen); 
+            free(ruta_L_block_destino); free(ruta_F_block_origen);
+            return ERROR_DESCONOCIDO; 
+        }
+        
+        free(nombre_L_block_dest); free(nombre_bloque_fisico_origen); 
+        free(ruta_L_block_destino); free(ruta_F_block_origen);
+
+        i++;
+    }
+    string_array_destroy(blocks_array);  
+    config_destroy(config_metadata_origen);  
+    
+    free(ruta_physical_blocks);
+    free(ruta_metadata_origen);
+    free(ruta_logical_blocks_destino);
     return 0; 
 }
 
@@ -157,20 +222,135 @@ int commit_tag(char* file, char* tag){
     char* ruta_file = add_seg_ruta(ruta_files, file);          
     char* ruta_tag  = add_seg_ruta(ruta_file, tag);
     char* ruta_metadata = add_seg_ruta(ruta_tag, "/metadata.config");
-    char* ruta_L_blocks = add_seg_ruta(ruta_tag,"/logical_blocks");
+    char* ruta_logical_blocks = add_seg_ruta(ruta_tag,"/logical_blocks");
+
     t_config* config_tag = config_create(ruta_metadata);
 
-        recorrer_logical_blocks(ruta_L_blocks, ruta_tag);   
-        config_set_value(config_tag, "ESTADO", "COMMITED"); 
+    if (!config_tag) {
+        log_error(logger, "COMMIT: No se puede crear el config");
+        config_destroy(config_tag);
+        free(ruta_files);free(ruta_file);free(ruta_tag);  
+        free(ruta_metadata);free(ruta_logical_blocks); 
+        return ERROR_DESCONOCIDO;
+    }
+
+    char** blocks_array = config_get_array_value(config_tag, "BLOCKS");
+    int i = 0;
+    bool hubo_cambios = false; 
+
+    while(blocks_array[i] != NULL) {
+        int nro_fisico_actual = atoi(blocks_array[i]);
         
-    config_save(config_tag);  
-    config_destroy(config_tag);
-    free(ruta_files);
-    free(ruta_file);  
-    free(ruta_tag);  
-    free(ruta_metadata);  
-    free(ruta_L_blocks);  
-    return 0;
+        char* nombre_L_block = crear_nombre_block(i, 6);
+        char* ruta_L_block = add_seg_ruta(ruta_logical_blocks, nombre_L_block);
+
+        int nro_fisico_final = procesar_bloque_logico(ruta_L_block, nro_fisico_actual);
+
+        if (nro_fisico_final < 0) {
+            log_error(logger, "Error en commit del bloque %d", i);
+            // ... manejo de error grave ...
+        } 
+        else if (nro_fisico_final != nro_fisico_actual) {
+            // ¡Hubo deduplicación! Actualizamos el array en memoria
+            free(blocks_array[i]);
+            blocks_array[i] = string_itoa(nro_fisico_final);
+            hubo_cambios = true;
+        }
+
+        free(nombre_L_block);
+        free(ruta_L_block);
+        i++;
+    }
+    // 4. Si hubo cambios (deduplicación), guardamos la nueva lista de bloques
+        if (hubo_cambios) {
+            char* joined_blocks = join_string_array(blocks_array, ",");
+            char* formatted_blocks = string_from_format("[%s]", joined_blocks);
+            config_set_value(config_tag, "BLOCKS", formatted_blocks);
+            free(joined_blocks);
+            free(formatted_blocks);
+        }
+        // 5. Marcar como COMMITED
+        config_set_value(config_tag, "ESTADO", "COMMITED");
+        config_save(config_tag);
+
+        // Limpieza
+        string_array_destroy(blocks_array);
+        config_destroy(config_tag);
+        free(ruta_files); free(ruta_file); free(ruta_tag); free(ruta_metadata); free(ruta_logical_blocks);
+        
+        return 0;
+}
+int procesar_bloque_logico(char* ruta_bloque, int nro_bloque_fisico_actual) {
+    struct stat st;
+    if (stat(ruta_bloque, &st) == -1) {
+        log_error(logger, "Error en stat: %s", ruta_bloque);
+        return -1;
+    }
+
+    FILE* f = fopen(ruta_bloque, "rb");
+        if (!f) 
+            return ERROR_DESCONOCIDO;
+
+    void* buffer = malloc(st.st_size);
+    fread(buffer, 1, st.st_size, f);
+    fclose(f);
+
+    char* hash = crypto_md5(buffer, st.st_size);
+    free(buffer);
+
+    log_info(logger, "Procesando bloque Físico %d - Hash: %s", nro_bloque_fisico_actual, hash);
+
+    int bloque_fisico_final = nro_bloque_fisico_actual; // Por defecto, nos quedamos con el mismo
+
+    // --- 2. Sección Crítica (Índice de Hashes) ---
+    pthread_mutex_lock(&mutex_file_hash);
+
+    // CASO A: El Hash YA EXISTE (Deduplicar)
+    if (config_has_property(config_hash, hash)) {
+        
+        // Obtenemos el  bloque existente (ej: "block0010.dat")
+        int nro_bloque_existente = config_get_int_value(config_hash, hash); 
+        
+        
+        log_info(logger, "--> Hash encontrado en bloque %d. Deduplicando...", nro_bloque_existente);
+
+        // Si ya apuntamos al mismo bloque, no hacemos nada
+        if (nro_bloque_existente != nro_bloque_fisico_actual) {
+            char* nombre_bloque_F = crear_nombre_block(nro_bloque_existente, 4);
+            char* ruta_files = add_seg_ruta(PUNTO_MONTAJE,"/files");
+            char* ruta_bloque_F = add_seg_ruta(ruta_files, nombre_bloque_F);
+
+            // 1. Romper enlace actual
+            unlink(ruta_bloque); 
+            
+            // 2. Crear enlace al bloque existente
+            if (link(ruta_bloque_F, ruta_bloque) == -1) {
+                log_error(logger, "Error al relinkear");
+                // Manejo de error...
+            } else {
+                // 3. Intentar liberar el bloque viejo (si nadie más lo usa)
+                liberar_bloque_si_no_se_usa(nro_bloque_fisico_actual);
+                
+                // ACTUALIZAMOS el valor de retorno
+                bloque_fisico_final = nro_bloque_existente;
+            }
+            free(nombre_bloque_F); free(ruta_bloque_F);free(ruta_files);
+        }
+
+    // CASO B: El Hash NO EXISTE (Indexar)
+    } else {
+        log_info(logger, "--> Hash nuevo. Indexando bloque %d.", nro_bloque_fisico_actual);
+        char* str_nro_bloque = string_itoa(nro_bloque_fisico_actual);
+        config_set_value(config_hash, hash, str_nro_bloque);
+        config_save(config_hash);
+        free(str_nro_bloque);
+        
+    }
+
+    pthread_mutex_unlock(&mutex_file_hash);
+    free(hash);
+
+    return bloque_fisico_final;
 }
 
 int escritura_bloque(char* file, char* tag, int num_L_block, char* contenido,int tamanio){
@@ -525,13 +705,13 @@ void copiar_archivo(char* archivo_origen, char* archivo_destino) {
     fclose(dst);
 }
 
-void copiar_directorio(char* dir_origen, char* dir_destino) {
+int copiar_directorio(char* dir_origen, char* dir_destino) {
     mkdir(dir_destino, 0777);  
     
     DIR* dir = opendir(dir_origen);     
     if (!dir) {
         log_error(logger, "No se pudo abrir el directorio origen");
-        return;
+        return ERROR_DESCONOCIDO;
     }
 
     struct dirent *entrada;         
@@ -556,6 +736,8 @@ void copiar_directorio(char* dir_origen, char* dir_destino) {
     }
 
     closedir(dir);
+    return 0; 
+
 }
 
 // funciones para eliminar_tag
@@ -595,151 +777,5 @@ void eliminar_directorio(char* directorio) {
     else
         printf("Directorio '%s' eliminado correctamente.\n", directorio);
 }
-
-
-// funciones para commit_tag
-
-void recorrer_logical_blocks(char* path_dir, char* ruta_tag) {
-    DIR* dir = opendir(path_dir);  
-    if (!dir) {
-        log_error(logger, "No se pudo abrir el directorio/eliminar1/");
-        exit(EXIT_FAILURE);
-    }
-
-    struct dirent* entry;  
-    int i = 0;
-    while ((entry = readdir(dir)) != NULL) {
-        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
-            continue;
-
-        // se construye la ruta completa del bloque lógico
-        char ruta_bloque[512];
-        snprintf(ruta_bloque, sizeof(ruta_bloque), "%s/%s", path_dir, entry->d_name);
-
-        log_info(logger, "Bloque lógico encontrado: %s", ruta_bloque);
-        
-        procesar_bloque_logico(ruta_bloque, i);
-        eliminar_block_metadata(ruta_tag, i);
-        i++;
-    }
-
-    closedir(dir);  
-}
-
-
-int procesar_bloque_logico(char* ruta_bloque, int contador) {
-    struct stat st;
-
-    // se obtiene info del bloque lógico (y su bloque físico)
-    if (stat(ruta_bloque, &st) == -1) {
-        log_error(logger, "Error en stat");
-        return ERROR_DESCONOCIDO;
-    }
-
-    log_info(logger,"Bloque lógico: %s", ruta_bloque);
-    log_info(logger,"Bloque físico (inodo): %ld", st.st_ino);
-    log_info(logger,"Tamaño del bloque: %ld bytes", st.st_size);
-    log_info(logger,"Cantidad de hard links: %ld", st.st_nlink);
-
-    // se lee el contenido del bloque
-    FILE* f = fopen(ruta_bloque, "rb");
-    if (!f) {
-        log_error(logger, "No se pudo abrir el bloque");
-        return ERROR_DESCONOCIDO;
-    }
-
-    void* buffer = malloc(st.st_size);
-    if (!buffer) {
-        log_error(logger, "No se pudo reservar memoria");
-        fclose(f);
-        return ERROR_DESCONOCIDO;
-    }
-
-    fread(buffer, 1, st.st_size, f);
-    fclose(f);
-
-    // se calcula el hash del contenido
-    char* hash = crypto_md5(buffer, st.st_size);
-    free(buffer);
-
-    if (!hash) {
-        log_error(logger, "Error calculando hash MD5");
-        free(buffer);
-        return ERROR_DESCONOCIDO;
-    }
-
-    log_info(logger,"Hash del bloque: %s", hash);
-
-    pthread_mutex_lock(&mutex_file_hash);
-
-    if(config_has_property(config_hash, hash) == 1){
-        // hacer que el bloque logico apunte al bloque fisico ya asignado
-        int nro_bloque_fisico_actual = config_get_int_value(config_hash, hash);
-        char* nombre_bloque_F = crear_nombre_block(nro_bloque_fisico_actual, 4);
-        log_info(logger, "COMMIT: Hash %s encontrado. Re-enlazando a %s", hash, nombre_bloque_F);
-        char* ruta_files = add_seg_ruta(PUNTO_MONTAJE,"/files");
-        char* ruta_bloque_F = add_seg_ruta(ruta_files, nombre_bloque_F); //bloque existente
-
-        if (unlink(ruta_bloque) == -1) {
-            log_error(logger, "COMMIT: Error al unlink %s: %s", ruta_bloque, strerror(errno));
-        }
-
-
-        if (link(ruta_bloque_F, ruta_bloque) == -1) {
-
-            liberar_bloque_reservado(nro_bloque_fisico_actual);
-            log_error(logger, "No se pudo crear Hard Link BASE. Error: %s", strerror(errno));
-            free(buffer); free(nombre_bloque_F); free(ruta_bloque_F); 
-            free(ruta_files); free(ruta_bloque_F); 
-
-            return ERROR_DESCONOCIDO; 
-        }
-        liberar_bloque_si_no_se_usa(nro_bloque_fisico_actual);
-        free(nombre_bloque_F);
-        free(ruta_files);
-        free(ruta_bloque_F);
-
-    } else {
-        // agregar al config hash
-        log_info(logger, "COMMIT: Hash %s no encontrado. Indexando bloque físico %d", hash, contador);
-        
-        char* bloque_fisico = crear_nombre_block(contador++, 4);
-        config_set_value(config_hash, hash, bloque_fisico);
-        config_save(config_hash);
-        free(bloque_fisico);
-    }
-    pthread_mutex_unlock(&mutex_file_hash);
-
-    free(hash);
-    return 0;
-}
-
-void eliminar_block_metadata(char* ruta_tag, int posicion_bloq){
-    char* ruta_metadata = add_seg_ruta(ruta_tag, "/metadata.config");
-    t_config* config = config_create(ruta_metadata);
-    char **bloques = config_get_array_value(config, "BLOCKS");
-    int pos = posicion_bloq; // posición a borrar
-
-    for (int i = pos; bloques[i] != NULL; i++) {
-        bloques[i] = bloques[i + 1];
-    }
-
-    // Reconstruir el string con formato [A,B,C,D]
-    char nuevo_valor[512] = "[";
-    for (int i = 0; bloques[i] != NULL; i++) {
-        strcat(nuevo_valor, bloques[i]);
-        if (bloques[i + 1] != NULL)
-            strcat(nuevo_valor, ",");
-    }
-    strcat(nuevo_valor, "]");
-    int valor = atoi(bloques[posicion_bloq]);
-    liberar_bloque_reservado(valor);
-    // Guardar en el config
-    config_set_value(config, "BLOCKS", nuevo_valor);
-    config_save(config);
-    config_destroy(config);
-    free(ruta_metadata);
-}
-
 
 

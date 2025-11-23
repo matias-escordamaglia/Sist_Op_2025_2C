@@ -962,7 +962,7 @@ int anadir_a_dicc_estado(char* key){
     if(dictionary_has_key(dicc_estado_tag, key)){
 
         log_error(logger, "Error: Se intentó operar sobre un File:Tag existente: %s", key);
-        estado_op = -1; 
+        estado_op = ERROR_FILE_TAG_PREEXISTENTE; 
 
     }else{
     

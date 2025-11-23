@@ -34,11 +34,12 @@ int obtener_tamano(char*);
 int incrementar(int, int, char*);
 int decrementar(int, int, char*);
 void copiar_archivo(char*, char*);
-void copiar_directorio(char*, char*);
+int copiar_directorio(char*, char*);
+int duplicar_enlaces_bloques(char* ruta_tag_origen, char* ruta_tag_destino);
 void eliminar_directorio(char*);
 int bloq_L_apuntan_bloq_F_0(char*);
-void recorrer_logical_blocks(char*, char*);
 int procesar_bloque_logico(char*, int);
-void eliminar_block_metadata(char*, int);
+
+
 
 #endif /* OPERACIONES_H_ */
