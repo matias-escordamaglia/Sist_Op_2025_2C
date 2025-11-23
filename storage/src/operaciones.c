@@ -329,58 +329,35 @@ int eliminar_tag(char* file, char* tag){
     char* ruta_file = add_seg_ruta(ruta_files, file);          
     char* ruta_tag  = add_seg_ruta(ruta_file, tag); 
     char* ruta_metadata = add_seg_ruta(ruta_tag, "/metadata.config");
-
+    char* ruta_L_blocks = add_seg_ruta(ruta_tag,"/logical_blocks");  
+    char **bloques = config_get_array_value(config, "BLOCKS");
     t_config* config = config_create(ruta_metadata);
+
     if (config == NULL) {
         log_error(logger, "DELETE: No se pudo leer metadata de %s", ruta_metadata);
         free(ruta_files);free(ruta_file);
         free(ruta_tag);free(ruta_metadata);        
         return ERROR_DESCONOCIDO;
     }
- ///////////////-----------------------------------desde aca
-    char* ruta_L_blocks = add_seg_ruta(tag,"/logical_blocks");
-    char **bloques = config_get_array_value(config, "BLOCKS");
     int cantidad_bloques = 0;
     while (bloques[cantidad_bloques] != NULL) {
         cantidad_bloques++;
     }
-    
     for(int i = 0; i < cantidad_bloques; i++){
-        char* nombre_bloque = crear_nombre_block(i, 6);
-        char* ruta_L_block = add_seg_ruta(nombre_bloque, ruta_L_blocks);
+        char* nombre_L_block = crear_nombre_block(i, 6);
+        char* ruta_L_block = add_seg_ruta(nombre_L_block, ruta_L_blocks);
         struct stat st;
-        if (stat(ruta_L_block, &st) == -1) {
-            log_error(logger, "Bloque lógico no asignado o inexistente");
-            return ERROR_DESCONOCIDO;
-        }
-        FILE* f = fopen(ruta_L_block, "rb");
-        if (!f) {
-            log_error(logger, "No se pudo abrir el bloque");
-            return ERROR_DESCONOCIDO;
+        if (st.st_nlink == 2) { 
+            if (stat(ruta_L_block, &st) == -1) {
+                log_error(logger, "Bloque lógico no asignado o inexistente");
+                return ERROR_DESCONOCIDO;
+            }
+            liberar_bloque_reservado(i);
         }
 
-        void* buffer = malloc(st.st_size);
-        if (!buffer) {
-            log_error(logger, "No se pudo reservar memoria");
-            fclose(f);
-            return ERROR_DESCONOCIDO;
-        }
-
-        fread(buffer, 1, st.st_size, f);
-        fclose(f);
-
-        // se calcula el hash del contenido
-        char* hash = crypto_md5(buffer, st.st_size);
-        free(buffer);
-
-        if (!hash) {
-            log_error(logger, "Error calculando hash MD5");
-            return ERROR_DESCONOCIDO;
-        }
-        int bloque_F = config_get_int_value(config_hash, hash);
-        liberar_bloque_reservado(bloque_F);
     }
     eliminar_directorio(ruta_tag);
+    free(ruta_files), free(ruta_file), free(ruta_tag), free(ruta_metadata), free(ruta_L_blocks);
     return 0;
 }
 
