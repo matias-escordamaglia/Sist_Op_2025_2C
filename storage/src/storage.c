@@ -1082,3 +1082,51 @@ void liberar_bloque_si_no_se_usa(int nro_bloque) {
     free(pre_ruta);
     free(ruta_F_block);
 }
+int actualizar_metadata_incremento(char* file, char* tag, int* bloques_fisicos_nuevos, int cant_bloques_a_agregar) {
+    
+    char* ruta_files = add_seg_ruta(PUNTO_MONTAJE, "/files");
+    char* ruta_file = add_seg_ruta(ruta_files, file);
+    char* ruta_tag = add_seg_ruta(ruta_file, tag);
+    char* ruta_metadata = add_seg_ruta(ruta_tag, "/metadata.config");
+
+    t_config* config = config_create(ruta_metadata);
+    if (config == NULL) {
+        log_error(logger, "TRUNCATE: Error al abrir metadata: %s", ruta_metadata);
+        free(ruta_files); free(ruta_file); free(ruta_tag); free(ruta_metadata);
+        return ERROR_DESCONOCIDO;
+    }
+
+    char** bloques_actuales_str = config_get_array_value(config, "BLOCKS");
+    int cant_actual = string_array_size(bloques_actuales_str);
+    int cant_total = cant_actual + cant_bloques_a_agregar;
+
+    // Crear array combinado
+    char** bloques_totales_str = malloc((cant_total + 1) * sizeof(char*));
+
+    // Copiar viejos
+    for (int i = 0; i < cant_actual; i++) {
+        bloques_totales_str[i] = string_duplicate(bloques_actuales_str[i]);
+    }
+
+    // Copiar nuevos
+    for (int i = 0; i < cant_bloques_a_agregar; i++) {
+        bloques_totales_str[cant_actual + i] = string_itoa(bloques_fisicos_nuevos[i]);
+    }
+    bloques_totales_str[cant_total] = NULL; 
+
+    // Guardar
+    char* joined_string = join_string_array(bloques_totales_str, ","); 
+    char* final_array_string = string_from_format("[%s]", joined_string);
+
+    config_set_value(config, "BLOCKS", final_array_string);
+    config_save(config);
+
+    free(joined_string);
+    free(final_array_string);
+    string_array_destroy(bloques_actuales_str); 
+    string_array_destroy(bloques_totales_str); 
+    config_destroy(config);
+    free(ruta_files); free(ruta_file); free(ruta_tag); free(ruta_metadata);
+    
+    return 0;
+}

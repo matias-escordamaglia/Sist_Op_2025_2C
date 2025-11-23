@@ -357,12 +357,12 @@ int atender_commit(char* file, char* tag, int query_id){
     }
     pthread_mutex_unlock(mutex_file_tag);
 
-    free(key_file_tag);
 
     if(estado==0 && estado_dic == 0){ 
         log_info(logger,"##%u - Commit de File:Tag %s", query_id,key_file_tag);
         return 0; 
     }
+    free(key_file_tag);
    return ERROR_DESCONOCIDO; 
 }
 int atender_lectura(char* file, char* tag, int bloque_logico, int* tamanio_leido, char** contenido_salida, int query_id){

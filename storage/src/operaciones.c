@@ -100,7 +100,7 @@ int truncar_archivo(char* file, char* tag, int nuevo_valor){
     int estado = 0; 
     if(nuevo_valor > tamanio_archivo){
         log_info(logger, "TRUNCATE: Incrementando FILE:TAG: %s:%s",file,tag);
-        estado = incrementar(nuevo_valor, tamanio_archivo, ruta_L_blocks);
+        estado = incrementar(file,tag,nuevo_valor, tamanio_archivo, ruta_L_blocks);
     }
     else if (nuevo_valor < tamanio_archivo) {
         log_info(logger, "TRUNCATE: Decrementando FILE:TAG: %s:%s",file,tag);
@@ -302,42 +302,33 @@ int procesar_bloque_logico(char* ruta_bloque, int nro_bloque_fisico_actual) {
 
     int bloque_fisico_final = nro_bloque_fisico_actual; // Por defecto, nos quedamos con el mismo
 
-    // --- 2. Sección Crítica (Índice de Hashes) ---
     pthread_mutex_lock(&mutex_file_hash);
 
-    // CASO A: El Hash YA EXISTE (Deduplicar)
     if (config_has_property(config_hash, hash)) {
         
-        // Obtenemos el  bloque existente (ej: "block0010.dat")
         int nro_bloque_existente = config_get_int_value(config_hash, hash); 
         
         
         log_info(logger, "--> Hash encontrado en bloque %d. Deduplicando...", nro_bloque_existente);
 
-        // Si ya apuntamos al mismo bloque, no hacemos nada
         if (nro_bloque_existente != nro_bloque_fisico_actual) {
             char* nombre_bloque_F = crear_nombre_block(nro_bloque_existente, 4);
             char* ruta_files = add_seg_ruta(PUNTO_MONTAJE,"/files");
             char* ruta_bloque_F = add_seg_ruta(ruta_files, nombre_bloque_F);
 
-            // 1. Romper enlace actual
             unlink(ruta_bloque); 
             
-            // 2. Crear enlace al bloque existente
             if (link(ruta_bloque_F, ruta_bloque) == -1) {
                 log_error(logger, "Error al relinkear");
                 // Manejo de error...
             } else {
-                // 3. Intentar liberar el bloque viejo (si nadie más lo usa)
                 liberar_bloque_si_no_se_usa(nro_bloque_fisico_actual);
                 
-                // ACTUALIZAMOS el valor de retorno
                 bloque_fisico_final = nro_bloque_existente;
             }
             free(nombre_bloque_F); free(ruta_bloque_F);free(ruta_files);
         }
 
-    // CASO B: El Hash NO EXISTE (Indexar)
     } else {
         log_info(logger, "--> Hash nuevo. Indexando bloque %d.", nro_bloque_fisico_actual);
         char* str_nro_bloque = string_itoa(nro_bloque_fisico_actual);
@@ -440,7 +431,8 @@ int escritura_bloque(char* file, char* tag, int num_L_block, char* contenido,int
 
         log_info(logger,"WRITE: COW finalizado. Bloque lógico %d ahora apunta a físico %d", num_L_block, bloque_fisico);
 
-        free(nombre_L_block); free(key_file_tag); free(ruta_files); free(ruta_file); free(ruta_tag); free(ruta_L_blocks); free(ruta_L_block);
+        free(nombre_L_block); free(key_file_tag); free(ruta_files);
+        free(ruta_file); free(ruta_tag); free(ruta_L_blocks); free(ruta_L_block);
         free(nombre_block); free(pre_ruta); free(ruta_F_block);
         return bloque_fisico;
     }
@@ -586,7 +578,7 @@ int obtener_tamano(char* ruta) {
 
 // funciones para truncate
 
-int incrementar(int nuevo_valor, int valor_original, char* ruta_logical_block){
+int incrementar(char*file,char*tag, int nuevo_valor, int valor_original, char* ruta_logical_block){
     int bloques_actuales = (int)ceil((double)valor_original / (double)BLOCK_SIZE);
     int bloques_necesarios = (int)ceil((double)nuevo_valor / (double)BLOCK_SIZE);
     int cant_bloques_a_agregar = bloques_necesarios - bloques_actuales;
@@ -618,11 +610,11 @@ int incrementar(int nuevo_valor, int valor_original, char* ruta_logical_block){
 
         bloques_fisicos_nuevos[i]=nuevo_bloque_f;
     }
-    ///////////////////////////////
-    //int estado_meta = actualizar_metadata_incremento(file, tag, bloques_fisicos_nuevos, cant_bloques_a_agregar);
+    
+    int estado_meta = actualizar_metadata_incremento(file, tag, bloques_fisicos_nuevos, cant_bloques_a_agregar);
     
     free(bloques_fisicos_nuevos);
-    return 0; 
+    return estado_meta; 
 }
 
 
