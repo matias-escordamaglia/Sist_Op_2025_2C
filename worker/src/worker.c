@@ -8,6 +8,8 @@ int block_size;
 pthread_t hilo_master;
 pthread_t hilo_storage;
 
+pthread_t hilo_lanzamiento_ejecucion;
+
 int main(int argc, char** argv)
 {	
 
@@ -24,7 +26,15 @@ int main(int argc, char** argv)
 	log_level = obtener_log_level_config(config);
 
 	logger = log_create("worker.log", "WORKER", true, log_level);
-	
+
+
+    iniciar_semaforos();
+    settear_valores_nulos_query_actual();
+
+    pthread_create(&hilo_lanzamiento_ejecucion, NULL, main_lanzamiento_ejecucion, NULL);
+    pthread_detach(hilo_lanzamiento_ejecucion);
+
+
     ip_storage = config_get_string_value(config, "IP_STORAGE");
 	puerto_storage = config_get_string_value(config, "PUERTO_STORAGE");
 
@@ -70,7 +80,7 @@ int main(int argc, char** argv)
 	pthread_join(hilo_storage, NULL);
 	pthread_join(hilo_master, NULL);
 
-
+    destruir_semaforos();
 
     return 0;
 }
@@ -177,25 +187,109 @@ void* manejar_master(void* arg) {
                     free(buffer);
                     break;
                 }
+
+                t_aviso_worker_master* aviso_confirmacion = malloc(sizeof(t_aviso_worker_master));
+
+                switch (pedido->motivo)
+                {
+                case PEDIDO_QUERY:
+
+                    
+
+                    if(query_actual.qid_actual == QID_NULO) {
+
+                        aviso_confirmacion->tipo_aviso = RESPUESTA_SIG_QUERY;
+                        aviso_confirmacion->argumento = convertir_int_a_string(OK);
+
+
+                        if(!armar_y_enviar_confirmacion_a_master(aviso_confirmacion, conexion)){
+                            log_error(logger, "No se pudo empaquetar el aviso de confirmación a Master");
+                        }
+
+                        // Parte Testing
+                        char* mensaje  = "PRUEBA:VERSION1.0 Lectura_de_prueba"; 
+                        t_tipo_aviso_worker_master tipo_aviso = NUEVA_LECTURA;
+                        t_paquete* paquete_resp = crear_paquete();
+            
+                        insertar_variable_a_paquete(paquete_resp, &(tipo_aviso), sizeof(t_tipo_aviso_worker_master));
+                        insertar_string_a_paquete(paquete_resp, mensaje);
+                        enviar_paquete(paquete_resp,conexion);
+                        // Fin Testing
+                        
+                        t_motivo_pedido_master_worker motivo = pedido->motivo;
+                        query_actual.query_path = pedido->query_path;
+                        query_actual.pc_actual = pedido->program_counter;
+                        query_actual.qid_actual = pedido->query_id;
+
+                        log_info(logger, "Nuevo pedido de Query. Query ID: %d - Path: %s - Program Count: %d - Motivo: %d ", 
+                            query_actual.qid_actual, query_actual.query_path, query_actual.pc_actual, motivo);
+
+                        sem_post(sem_ejecucion_pendiente);
+
+                        
+
+                    } else {
+                        
+
+                        aviso_confirmacion->tipo_aviso = RESPUESTA_SIG_QUERY;
+                        aviso_confirmacion->argumento = convertir_int_a_string(OK);
+
+                        if(!armar_y_enviar_confirmacion_a_master(aviso_confirmacion, conexion)){
+                            log_error(logger, "No se pudo empaquetar el aviso de rechazo de pedido a Master");
+                        }
+                    }
+
+
+                    break;
+                    
+                    
+                case INTERRUPCION:
+                    
+
+                    if(query_actual.qid_actual != pedido->query_id) {
+                        aviso_confirmacion->tipo_aviso = DESALOJO_QUERY_DIFERENTE_RESPUESTA;
+                        int qid_temp = query_actual.qid_actual;
+                        aviso_confirmacion->argumento = convertir_int_a_string(qid_temp);
+
+                        if(!armar_y_enviar_confirmacion_a_master(aviso_confirmacion, conexion)){
+                            log_error(logger, "No se pudo empaquetar el aviso de query diferente a Master");
+                        }
+
+                    } else {
+                        hay_pedido_desalojo = true;
+
+                        sem_wait(sem_desalojo_pendiente);
+
+                        
+                        if (hay_pedido_desalojo) {
+        
+                            aviso_confirmacion->tipo_aviso = DEVOLUCION_X_INTERRUPCION;
+                            int pc_temp = query_actual.pc_actual; 
+                            aviso_confirmacion->argumento = convertir_int_a_string(pc_temp);
+
+                            if(!armar_y_enviar_confirmacion_a_master(aviso_confirmacion, conexion)){
+                                log_error(logger, "Error enviando aviso de interrupcion a Master");
+                            }
+                            
+                            
+                            hay_pedido_desalojo = false;
+                            
+                            settear_valores_nulos_query_actual();
+                        
+                        } else {
+                            log_warning(logger, "Omitiendo envío de interrupción: la query finalizó por END concurrentemente.");
+                        }
+
+                    }
+
+                    break;
                 
-                envioAQueryInterpreter(pedido);
-
-                t_motivo_pedido_master_worker motivo = pedido->motivo;
-                char* path_query = pedido->query_path;
-                uint32_t pc = pedido->program_counter;
-                uint32_t qid = pedido->query_id;
-
-                log_info(logger, "Nuevo pedido de Query. Query ID: %d - Path: %s - Program Count: %d - Motivo: %d " 
-                                            , qid, path_query, pc, motivo);
-
-                char* mensaje  = "PRUEBA:VERSION1.0 Lectura_de_prueba"; 
-                t_tipo_aviso_worker_master tipo_aviso = NUEVA_LECTURA;
-                t_paquete* paquete_resp = crear_paquete();
-    
-                insertar_variable_a_paquete(paquete_resp, &(tipo_aviso), sizeof(t_tipo_aviso_worker_master));
-                insertar_string_a_paquete(paquete_resp, mensaje);
-                enviar_paquete(paquete_resp,conexion);
-
+                default:
+                    log_error(logger, "Error; código de motivo de pedido master desconocido");
+                    break;
+                }
+                
+               
                 free(pedido->query_path);
                 free(pedido);
                 free(buffer); 
@@ -284,3 +378,21 @@ t_programa* leer_y_partir(const char* path){
     fclose(f);
     return p;
 }
+
+bool armar_y_enviar_confirmacion_a_master(t_aviso_worker_master* aviso_confirmacion, int conexion) {
+    t_paquete* paquete_confirmacion = empaquetar_aviso_worker_master(aviso_confirmacion);
+
+    if (!paquete_confirmacion) {
+        free(aviso_confirmacion->argumento);
+        free(aviso_confirmacion);
+        return false;
+    }
+
+    enviar_paquete(paquete_confirmacion, conexion);
+
+    free(aviso_confirmacion->argumento);
+    free(aviso_confirmacion);
+
+    return true;
+}
+

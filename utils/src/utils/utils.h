@@ -111,7 +111,7 @@ typedef enum MotivoMasterWorker{
     INTERRUPCION
 } t_motivo_pedido_master_worker;
 
-typedef enum TipoAvisoMasterWorker{
+typedef enum TipoAvisoWorkerMaster{
     FINALIZACION_QUERY, // cuando ejecuto un "END"
     NUEVA_LECTURA, //lo mando al ejecutar un "READ"
     DEVOLUCION_X_INTERRUPCION, // tengo que devoler esto, cuando master me mande en "MotivoMasterWorker"
