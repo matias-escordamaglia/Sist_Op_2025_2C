@@ -207,6 +207,7 @@ void enviar_estado_op(int estado, int socket){
     t_paquete* paquete = crear_paquete();
     insertar_int_a_paquete(paquete,estado);
     enviar_paquete(paquete,socket);
+    eliminar_paquete(paquete);
 }
 void enviar_paquete_read(int estado,char* contenido_salida, int tamanio_leido,int socket){
     t_paquete* paquete = crear_paquete();
@@ -214,6 +215,7 @@ void enviar_paquete_read(int estado,char* contenido_salida, int tamanio_leido,in
     insertar_int_a_paquete(paquete,tamanio_leido);
     insertar_binario_a_paquete(paquete,contenido_salida,tamanio_leido);
     enviar_paquete(paquete,socket);
+    eliminar_paquete(paquete);
 }
 
 int atender_create(char* file, char* tag, int query_id){
