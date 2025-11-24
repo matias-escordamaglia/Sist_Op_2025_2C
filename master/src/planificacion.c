@@ -705,66 +705,73 @@ void enviar_evento_planificacion(t_tipo_evento tipo, uint32_t worker_id, uint32_
 
 void manejar_worker_desconectado(uint32_t worker_id, uint32_t query_id_ejecutando) {
 
-    log_info(get_logger(), "Worker %d desconectado", worker_id);
+    t_worker_conectado* worker_temp = obtener_worker_por_id_uso_externo(worker_id);
 
-    if (query_id_ejecutando >= 0) {
-        t_elemento_cola* elemento = NULL;
+    if (worker_temp->worker_conectado) {
 
-        LOCK(&mutex_estado_critico);
+        if (query_id_ejecutando >= 0) {
 
-        LOCK(&mutex_cola_exec);
-        elemento = buscar_y_remover_por_qid(cola_exec, query_id_ejecutando);
-        UNLOCK(&mutex_cola_exec);
-        
-        if (elemento != NULL) {
+            log_info(get_logger(), "Worker %d desconectado", worker_id);
 
-            // Mover a EXIT
-            LOCK(&mutex_cola_exit);
-            list_add(cola_exit, elemento);
-            UNLOCK(&mutex_cola_exit);
+            t_elemento_cola* elemento = NULL;
+
+            LOCK(&mutex_estado_critico);
+
+            LOCK(&mutex_cola_exec);
+            elemento = buscar_y_remover_por_qid(cola_exec, query_id_ejecutando);
+            UNLOCK(&mutex_cola_exec);
             
-            log_info(get_logger(), "Query %d movido a EXIT por desconexión de worker", 
-                    query_id_ejecutando);
-            
-            
-            notificar_error_desconexion_a_query_control(elemento->query->conexion);
-        } else {
-            LOCK(&mutex_cola_ready);
-            bool encontrado = buscar_por_qid(cola_ready, query_id_ejecutando);
-            UNLOCK(&mutex_cola_ready);
+            if (elemento != NULL) {
 
-            if (encontrado)
-            {
-                log_error(get_logger(), "ERROR FALTAL; se esperaba que la query de id %d estuviese en EXEC pero se encontró en READY", 
-                    query_id_ejecutando);
-
-                while(true) {
-                    printf("ERROR FATAL DE PLANIFICACION");
-                    sleep(5);
-                }
-            } else if(buscar_por_qid(cola_exit, query_id_ejecutando)) {
-                log_warning(get_logger(), "RACE CONDITION; se esperaba que la query de id %d estuviese en EXEC pero se encontró en EXIT", 
-                query_id_ejecutando);
-
+                // Mover a EXIT
+                LOCK(&mutex_cola_exit);
+                list_add(cola_exit, elemento);
+                UNLOCK(&mutex_cola_exit);
+                
+                log_info(get_logger(), "Query %d movido a EXIT por desconexión de worker", 
+                        query_id_ejecutando);
+                
+                
+                notificar_error_desconexion_a_query_control(elemento->query->conexion);
             } else {
-                log_error(get_logger(), "ERROR FALTAL; se esperaba que la query de id %d estuviese en EXEC pero no se encontró en ninguna lista", 
+                LOCK(&mutex_cola_ready);
+                bool encontrado = buscar_por_qid(cola_ready, query_id_ejecutando);
+                UNLOCK(&mutex_cola_ready);
+
+                if (encontrado)
+                {
+                    log_error(get_logger(), "ERROR FATAL; se esperaba que la query de id %d estuviese en EXEC pero se encontró en READY", 
+                        query_id_ejecutando);
+
+                    while(true) {
+                        printf("ERROR FATAL DE PLANIFICACION");
+                        sleep(5);
+                    }
+                } else if(buscar_por_qid(cola_exit, query_id_ejecutando)) {
+                    log_warning(get_logger(), "RACE CONDITION; se esperaba que la query de id %d estuviese en EXEC pero se encontró en EXIT", 
                     query_id_ejecutando);
 
-                while(true) {
-                    printf("ERROR FATAL DE PLANIFICACION");
-                    sleep(5);
-                }
-            }
-            
-        }    
-        
-        UNLOCK(&mutex_estado_critico);
+                } else {
+                    //TODO hay un error que a veces bisca un query id -1; revisar
+                    log_error(get_logger(), "ERROR FATAL; se esperaba que la query de id %d estuviese en EXEC pero no se encontró en ninguna lista", 
+                        query_id_ejecutando);
 
+                    while(true) {
+                        printf("ERROR FATAL DE PLANIFICACION");
+                        sleep(5);
+                    }
+                }
+                
+            }    
+            
+            UNLOCK(&mutex_estado_critico);
+
+        }
+        
+        // Marcar worker como desconectado
+        marcar_worker_desconectado(worker_id);
+        //sem_wait(cant_workers_libres); <-- puede que no vaya aquí ya que se le hizo wait al asignarle un query
     }
-    
-    // Marcar worker como desconectado
-    marcar_worker_desconectado(worker_id);
-    //sem_wait(cant_workers_libres); <-- puede que no vaya aquí ya que se le hizo wait al asignarle un query
     
 }
 

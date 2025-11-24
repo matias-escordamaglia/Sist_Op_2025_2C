@@ -508,7 +508,7 @@ t_respuesta_desalojo solicitar_desalojo_bloqueante(t_worker_conectado* worker, u
         
         if (resultado == 0) {
             
-            if (conf->respuesta_recibida && conf->dato_respuesta > 0) {
+            if (conf->respuesta_recibida && conf->dato_respuesta >= 0) {
 
                 if (dato_es_query_diferente(conf->dato_respuesta, query_id_esperado)) {
                     respuesta_final.resultado = DESALOJO_QUERY_DIFERENTE;
