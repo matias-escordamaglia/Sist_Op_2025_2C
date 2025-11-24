@@ -1,6 +1,7 @@
 #ifndef QUERYINTERPRETER_H
 #define QUERYINTERPRETER_H
 
+#include <ctype.h>
 #include "./utils/utils.h"
 #include "./utils/empaquetar.h"
 #include "./utils/desempaquetar.h"
@@ -10,7 +11,8 @@
 #include <ctype.h>
 
 
-void envioAQueryInterpreter(t_pedido_master_worker* pedido);
+void* main_lanzamiento_ejecucion();
+void envioAQueryInterpreter();
 char* instruccion_n(char* nombre, size_t idx);
 t_programa* obtener_programa(char* nombre);
 char* const* instrucciones_desde(char* nombre, size_t idx_1based, size_t* out_cant);

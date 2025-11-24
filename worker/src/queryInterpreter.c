@@ -1,7 +1,7 @@
 
 #include "queryInterpreter.h"
 
-void envioAQueryInterpreter(t_pedido_master_worker* pedido){
+void envioAQueryInterpreter(){
     size_t cant = 0;
     char* const* vec = instrucciones_desde("querie1.txt", 4, &cant);
     if (!vec) {
@@ -9,15 +9,35 @@ void envioAQueryInterpreter(t_pedido_master_worker* pedido){
         return;
     }
 
-    ejecutarOperacion(pedido, vec, cant);
+    ejecutarOperacion(vec, cant);
 }
 
-void ejecutarOperacion(t_pedido_master_worker* pedido, char* const* instrucciones, size_t cantidad)
+
+/*
+Motivo de este hilo es el de desacoplar la ejecución de las queries de la escucha de master y no bloquearla;
+De esta forma podrá escuchar los pedidos de interrupción en tiempo real
+*/
+void* main_lanzamiento_ejecucion(void* _){
+
+    while(true) {
+
+        sem_wait(sem_ejecucion_pendiente);
+
+        envioAQueryInterpreter();
+
+
+    }
+    
+}
+
+
+void ejecutarOperacion(char* const* instrucciones, size_t cantidad)
+
 {
-    if (!pedido || !instrucciones) { log_error(logger, "Argumentos nulos"); return; }
+    if (!instrucciones) { log_error(logger, "Argumentos nulos"); return; }
 
     // PC 1-based (si viene 0, arrancamos en 1)
-    size_t pc = pedido->program_counter ? pedido->program_counter : 1;
+    size_t pc = query_actual.pc_actual ? query_actual.pc_actual : 1;
     if (pc < 1) pc = 1;
     if (pc > cantidad) {
         log_info(logger, "PC=%zu ya está al final (cant=%zu). Nada que ejecutar.", pc, cantidad);
@@ -29,28 +49,55 @@ void ejecutarOperacion(t_pedido_master_worker* pedido, char* const* instruccione
         char* linea = instrucciones[i];
         log_info(logger, "INST %zu: %s", i + 1, linea);
 
-        bool ok = ejecutar_linea(linea, pedido->query_id);
+
+        bool ok = ejecutar_linea(linea, query_actual.qid_actual);
+
 
         if (!ok) {
             log_error(logger, "Fallo la instruccion %zu. Deteniendo.", i + 1);
-            pedido->program_counter = i + 1; // PC queda apuntando a la fallida (1-based)
+            query_actual.pc_actual = i + 1; // PC queda apuntando a la fallida (1-based)
+
+        
+            char* texto_mockeado = strdup("Error de mockeo");
+            
+
+            deterner_ejecucion_query_error(texto_mockeado);
             return;
         }
-
+        
         // Si fue END, cortamos ejecución (ya ejecutada)
         Operation op;
         char* params=NULL;
         if (detectar_operacion(linea, &op, &params) && op == END) {
-            pedido->program_counter = i + 1;
-            log_info(logger, "END ejecutado. PC=%u", pedido->program_counter);
+            query_actual.pc_actual = i + 1;
+            log_info(logger, "END ejecutado. PC=%d", query_actual.pc_actual);
+            
+            if (hay_pedido_desalojo) {
+                
+                hay_pedido_desalojo = false; 
+                
+                sem_post(sem_desalojo_pendiente); 
+                log_info(logger, "Desalojo ignorado por finalización natural (END).");
+            }
+
+            deterner_ejecucion_query_finalizado();
             return;
         }
 
-        // Avanza al siguiente
-        pedido->program_counter = i + 2; // próximo a ejecutar en 1-based
+        query_actual.pc_actual = i + 2; 
+
+
+        if(hay_pedido_desalojo) {
+            log_info(logger, "Deteniendo ejecución por pedido de desalojo...");
+            
+            sem_post(sem_desalojo_pendiente);
+            return;
+        }
     }
 
-    log_info(logger, "Ejecución completa. PC final=%u (cant=%zu)", pedido->program_counter, cantidad);
+
+    log_info(logger, "Ejecución completa. PC final=%d (cant=%ld)", query_actual.pc_actual, cantidad);
+
 }
 
 bool ejecutar_linea(char* linea, uint32_t queryid) {
@@ -297,6 +344,7 @@ void enviar_lectura_a_master(char* file, char* tag, void* contenido, uint32_t ta
     enviar_paquete(paquete, conexion_master);
     eliminar_paquete(paquete);
 }
+
 
 void finalizar_query_con_error(t_tipo_aviso_worker_master tipodeerror, int motivo) {
     
@@ -647,7 +695,7 @@ bool parsear_tag_params(  char* params, t_tag* out) {
     char* origen = p;
 
     // tomar segundo token (destino)
-    char* p2 = saltar_blancos(sp1 + 1);
+    const char* p2 = saltar_blancos(sp1 + 1);
     if (*p2 == '\0') { free(tmp); return false; }
     // p2 debería ser el último token (FD:TD). Si hubiera más, lo ignoramos/validamos:
     char* sp2 = strpbrk(p2, " \t");
@@ -656,7 +704,7 @@ bool parsear_tag_params(  char* params, t_tag* out) {
         // *sp2 = '\0'; // o return false;
         *sp2 = '\0';
     }
-    char* destino = p2;
+    const char* destino = p2;
 
     // split origen "FO:TO"
     char* colon1 = strchr(origen, ':');
