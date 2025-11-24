@@ -13,6 +13,7 @@
 #include <commons/log.h>
 #include <commons/config.h>
 #include <commons/collections/list.h>
+#include <commons/bitarray.h>
 
 
 
@@ -102,7 +103,9 @@ typedef enum Operation{
     COMMIT,
     FLUSH,
     DELETE,
-    END
+    END,
+    RESPONSE = 100,
+    FIN_ERROR,
 } Operation;
 
 
@@ -125,6 +128,17 @@ typedef enum TipoAvisoMasterQuery{
     LECTURA_QUERY,
     QUERY_FINALIZADO
 } t_motivo_aviso_master_query;
+
+typedef enum {
+    ERROR_OK = 0, 
+    ERROR_FILE_TAG_INEXISTENTE = -1, 
+    ERROR_FILE_TAG_PREEXISTENTE = -2, 
+    ERROR_ESPACIO_INSUFICIENTE = -3, 
+    ERROR_ESCRITURA_NO_PERMITIDA = -4, 
+    ERROR_FUERA_DE_LIMITE = -5,  
+    ERROR_NO_CRITICO= -6,
+    ERROR_DESCONOCIDO = -7
+} t_storage_error_code;
 
 
 // ------------------------------------------------------------------------------------------
@@ -193,6 +207,42 @@ typedef struct {
     char* file_dest;
     char* tag_dest;
 } t_tag;
+
+typedef struct {
+    char*  file;
+    char*  tag;
+    size_t dir_base;
+    uint8_t* data;
+    size_t len;
+} t_write;
+
+// Struct para entrada de página
+typedef struct {
+    int marco_num;
+    bool presente;
+    bool modificado;
+    bool bit_uso;
+    int nro_pagina;
+    time_t ultimo_acceso;
+} t_entrada_pagina;
+
+// Struct para tabla de File:Tag
+typedef struct {
+    char* tag;
+    t_list* paginas_proceso;
+    char* file;
+    int tam_file;
+} t_tabla_paginas;
+
+// Global
+typedef struct {
+    uint32_t pagina;
+    uint32_t offset_en_pagina;
+    uint32_t bytes_en_pagina;
+    uint32_t offset_en_buffer;
+    uint32_t bytes_restantes; 
+} segmento_acceso;
+
 
 // ------------------------------------------------------------------------------------------
 // -- Funciones --

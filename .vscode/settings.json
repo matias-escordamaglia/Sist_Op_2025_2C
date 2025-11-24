@@ -27,6 +27,9 @@
         "dictionary.h": "c",
         "unistd.h": "c",
         "time.h": "c",
-        "temporal.h": "c"
+        "temporal.h": "c",
+        "pthread.h": "c",
+        "stdbool.h": "c",
+        "stddef.h": "c"
     }
 }

@@ -1,35 +1,82 @@
 #include "storage.h"
 
+#include "manejo-worker.h"
+#include "operaciones.h"
+
 t_log *logger;
 t_config *config;
 t_config *sp_block_config;
+
+//get configs
+char* PUERTO_ESCUCHA; 
+bool FRESH_START;
+char* PUNTO_MONTAJE;
+int RETARDO_OPERACION;
+int RETARDO_ACCESO_BLOQUE; 
+
+//hash config
+t_config* config_hash; 
+
+int BLOCK_SIZE; 
+int FS_SIZE; 
+
+// bitarray
+t_bitarray* BA_bitmap; 
+char* mmap_BM;
+
+
+t_log_level log_level; 
 
 int server_fd_general;
 
 pthread_t hilo_manejo_worker;
 
-int main(int argc, char **argv)
-{
+//semaforos mutex
+pthread_mutex_t mutex_bitmap;
+pthread_mutex_t mutex_dir_files; 
+pthread_mutex_t mutex_file_hash;
+pthread_mutex_t mutex_diccionary; 
+pthread_mutex_t mutex_dic_estado; 
 
-    //config = iniciar_config(logger, "storage.config");
-    config = config_create("storage.config"); 
+
+//dictionarys
+t_dictionary* file_tag_dic = NULL; 
+t_dictionary* dicc_estado_tag = NULL; 
+
+
+int main(int argc, char **argv)
+{   
+    if (argc < 3) { 
+            fprintf(stderr, "Uso correcto: %s <archivo_config[path]> <archivo_superBlock[path]> \n", argv[0]);
+            return EXIT_FAILURE;
+    }
+    
+    char* archivo_superBlock_path = argv[2];
+    char* archivo_config_path = argv[1];
+
+    t_log* log_temp = log_create("temp.log","STORAGE",true,LOG_LEVEL_INFO); 
+    config = iniciar_config(log_temp,archivo_config_path);
     extraer_storage_config(config);
+    log_destroy(log_temp); 
 
     log_level = obtener_log_level_config(config);
     logger = log_create("storage.log", "STORAGE", true, log_level);
-    pasar_logger_a_manejo_worker(logger);
 
-    iniciar_estructuras();
+    iniciar_estructuras(archivo_superBlock_path);
+
+
+    log_info(logger, "Preparando Servidor...");
 
     server_fd_general = iniciar_servidor(NULL, PUERTO_ESCUCHA, logger);
     if (server_fd_general == -1)
-    {
-        log_error(logger, "No se pudo iniciar el servidor general. Terminando.");
-        return EXIT_FAILURE;
-    }
+        {
+            log_error(logger, "No se pudo iniciar el servidor general. Terminando.");
+            return EXIT_FAILURE;
+        }
 
     int *server_fd_copy = malloc(sizeof(int));
     *server_fd_copy = server_fd_general;
+    
     pthread_create(&hilo_manejo_worker, NULL, manejar_cliente_worker, server_fd_copy);
     pthread_join(hilo_manejo_worker, NULL);
 
@@ -55,7 +102,7 @@ void extraer_storage_config(t_config* config_st)
         FRESH_START = false;
     }
 }
-void iniciar_estructuras(){
+void iniciar_estructuras(char* super_block_path){
     
 
     if (FRESH_START == true){ // Iniciamos un FS desde cero
@@ -84,13 +131,16 @@ void iniciar_estructuras(){
                 log_info(logger, "Archivo %s borrado correctamente\n", ruta_bitmap);
             } else {
                 log_error(logger, "Error al borrar el archivo");
+                exit(EXIT_FAILURE);
             }       
         }
         if(existe_archivo(ruta_block_hash)){
-            if (remove(ruta_bitmap) == 0) {
+            if (remove(ruta_block_hash) == 0) {
                 log_info(logger, "Archivo %s borrado correctamente\n", ruta_block_hash);
             } else {
                 log_error(logger, "Error al borrar el archivo");
+            exit(EXIT_FAILURE);
+
             }       
         }
         if(existe_directorio(ruta_f_block)==1){
@@ -100,6 +150,8 @@ void iniciar_estructuras(){
             }
             else {
                 log_error(logger, "Error al borrar el directorio");
+                exit(EXIT_FAILURE);
+            
             }
         }
          if(existe_directorio(ruta_files)==1){
@@ -109,30 +161,42 @@ void iniciar_estructuras(){
             }
             else {
                 log_error(logger, "Error al borrar el directorio");
+                exit(EXIT_FAILURE);
+
             }
         }
         log_info(logger, "Inicializando estructuras nuevas...");
-        inicializar_super_block_config();
-        inicializar_dir_physic_block(ruta_f_block); 
+        inicializar_super_block_config(super_block_path);
+        inicializar_dictionary_mutex();
+        inicializar_blocks_hash(ruta_block_hash);
         inicializar_bitmap(ruta_bitmap);
-        inicializar_dir_logic_block(ruta_files); 
-
-
-
+        inicializar_dir_physic_block(ruta_f_block); 
+        inicializar_dir_logic_block(ruta_files);
+        
+        free(ruta_bitmap);
+        free(ruta_block_hash);
+        free(ruta_f_block);
+        free(ruta_files);
 
     }
     else
     {
-
-        //cargar estructuras existentes
-        //cargar_bitmap();    
+        cargar_estructuras_existentes(super_block_path);
+         
     }
+    log_info(logger, "TODAS LAS ESTRUCTURAS ESTA LISTAS");
 }
 void finalizar_FS(){
     config_destroy(config);
     log_destroy(logger); 
-    bitarray_destroy ( BA_bitmap);
+    finalizar_munmap(); 
+    bitarray_destroy(BA_bitmap);
 
+}
+void finalizar_munmap(){
+    int tam_bitmap = ((FS_SIZE / BLOCK_SIZE + 7)/8) ; 
+    log_info(logger, "tamaño: %u", tam_bitmap);
+    munmap(mmap_BM,tam_bitmap);
 }
 bool existe_archivo(char *path){
     FILE *f = fopen(path, "r");
@@ -143,16 +207,21 @@ bool existe_archivo(char *path){
     return false; 
 }
 char* add_seg_ruta(char *base, char *extra){
+    int necesita_barra = (extra[0] != '/');
     size_t len_base = strlen(base);
     size_t len_extra = strlen(extra);
-    char *ruta_final = malloc(len_base + len_extra + 1);
-    if (!ruta_final)
-    {
-        perror("Error al realloc");
+    size_t total = len_base + len_extra + (necesita_barra ? 1 : 0) + 1;
+
+    char* ruta_final = malloc(total);
+    if (!ruta_final) {
+        perror("malloc");
         exit(EXIT_FAILURE);
     }
+
     strcpy(ruta_final, base);
-    strcpy(ruta_final + len_base, extra);
+    if (necesita_barra)
+        strcat(ruta_final, "/");
+    strcat(ruta_final, extra);
 
     return ruta_final;
 }
@@ -229,16 +298,22 @@ int borrar_directorio(const char *path) {
 
     return 0; // éxito
 }
-void inicializar_super_block_config(){
-    sp_block_config = config_create("superblock.config");
+void inicializar_super_block_config(char* path){
+    sp_block_config = iniciar_config(logger,path);
     BLOCK_SIZE = config_get_int_value(sp_block_config, "BLOCK_SIZE");
     FS_SIZE = config_get_int_value(sp_block_config, "FS_SIZE");
     log_info(logger, "Archivo superblock.config extraido exitosamente");
+    pasar_log_config_a_manejo_worker(logger,sp_block_config);
+
 
 }
 void inicializar_bitmap(const char* ruta){
     //ya que vamos a usar mmap menor utilizamos file descriptors 
+    //aca creamos un archivo .bin
+    //tam_bitmap = malloc(sizeof(int)); 
     int tam_bitmap = ((FS_SIZE / BLOCK_SIZE + 7)/8) ; 
+    log_info(logger, "tamaño: %u", tam_bitmap); 
+
     int fd = open( ruta, O_RDWR | O_CREAT, 0666); 
     if (fd == -1) {
         log_error(logger, "error abriendo %s: %s", ruta, strerror(errno));
@@ -250,14 +325,16 @@ void inicializar_bitmap(const char* ruta){
         exit(1);
     }
     log_info(logger, "Archivo bitmap.bin creado exitosamente"); 
-    
+    //"subimos" el archivo a memoria 
     log_info(logger, "mapeando bitmap.bin..."); 
-    char* mmap_BM = mmap(NULL,tam_bitmap,PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0); 
+    mmap_BM = mmap(NULL,tam_bitmap,PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0); 
         if (mmap_BM == MAP_FAILED) {
         log_error(logger, "error mapeo %s: %s", ruta, strerror(errno)); 
              exit(1); 
         }
+    //lo llenamos de ceros
     memset(mmap_BM, 0, tam_bitmap);
+
     BA_bitmap = bitarray_create_with_mode(mmap_BM,tam_bitmap,MSB_FIRST); 
     log_info(logger, "BITMAP Creado exitosamente"); 
     close(fd); 
@@ -365,7 +442,7 @@ void inicializar_dir_logic_block( char* ruta){
     fprintf(f, "TAMAÑO=0\n");
     fprintf(f, "ESTADO=WORK_IN_PROGRESS\n");
     fprintf(f, "BLOCKS=[0]\n");
-    //bitmap marca espacio ocupado
+//bitmap marca espacio ocupado
     bitarray_set_bit(BA_bitmap,0); 
 
     log_info(logger, "Metadata %s creado exitosamente",ruta_absoluta_metadata );
@@ -386,11 +463,25 @@ void inicializar_dir_logic_block( char* ruta){
     else {
         log_info(logger, "Directorio %s creado correctamente", ruta_absoluta_dir_log_block); 
     }
+// dentro de esta carpeta creamos el hard link del B. Físico 0.
+    char* ruta_F_block_Base = add_seg_ruta(PUNTO_MONTAJE, "/physical_blocks/block0000.dat");
+    char* ruta_L_block_Base = add_seg_ruta(ruta_absoluta_dir_log_block, "/000000.dat");
+//creación de hard link 
+    if (link(ruta_F_block_Base, ruta_L_block_Base) == -1) {
+    log_error(logger, "No se pudo crear Hard Link BASE. Error: %s", strerror(errno));
+    exit(EXIT_FAILURE);
+    }
+    log_info(logger, "Hard link BASE creado");
+
+
 
     free(ruta_initial_file);
     free(ruta_tag_BASE);
     free(ruta_absoluta_metadata);
     free(ruta_absoluta_dir_log_block);
+    free(ruta_F_block_Base);
+    free(ruta_L_block_Base);
+
 }
 
 void crear_metadata_config(char* ruta){
@@ -400,4 +491,594 @@ void crear_metadata_config(char* ruta){
         perror("Error al crear metadata.config");
         exit(EXIT_FAILURE);
     }
+}
+void inicializar_blocks_hash(char* ruta){
+    //aca solo creamos el archivo y lo seteamos
+    FILE* f = fopen(ruta,"wb");
+    if (!f) { perror("Error creando blocks_hash_index"); exit(1); }
+    //rellenamos con valores seteados
+    int cant_bloques = (FS_SIZE/BLOCK_SIZE); 
+    for(int i=0;i<cant_bloques;i++){
+        fprintf(f, "=%d\n", i);  // vacío = bloque libre
+    }
+    log_info(logger,"Block_hash.config creado correctamente");
+    //para la manipulacion de datos usaremos t_config* 
+    config_hash = config_create(ruta);
+    fclose(f);
+
+}
+int busqueda_block_asociado_hash(char* hash){
+    if(config_has_property(config,hash)){ //checkea si existe el hash
+        int bloque = config_get_int_value(config,hash); //devuelve el n° de bloque
+        return bloque; 
+    }
+    return -1; 
+}
+void inicializar_semaforos(){
+    pthread_mutex_init(&mutex_bitmap,NULL);
+    pthread_mutex_init(&mutex_dir_files,NULL);
+    pthread_mutex_init(&mutex_file_hash,NULL);
+    pthread_mutex_init(&mutex_diccionary,NULL);
+}
+//seccion critica 
+void iniciar_mutex_file_tag(char* nombre){
+    pthread_mutex_t* nuevo_mutex = malloc(sizeof(pthread_mutex_t));
+    pthread_mutex_init(nuevo_mutex, NULL);
+    dictionary_put(file_tag_dic, nombre, nuevo_mutex);
+}
+//seccion critica 
+void eliminar_mutex_file_tag(char* nombre){
+    if(dictionary_has_key(file_tag_dic,nombre)==true){
+        pthread_mutex_t* mutex_a_eliminar = (pthread_mutex_t*) dictionary_remove(file_tag_dic, nombre);
+        pthread_mutex_destroy(mutex_a_eliminar);
+    } 
+}
+void cargar_estructuras_existentes(char* super_block_path){
+    log_info(logger, "Iniciando en modo FRESH_STAR = false");
+
+    char* ruta_bitmap = add_seg_ruta(PUNTO_MONTAJE, "/bitmap.bin"); 
+    char* ruta_block_hash = add_seg_ruta(PUNTO_MONTAJE, "/blocks_hash_index.config"); 
+    char* ruta_f_block = add_seg_ruta(PUNTO_MONTAJE, "/physical_blocks");
+    char* ruta_files = add_seg_ruta(PUNTO_MONTAJE, "/files");
+
+    log_info(logger, "Cargando estructuras existentes");
+    inicializar_dictionary_mutex();
+    inicializar_super_block_config(super_block_path);
+    cargar_block_hash(ruta_block_hash); 
+    cargar_bitmap(ruta_bitmap);
+    mapeo_dir_mutex_dinamic(ruta_files); 
+     
+    free(ruta_bitmap);
+    free(ruta_block_hash);
+    free(ruta_f_block);
+    free(ruta_files);
+}
+void cargar_block_hash(char* ruta){
+    config_hash = config_create(ruta); 
+}
+void cargar_bitmap(char* ruta){
+    log_info(logger, "mapeando bitmap.bin..."); 
+    int tam_bitmap = ((FS_SIZE / BLOCK_SIZE + 7)/8) ; 
+    log_info(logger, "tamaño: %u", tam_bitmap);
+    int fd = open(ruta,O_RDWR);
+    if (fd == -1) {
+        log_error(logger, "Error abriendo %s: %s", ruta, strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+    if (ftruncate(fd, tam_bitmap) == -1) {
+        log_error(logger, "Error con ftruncate en %s: %s", ruta, strerror(errno));
+        close(fd);
+        exit(EXIT_FAILURE);
+    }
+
+    log_info(logger, "tamaño: %u", tam_bitmap); 
+    char* mmap_BM = mmap(NULL,tam_bitmap,PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    if (mmap_BM == MAP_FAILED) {
+    log_error(logger, "error mapeo %s: %s", ruta, strerror(errno)); 
+            exit(1); 
+    }
+    BA_bitmap = bitarray_create_with_mode(mmap_BM,tam_bitmap,MSB_FIRST); 
+      if (!BA_bitmap) {
+        log_error(logger, "Error creando bitarray desde el mmap de %s", ruta);
+        munmap(mmap_BM, tam_bitmap);
+        close(fd);
+        exit(EXIT_FAILURE);
+    }
+    log_info(logger, "BITMAP Cargado exitosamente"); 
+    close(fd);
+}
+
+void mapeo_dir_mutex_dinamic(char* ruta){
+    DIR* dir_files = opendir(ruta);
+        if (dir_files == NULL) {
+            log_error(logger, "Error al abrir el directorio");
+            return;
+        }
+
+        struct dirent* entrada_file;
+
+        while ((entrada_file = readdir(dir_files)) != NULL) {
+            
+            if (strcmp(entrada_file->d_name, ".") == 0 || strcmp(entrada_file->d_name, "..") == 0) {
+                continue;
+            }
+
+            if (entrada_file->d_type == DT_DIR) {
+                char* nombre_file = entrada_file->d_name;
+                char* ruta_file = add_seg_ruta(ruta,nombre_file); 
+                
+                DIR* dir_tags = opendir(ruta_file);
+                if (dir_tags == NULL) {
+                    log_error(logger, "Error al abrir el directorio");
+                    continue;
+                }
+
+                struct dirent* entrada_tag;
+                while ((entrada_tag = readdir(dir_tags)) != NULL) {
+                    if (strcmp(entrada_tag->d_name, ".") == 0 || strcmp(entrada_tag->d_name, "..") == 0) {
+                        continue;
+                    }
+
+                    if (entrada_tag->d_type == DT_DIR) {
+                        char* nombre_tag = entrada_tag->d_name;
+                        char* ruta_tag = add_seg_ruta(ruta_file,nombre_tag);
+                        log_info(logger, "File:Tag descubierto: %s:%s", nombre_file, nombre_tag);
+               
+                     // recreando diccionario de mutex y diccionario de estado
+
+                        char* key_file_tag = crear_key_file_tag(nombre_file, nombre_tag); 
+                        log_info(logger, "valor: %s", key_file_tag);
+
+                        int estado_leido = lectura_metadata(ruta_tag);
+                        log_info(logger, "estado: %u", estado_leido);
+
+                        if(estado_leido == 1 || estado_leido == 0  ){
+                            intptr_t estado_ptr = estado_leido; 
+                            //log_info(logger, "DEBUG: dicc_estado_tag=%p, key=%s, estado_ptr=%p", (void*)dicc_estado_tag, key_file_tag, (void*)estado_ptr);
+                            dictionary_put(dicc_estado_tag, key_file_tag, (void*)(intptr_t)estado_ptr);
+                            log_info(logger, "File:Tag añadido a diccionario de ESTASDo: %s:%s", nombre_file, nombre_tag);
+                        }else
+                            log_error(logger, "Error de lectura metadata: %s", key_file_tag); 
+                    
+                     //crear y agregamos al dicc el mutex file_tag
+                        iniciar_mutex_file_tag(key_file_tag); 
+                        log_info(logger, "File:Tag añadido a diccionario de MUTEX: %s:%s", nombre_file, nombre_tag);
+
+
+                     free(ruta_tag);
+                     free(key_file_tag);
+                      
+                    }
+                }
+                log_info(logger, "Mapeo de Files Finalizado");
+                free(ruta_file);
+                closedir(dir_tags);
+            }
+        }
+        closedir(dir_files);
+}
+char* crear_key_file_tag(char *nombre_file,  char *nombre_tag){
+    size_t len_file = strlen(nombre_file);
+    size_t len_tag = strlen(nombre_tag);
+    
+    char *key = malloc(len_file + len_tag + 2);
+    if (!key){
+        log_info(logger, "error de malloc");
+       exit(EXIT_FAILURE);
+    }
+
+    sprintf(key, "%s:%s", nombre_file, nombre_tag);
+    return key; 
+}
+int lectura_metadata(char* ruta){
+    char* ruta_metadata = add_seg_ruta(ruta, "/metadata.config");
+    //log_info(logger, "ruta metadata: %s",ruta_metadata); 
+    int estado = -1;  
+
+    t_config* config_temporal = config_create(ruta_metadata);
+    if (config_temporal == NULL) {
+        log_error(logger, "Error al abrir  Metadata");
+        free(ruta_metadata); 
+
+        return estado; 
+    }
+    
+    if (!config_has_property(config_temporal, "ESTADO")) {
+        log_error(logger, "La clave 'ESTADO' no existe en: %s", ruta_metadata);
+        config_destroy(config_temporal);
+        free(ruta_metadata);
+        return estado;
+    }
+
+    char* estado_C = config_get_string_value(config_temporal, "ESTADO");
+    if((strcmp(estado_C,"COMMITED")==0)){
+
+        estado = 0; //COMMITED
+    }
+    else 
+        estado = 1; //WORK_IN_PROGRESS
+
+    config_destroy(config_temporal);
+    free(ruta_metadata); 
+    return estado;
+}
+
+
+void inicializar_dictionary_mutex(){
+    if (dicc_estado_tag == NULL)
+    dicc_estado_tag = dictionary_create();
+    if (file_tag_dic == NULL)
+        file_tag_dic = dictionary_create();
+}
+// --- Esta función debe ser llamada DENTRO de un mutex del File:Tag ---
+int asignar_bloque_logico(char* ruta_logical_block){
+// buscamos un bloque fisico
+// dentro de esta carpeta creamos el hard link del B. Físico 0. 
+    int k=4; 
+    int bloque_fisico = encontrar_y_reservar_bloque(); 
+    if (bloque_fisico == -1) {
+        log_error(logger, "Espacio insuficiente en el bitmap");
+        return ERROR_ESPACIO_INSUFICIENTE;
+    }
+    char* nombre_block = crear_nombre_block(bloque_fisico, k); 
+    char* pre_ruta = add_seg_ruta("/physical_blocks",nombre_block);
+    char* ruta_F_block = add_seg_ruta(PUNTO_MONTAJE,pre_ruta);
+//encontrar numero de bloque logico a esta ruta
+    int posicion = buscar_num_ultimo_bloque(ruta_logical_block);
+    if(posicion<0){
+        free(nombre_block);
+        free(pre_ruta);
+        free(ruta_F_block);
+        liberar_bloque_reservado(bloque_fisico); 
+        return ERROR_DESCONOCIDO; 
+    }
+    int Q = 6; 
+    char* nombre_block_logic = crear_nombre_block(posicion, Q); 
+    char* ruta_L_block_final= add_seg_ruta(ruta_logical_block, nombre_block_logic);
+//creación de hard link 
+    if (link(ruta_F_block, ruta_L_block_final) == -1) {
+
+        liberar_bloque_reservado(bloque_fisico);
+        log_error(logger, "No se pudo crear Hard Link BASE. Error: %s", strerror(errno));
+
+
+        free(nombre_block);
+        free(pre_ruta);
+        free(ruta_F_block); 
+        free(nombre_block_logic);
+        free(ruta_L_block_final);
+
+        return ERROR_DESCONOCIDO; 
+
+    }
+    log_info(logger, "Hard link creado: %s -> %s", ruta_L_block_final, ruta_F_block);
+
+
+    free(nombre_block);
+    free(pre_ruta);
+    free(ruta_F_block); 
+    free(nombre_block_logic);
+    free(ruta_L_block_final);
+
+    return bloque_fisico; 
+}
+int asignar_bloque_logico_especifico(char* ruta_logical_block, int num_bloque_logico) {
+    
+    int k = 4; 
+    int bloque_fisico = encontrar_y_reservar_bloque(); 
+    if (bloque_fisico == -1) {
+        log_error(logger, "Espacio insuficiente en el bitmap");
+        return ERROR_ESPACIO_INSUFICIENTE;
+    }
+    
+    char* nombre_block = crear_nombre_block(bloque_fisico, k); 
+    char* pre_ruta = add_seg_ruta("/physical_blocks", nombre_block);
+    char* ruta_F_block = add_seg_ruta(PUNTO_MONTAJE, pre_ruta);
+
+    int Q = 6; 
+    char* nombre_block_logic = crear_nombre_block(num_bloque_logico, Q); 
+    char* ruta_L_block_final = add_seg_ruta(ruta_logical_block, nombre_block_logic);
+
+    if (link(ruta_F_block, ruta_L_block_final) == -1) {
+        liberar_bloque_reservado(bloque_fisico); 
+        log_error(logger, "No se pudo crear Hard Link para %s. Error: %s", nombre_block_logic, strerror(errno));
+        free(nombre_block); free(pre_ruta); free(ruta_F_block); 
+        free(nombre_block_logic); free(ruta_L_block_final);
+        return ERROR_DESCONOCIDO; 
+    }
+    
+    log_info(logger, "Hard link creado: %s -> %s", nombre_block_logic, nombre_block);
+
+    free(nombre_block); free(pre_ruta); free(ruta_F_block); 
+    free(nombre_block_logic); free(ruta_L_block_final);
+
+    return bloque_fisico; 
+}
+
+void liberar_bloque_reservado(int nro_bloque) {
+    //solo si no hay mas enlaces existentes
+    pthread_mutex_lock(&mutex_bitmap);
+    
+    bitarray_clean_bit(BA_bitmap, nro_bloque);
+    
+    pthread_mutex_unlock(&mutex_bitmap);
+}
+void ocupar_bloque_reservar(int nro_bloque) {
+    //solo si no hay mas enlaces existentes
+    pthread_mutex_lock(&mutex_bitmap);
+    
+    bitarray_set_bit(BA_bitmap, nro_bloque);
+    
+    pthread_mutex_unlock(&mutex_bitmap);
+}
+char* crear_nombre_block(int valor, int cod) {
+    char* nombre = malloc(25); 
+
+    if (!nombre) 
+        return NULL;
+    if(cod == 4)
+    sprintf(nombre, "block%04d.dat", valor);
+    else 
+    sprintf(nombre, "%06d.dat", valor);
+
+    return nombre;
+}
+int encontrar_y_reservar_bloque() {
+    
+    pthread_mutex_lock(&mutex_bitmap);
+
+    int bloque_libre = buscar_primer_bloque_libre(BA_bitmap);
+
+    if (bloque_libre > 0) {
+        bitarray_set_bit(BA_bitmap, bloque_libre);
+    }
+
+    pthread_mutex_unlock(&mutex_bitmap); 
+    return bloque_libre;
+}
+int buscar_primer_bloque_libre() {
+    
+    int cant_bloques = FS_SIZE / BLOCK_SIZE; 
+    for (int i = 0; i<cant_bloques; i++) {
+        
+        if (bitarray_test_bit(BA_bitmap, i) == false) {
+            return i;
+        }
+    }
+
+    log_error(logger, "No se encontró espacio libre en el bitmap.");
+    return ERROR_ESPACIO_INSUFICIENTE; 
+}
+int buscar_num_ultimo_bloque(char* ruta_logical_block){
+ // ruta_logical_block es ".../files/FILE/TAG/logical_blocks"
+    
+    char* ultimo_slash = strrchr(ruta_logical_block, '/');
+    if (ultimo_slash == NULL) {
+        log_error(logger, "Ruta inválida: %s", ruta_logical_block);
+        return ERROR_DESCONOCIDO;
+    }
+
+    char* ruta_tag = strndup(ruta_logical_block, ultimo_slash - ruta_logical_block);
+
+    char* ruta_metadata = add_seg_ruta(ruta_tag, "/metadata.config");
+     
+    t_config* temp = config_create(ruta_metadata);
+    if (temp == NULL) {
+        log_error(logger, "No se pudo leer metadata en: %s", ruta_metadata);
+        free(ruta_tag);
+        free(ruta_metadata);
+        return ERROR_DESCONOCIDO; 
+    }
+
+    int tamaño = config_get_int_value(temp, "TAMAÑO");
+    int bloques_actuales = (int)ceil((double)tamaño / (double)BLOCK_SIZE);
+    int proximo_bloque = bloques_actuales;
+    
+    free(ruta_tag);
+    free(ruta_metadata);
+    config_destroy(temp); 
+
+    return proximo_bloque;  
+}
+int actualizar_metadata_bloque(char* file, char* tag, int num_L_block_a_cambiar, int nro_bloque_fisico_nuevo) {
+    
+    char* ruta_files = add_seg_ruta(PUNTO_MONTAJE, "/files");
+    char* ruta_file = add_seg_ruta(ruta_files, file);
+    char* ruta_tag = add_seg_ruta(ruta_file, tag);
+    char* ruta_metadata = add_seg_ruta(ruta_tag, "/metadata.config");
+
+    t_config* config = config_create(ruta_metadata);
+    if (config == NULL) {
+        log_error(logger, "Error al abrir metadata para actualizar: %s", ruta_metadata);
+        free(ruta_files); free(ruta_file); free(ruta_tag); free(ruta_metadata);
+        return ERROR_DESCONOCIDO;
+    }
+
+    char** bloques_array = config_get_array_value(config, "BLOCKS");
+    if (bloques_array == NULL) {
+        log_error(logger, "Error al leer 'BLOCKS' de metadata: %s", ruta_metadata);
+        config_destroy(config);
+        free(ruta_files); free(ruta_file); free(ruta_tag); free(ruta_metadata);
+        return ERROR_DESCONOCIDO;
+    }
+
+    int array_size = 0;
+    while (bloques_array[array_size] != NULL) {
+        array_size++;
+    }
+
+    if (num_L_block_a_cambiar >= array_size) {
+        log_error(logger, "Error: num_L_block (%d) está fuera de rango (Tamaño: %d)", num_L_block_a_cambiar, array_size);
+        string_array_destroy(bloques_array);
+        config_destroy(config);
+        free(ruta_files); free(ruta_file); free(ruta_tag); free(ruta_metadata);
+        return ERROR_FUERA_DE_LIMITE;
+    }
+
+    free(bloques_array[num_L_block_a_cambiar]); 
+    
+    bloques_array[num_L_block_a_cambiar] = string_itoa(nro_bloque_fisico_nuevo);
+
+    char* joined_string = join_string_array(bloques_array, ","); 
+    char* final_array_string = string_from_format("[%s]", joined_string);
+
+    config_set_value(config, "BLOCKS", final_array_string);
+
+    config_save(config);
+
+    free(joined_string);
+    free(final_array_string);
+    string_array_destroy(bloques_array); 
+    config_destroy(config);
+    free(ruta_files); free(ruta_file); free(ruta_tag); free(ruta_metadata);
+
+    log_info(logger, "Metadata actualizada: Bloque lógico %d de %s:%s ahora apunta a físico %d",
+             num_L_block_a_cambiar, file, tag, nro_bloque_fisico_nuevo);
+    
+    return 0;
+}
+char* join_string_array(char** array, char* separator) {
+    
+    int size = string_array_size(array);
+    
+    if (size == 0) {
+        return string_new(); // Devuelve un string vacío
+    }
+
+    char* resultado = string_duplicate(array[0]);
+
+    for (int i = 1; i < size; i++) {
+        
+        string_append_with_format(&resultado, "%s%s", separator, array[i]);
+    }
+
+    return resultado;
+}
+
+int anadir_a_dicc_estado(char* key){
+    int estado_op;
+    pthread_mutex_lock(&mutex_dic_estado); 
+
+    if(dictionary_has_key(dicc_estado_tag, key)){
+
+        log_error(logger, "Error: Se intentó operar sobre un File:Tag existente: %s", key);
+        estado_op = -1; 
+
+    }else{
+    
+    intptr_t estado_ptr = (intptr_t)1; 
+    dictionary_put(dicc_estado_tag, key, (void*)(intptr_t)estado_ptr);
+    log_info(logger, "File:Tag añadido a diccionario de ESTASDo: %s",key);
+        
+    estado_op = 0;
+    }
+    pthread_mutex_unlock(&mutex_dic_estado); 
+    return estado_op; 
+}
+int obtener_estado_file_tag(char* key){
+    int estado_final;
+    pthread_mutex_lock(&mutex_dic_estado); 
+
+    if(dictionary_has_key(dicc_estado_tag, key)){
+    intptr_t estado_tag = (intptr_t)dictionary_get(dicc_estado_tag, key);
+    estado_final = (int)estado_tag;
+    }else{
+        log_error(logger, "Error: Se intentó operar sobre un File:Tag no existente: %s", key);
+        estado_final = -1; 
+    
+    } 
+    pthread_mutex_unlock(&mutex_dic_estado); 
+    return estado_final; 
+}
+int actualizar_dicc_estado(char* key_file_tag,int nuevo_estado){
+    pthread_mutex_lock(&mutex_dic_estado); 
+
+    if(!dictionary_has_key(dicc_estado_tag, key_file_tag)){
+        log_error(logger, "Error: Se intentó actualizar un estado no existente: %s", key_file_tag);
+        pthread_mutex_unlock(&mutex_dic_estado);
+        return ERROR_FILE_TAG_INEXISTENTE;
+    }
+    intptr_t estado_ptr = (intptr_t)nuevo_estado; 
+    dictionary_put(dicc_estado_tag, key_file_tag, (void*)(intptr_t)estado_ptr);
+    log_info(logger, "Estado actualizado para %s a %d", key_file_tag, nuevo_estado);       
+    
+    pthread_mutex_unlock(&mutex_dic_estado); 
+    return 0;
+}
+int calcular_cant_bloq_log(char* file, char* tag){
+    char* ruta_files = add_seg_ruta(PUNTO_MONTAJE,"/files");
+    char* ruta_file = add_seg_ruta(ruta_files, file);          
+    char* ruta_tag  = add_seg_ruta(ruta_file, tag);
+    char* ruta_metadata = add_seg_ruta(ruta_tag, "/metadata.config");
+    t_config* config_tag = config_create(ruta_metadata);
+
+    int tamanio = config_get_int_value(config_tag, "TAMAÑO");
+    int cantidad_bloques = tamanio/BLOCK_SIZE; 
+
+    config_destroy(config_tag);
+    free(ruta_files);
+    free(ruta_file);  
+    free(ruta_tag);  
+    free(ruta_metadata);  
+    return cantidad_bloques;
+}
+void rollback_falla_incrementar(int* bloques_fisicos_nuevos, int cant_exitosos) {
+    
+    log_warning(logger, "TRUNCATE: Falló el incremento. Revirtiendo %d bloques del bitmap...", cant_exitosos);
+
+    for (int i = 0; i < cant_exitosos; i++) {
+        int nro_bloque_a_liberar = bloques_fisicos_nuevos[i];
+        
+        log_debug(logger, "Rollback: Liberando bloque físico %d", nro_bloque_a_liberar);
+        
+        liberar_bloque_reservado(nro_bloque_a_liberar);
+    }
+
+    log_info(logger, "Rollback del bitmap completado.");
+}
+void log_contenido_legible(t_log* logger, const char* prefijo, char* contenido, int tamanio) {
+    
+    if (contenido == NULL) {
+        log_info(logger, "%s (Tamaño %d): [CONTENIDO NULO]", prefijo, tamanio);
+        return;
+    }
+    if (tamanio > MAX_LOG_TEXT_PREVIEW) {
+        
+        log_info(logger, "%s (Tamaño %d, mostrando %d): %.*s ...[truncado]",
+                 prefijo,                     // El mensaje
+                 tamanio,                     // El tamaño real
+                 MAX_LOG_TEXT_PREVIEW,        // El tamaño que mostramos
+                 MAX_LOG_TEXT_PREVIEW,        // El '.*' (cuántos bytes imprimir)
+                 contenido);                  // El buffer
+
+    } else {
+        
+        log_info(logger, "%s (Tamaño %d): %.*s",
+                 prefijo,                     // El mensaje
+                 tamanio,                     // El tamaño real
+                 tamanio,                     // El '.*' (cuántos bytes imprimir)
+                 contenido);                  // El buffer
+    }
+}
+void liberar_bloque_si_no_se_usa(int nro_bloque) {
+    char* nombre_block = crear_nombre_block(nro_bloque, 4);
+    char* pre_ruta = add_seg_ruta("/physical_blocks", nombre_block);
+    char* ruta_F_block = add_seg_ruta(PUNTO_MONTAJE, pre_ruta);
+
+    struct stat st_fisico;
+    if (stat(ruta_F_block, &st_fisico) == -1) {
+        log_error(logger, "Error en stat de %s al liberar: %s", ruta_F_block, strerror(errno));
+    } else {
+        // nlink == 1 significa que solo el propio archivo en /physical_blocks lo apunta.
+        // Nadie más lo está usando.
+        if (st_fisico.st_nlink == 1) {
+            log_info(logger, "COMMIT: Bloque %d (nlink=1) ya no se usa. Liberando en bitmap.", nro_bloque);
+            liberar_bloque_reservado(nro_bloque); // Libera en tu bitmap
+            // Opcional: unlink(ruta_F_block) para borrar el archivo físico
+        }
+    }
+
+    free(nombre_block);
+    free(pre_ruta);
+    free(ruta_F_block);
 }

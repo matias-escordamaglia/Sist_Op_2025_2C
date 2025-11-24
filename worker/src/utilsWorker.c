@@ -7,6 +7,12 @@ t_dictionary* diccionario_programas = NULL;
 u_int32_t QID_actual = QID_NULO; //Inicia en -1 dado que QID puede ser 0 si es el primero
 bool hay_pedido_desalojo = false;
 
+uint8_t* MEM               = NULL;  
+size_t   TAM_PAGINA        = 4096;
+int      RETARDO_MEMORIA_MS= 5;  
+int block_size = 1;
+pthread_mutex_t mutex_mem = PTHREAD_MUTEX_INITIALIZER;
+
 sem_t* sem_desalojo_pendiente;
 sem_t* sem_ejecucion_pendiente;
 
@@ -66,3 +72,4 @@ void deterner_ejecucion_query_error(char* mensaje)
 {
 	deterner_ejecucion_query_segun_motivo_y_mensaje(ERROR_QUERY, mensaje);
 }
+
