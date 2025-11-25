@@ -313,7 +313,8 @@ void* tratar_siguientes_pedidos_a_enviar_worker(void* _) {
 
         t_pedido_master_worker* pedido = malloc(sizeof(t_pedido_master_worker));
         pedido->query_id= qid_pedido;
-        pedido->program_counter = pc_pedido;
+        // pedido->program_counter = pc_pedido;
+        pedido->program_counter = 4;
         pedido->query_path = path;
         pedido->motivo = motivo;
 
