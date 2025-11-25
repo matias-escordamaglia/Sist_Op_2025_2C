@@ -390,6 +390,7 @@ int atender_lectura(char* file, char* tag, int bloque_logico, int* tamanio_leido
     } else {
         *contenido_salida = lectura;
         estado_final = 0;
+        log_info(logger,"##%u - Bloque Lógico Leído %s - Número de Bloque: %u",query_id,key_file_tag,bloque_logico);
         log_contenido_legible(logger, "Contenido READ leido", *contenido_salida, *tamanio_leido);
         log_info(logger, "##%u - Bloque Lógico Leído %s - Número de Bloque: %u",query_id,key_file_tag,bloque_logico); 
     }
@@ -429,7 +430,7 @@ int atender_escritura(char* file, char* tag, int bloque, char* contenido,int tam
    
     if(bloque >= cantidad_bloques){
         log_error(logger, "Error-WRITE: Se intentó WRITE en un bloque no existente de File:Tag : %s", key_file_tag);
-        pthread_mutex_unlock(mutex_file_tag);
+        pthread_mutex_unlock(mutex_file_tag); 
         free(key_file_tag);
         return ERROR_FILE_TAG_INEXISTENTE;
     }

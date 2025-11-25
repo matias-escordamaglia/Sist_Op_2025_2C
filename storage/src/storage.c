@@ -766,6 +766,7 @@ int asignar_bloque_logico_especifico(char* ruta_logical_block, int num_bloque_lo
     
     int k = 4; 
     int bloque_fisico = encontrar_y_reservar_bloque(); 
+    log_info(logger,"##%u - Bloque Físico Reservado - Número de Bloque: %u",query_id, bloque_fisico)
     if (bloque_fisico == -1) {
         log_error(logger, "Espacio insuficiente en el bitmap");
         return ERROR_ESPACIO_INSUFICIENTE;
