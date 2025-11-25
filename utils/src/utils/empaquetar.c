@@ -102,11 +102,12 @@ t_paquete* empaquetar_operacion_create(char* file, char* tag, uint32_t query_id)
 
     insertar_uint32_a_paquete(paquete, CREATE);
 
+    insertar_uint32_a_paquete(paquete, query_id);
+
     insertar_string_a_paquete(paquete, file);
 
     insertar_string_a_paquete(paquete, tag);
     
-    insertar_uint32_a_paquete(paquete, query_id);
     return paquete;
 }
 
@@ -115,13 +116,13 @@ t_paquete* empaquetar_operacion_truncate(char* file, char* tag, uint32_t tam, ui
     
     insertar_uint32_a_paquete(paquete, TRUNCATE);
 
+    insertar_uint32_a_paquete(paquete, queryid);
+
     insertar_string_a_paquete(paquete, file);
 
     insertar_string_a_paquete(paquete, tag);
 
     insertar_uint32_a_paquete(paquete, tam);   
-
-    insertar_uint32_a_paquete(paquete, queryid);
 
     return paquete;
 }
@@ -131,6 +132,8 @@ t_paquete* empaquetar_operacion_tag(char* file_origen, char* tag_origen, char* f
     
     insertar_uint32_a_paquete(paquete, TAG);
 
+    insertar_uint32_a_paquete(paquete, queryid);
+
     insertar_string_a_paquete(paquete, file_origen);
 
     insertar_string_a_paquete(paquete, tag_origen);
@@ -138,8 +141,6 @@ t_paquete* empaquetar_operacion_tag(char* file_origen, char* tag_origen, char* f
     insertar_string_a_paquete(paquete, file_dest);
 
     insertar_string_a_paquete(paquete, tag_dest);
-
-    insertar_uint32_a_paquete(paquete, queryid);
 
     return paquete;
 }
@@ -157,9 +158,9 @@ t_paquete* empaquetar_operacion_commit(char* file, char* tag, uint32_t queryid) 
     t_paquete* paquete = crear_paquete();
 
     insertar_uint32_a_paquete(paquete, COMMIT);
+    insertar_uint32_a_paquete(paquete, queryid);
     insertar_string_a_paquete(paquete, file);
     insertar_string_a_paquete(paquete, tag);
-    insertar_uint32_a_paquete(paquete, queryid);
 
     return paquete;
 }
@@ -168,9 +169,9 @@ t_paquete* empaquetar_operacion_delete(char* file, char* tag, uint32_t queryid) 
     t_paquete* paquete = crear_paquete();
 
     insertar_uint32_a_paquete(paquete, DELETE);
+    insertar_uint32_a_paquete(paquete, queryid);
     insertar_string_a_paquete(paquete, file);
     insertar_string_a_paquete(paquete, tag);
-    insertar_uint32_a_paquete(paquete, queryid);
 
     return paquete;
 }

@@ -3,7 +3,13 @@
 
 void envioAQueryInterpreter(){
     size_t cant = 0;
-    char* const* vec = instrucciones_desde("querie1.txt", 4, &cant);
+    // aca iba lo de pedido, osea pedido->program_counter y pedido->query_path
+    // char* const* vec = instrucciones_desde("querie1.txt", 4, &cant);
+    printf("DEBUG CHECK: Puntero: %p, Contenido: '%s'\n", 
+           (void*)query_actual.query_path, 
+           query_actual.query_path);
+           
+    char* const* vec = instrucciones_desde(query_actual.query_path, 4, &cant);
     if (!vec) {
         log_error(logger, "No hay instrucciones desde la 4 para %s", "querie1.txt");
         return;
@@ -118,11 +124,9 @@ bool ejecutar_linea(char* linea, uint32_t queryid) {
                 return false;
             }
 
-            int ok = ejecutar_create(&c,queryid); // en caso de retornar -1, es pq los parametros son invalidos
-
-            if(ok != 0){
-              // el ok va a ser un entero, perteneciente a un enum, el cual query_control lo va a usar
-              // para saber de que error estoy hablando.
+            int ok = ejecutar_create(&c,queryid);
+            // en caso de retornar != 1 => ese "ok" va a ser el motivo del error
+            if(ok != 1){
               finalizar_query_con_error(ERROR_QUERY, ok);
               destruir_create(&c);
               return false;
@@ -355,6 +359,8 @@ void finalizar_query_con_error(t_tipo_aviso_worker_master tipodeerror, int motiv
     }
     // 2) Enviar a Master
     enviar_paquete(paquete, conexion_master);
+    // 24/11 en caso de una falla en una query, se desconecta de master, pero no corta la consola.
+    // 24/11 
 }
 
 char* storage_error_to_string(int motivo) {
@@ -495,37 +501,51 @@ int ejecutar_delete(t_create* c , uint32_t queryid) {
 
 //////////////////////////////// TERMINA LA SECCION DE EJECUCION DE INSTRUCCIONES /////////////////
 
+// int recibir_respuesta_storage(int conexion, t_log* logger) {
+//     int opcode_respuesta = recibir_operacion(conexion, logger);
+//     if (opcode_respuesta < 0) {
+//         log_error(logger, "[WORKER] Error al recibir opcode de respuesta de Storage (conexión caída?)");
+//         return 0;  // Asumimos error
+//     }
+
+//     if (opcode_respuesta != ERROR_OK) {
+//         log_error(logger, "[WORKER] Opcode inesperado de Storage: %d (esperaba RESPONSE=%d)", opcode_respuesta, RESPONSE);
+//         return 0;
+//     }
+
+//     int size_buffer;
+//     void* buffer = recibir_buffer(&size_buffer, conexion);
+//     if (buffer == NULL) {
+//         log_error(logger, "[WORKER] Error al recibir buffer de respuesta de Storage");
+//         return 0;
+//     }
+
+//     if (size_buffer < sizeof(int)) {
+//         log_error(logger, "[WORKER] Buffer de respuesta inválido (demasiado chico)");
+//         free(buffer);
+//         return 0;
+//     }
+
+//     int flag;
+//     int offset = 0;
+//     memcpy(&flag, buffer + offset, sizeof(int));
+//     free(buffer);  // Limpia siempre
+
+//     return flag;  // 1=OK, 0=Error
+// }
+
 int recibir_respuesta_storage(int conexion, t_log* logger) {
-    int opcode_respuesta = recibir_operacion(conexion, logger);
-    if (opcode_respuesta < 0) {
-        log_error(logger, "[WORKER] Error al recibir opcode de respuesta de Storage (conexión caída?)");
-        return 0;  // Asumimos error
-    }
+    // MOCK ACTIVADO: Simulamos que Storage respondió OK
+    
+    // Simulamos que recibimos el OpCode RESPONSE (100)
+    log_trace(logger, "[MOCK] Storage envió OpCode: %d (RESPONSE)", RESPONSE);
 
-    if (opcode_respuesta != RESPONSE) {
-        log_error(logger, "[WORKER] Opcode inesperado de Storage: %d (esperaba RESPONSE=%d)", opcode_respuesta, RESPONSE);
-        return 0;
-    }
+    // Simulamos que leímos el buffer y adentro venía un 0 (ERROR_OK)
+    int valor_simulado_del_buffer = -2; // 1 = ÉXITO, cambialo a otro número para probar errores
+    
+    log_info(logger, "[MOCK] Simulando respuesta exitosa del Storage -> Retorno: %d", valor_simulado_del_buffer);
 
-    int size_buffer;
-    void* buffer = recibir_buffer(&size_buffer, conexion);
-    if (buffer == NULL) {
-        log_error(logger, "[WORKER] Error al recibir buffer de respuesta de Storage");
-        return 0;
-    }
-
-    if (size_buffer < sizeof(int)) {
-        log_error(logger, "[WORKER] Buffer de respuesta inválido (demasiado chico)");
-        free(buffer);
-        return 0;
-    }
-
-    int flag;
-    int offset = 0;
-    memcpy(&flag, buffer + offset, sizeof(int));
-    free(buffer);  // Limpia siempre
-
-    return flag;  // 1=OK, 0=Error
+    return valor_simulado_del_buffer;
 }
 
 
@@ -610,7 +630,12 @@ t_programa* obtener_programa(char* nombre){
 }
 
 char* const* instrucciones_desde(char* nombre, size_t idx_1based, size_t* out_cant) {
-    t_programa* p = obtener_programa(nombre);
+    char* nombre_con_comillas = string_from_format("\"%s\"", nombre);
+    t_programa* p = obtener_programa(nombre_con_comillas);
+    if (!p) {
+        printf("[DEBUG] Error: No se encontró el programa '%s' en el diccionario.\n", nombre_con_comillas);
+        return NULL;
+    }
     if (!out_cant) return NULL;
     *out_cant = 0;
     if (!p || idx_1based == 0 || idx_1based > p->cant) return NULL;
