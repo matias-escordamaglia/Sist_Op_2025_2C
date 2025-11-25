@@ -43,6 +43,8 @@ pthread_mutex_t mutex_dic_estado;
 t_dictionary* file_tag_dic = NULL; 
 t_dictionary* dicc_estado_tag = NULL; 
 
+__thread int g_query_id_actual = -1;
+
 
 int main(int argc, char **argv)
 {   
@@ -766,7 +768,7 @@ int asignar_bloque_logico_especifico(char* ruta_logical_block, int num_bloque_lo
     
     int k = 4; 
     int bloque_fisico = encontrar_y_reservar_bloque(); 
-    log_info(logger,"##%u - Bloque Físico Reservado - Número de Bloque: %u",query_id, bloque_fisico)
+    log_info(logger,"##%u - Bloque Físico Reservado - Número de Bloque: %u",g_query_id_actual, bloque_fisico);
     if (bloque_fisico == -1) {
         log_error(logger, "Espacio insuficiente en el bitmap");
         return ERROR_ESPACIO_INSUFICIENTE;
@@ -801,6 +803,7 @@ void liberar_bloque_reservado(int nro_bloque) {
     pthread_mutex_lock(&mutex_bitmap);
     
     bitarray_clean_bit(BA_bitmap, nro_bloque);
+    log_info(logger,"##%u- Bloque Físico Liberado - Número de Bloque: %u",g_query_id_actual,nro_bloque);
     
     pthread_mutex_unlock(&mutex_bitmap);
 }
@@ -1130,4 +1133,37 @@ int actualizar_metadata_incremento(char* file, char* tag, int* bloques_fisicos_n
     free(ruta_files); free(ruta_file); free(ruta_tag); free(ruta_metadata);
     
     return 0;
+}
+int obtener_nro_bloque_fisico(char* file, char* tag, int num_L_block) {
+    char* ruta_files = add_seg_ruta(PUNTO_MONTAJE, "/files");
+    char* ruta_file = add_seg_ruta(ruta_files, file);
+    char* ruta_tag = add_seg_ruta(ruta_file, tag);
+    char* ruta_metadata = add_seg_ruta(ruta_tag, "/metadata.config");
+
+    t_config* config = config_create(ruta_metadata);
+    if (config == NULL) {
+         log_error(logger, "No se pudo leer metadata de %s", ruta_metadata);
+        free(ruta_files);free(ruta_file);
+        free(ruta_tag);free(ruta_metadata);        
+        return ERROR_DESCONOCIDO;
+        
+    }
+
+    char** blocks = config_get_array_value(config, "BLOCKS");
+    int nro_fisico = -1;
+
+    // Validamos que el índice exista
+    int count = 0;
+    while(blocks[count] != NULL) count++;
+
+    if (num_L_block < count) {
+        nro_fisico = atoi(blocks[num_L_block]);
+    }
+
+    string_array_destroy(blocks);
+    config_destroy(config);
+    
+    free(ruta_files); free(ruta_file); free(ruta_tag); free(ruta_metadata);
+    
+    return nro_fisico;
 }

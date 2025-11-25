@@ -115,8 +115,9 @@ void* atender_conexion_worker(void* arg) {
                 void* buffer_st = recibir_buffer(&size, cliente_fd);
                 log_info(logger_worker, "[WORKER] Se recibe paquete desde WORKER %u", id_worker);
                 Operation operation = extraer_operacion(buffer_st, &offset); 
-
+                    g_query_id_actual = -1; 
                     int query_id = extraer_int(buffer_st, &offset);
+                    g_query_id_actual = query_id; 
                     char* nombre_file = extraer_string(buffer_st,&offset); 
                     char* nombre_tag  = extraer_string(buffer_st,&offset);
 
@@ -127,7 +128,7 @@ void* atender_conexion_worker(void* arg) {
                     char* contenido_salida;
                     int tamanio_leido;
                     
-                log_info(logger_worker, "EJECUTANDO operación: %s", operation_to_string(operation));
+                log_info(logger_worker, "##%u EJECUTANDO OPERACIÓN: %s", query_id, operation_to_string(operation));
 
                     switch (operation){
                         case  CREATE:
@@ -207,7 +208,6 @@ void enviar_estado_op(int estado, int socket){
     t_paquete* paquete = crear_paquete();
     insertar_int_a_paquete(paquete,estado);
     enviar_paquete(paquete,socket);
-    eliminar_paquete(paquete);
 }
 void enviar_paquete_read(int estado,char* contenido_salida, int tamanio_leido,int socket){
     t_paquete* paquete = crear_paquete();
@@ -215,7 +215,6 @@ void enviar_paquete_read(int estado,char* contenido_salida, int tamanio_leido,in
     insertar_int_a_paquete(paquete,tamanio_leido);
     insertar_binario_a_paquete(paquete,contenido_salida,tamanio_leido);
     enviar_paquete(paquete,socket);
-    eliminar_paquete(paquete);
 }
 
 int atender_create(char* file, char* tag, int query_id){
@@ -310,7 +309,7 @@ int atender_tag(char* file, char* tag, char* file_destino,char* tag_destino, int
         return ERROR_FILE_TAG_INEXISTENTE; 
     } 
     pthread_mutex_lock(mutex_file_tag);
-    int estado = tag_file(file_tag_origen,file_tag_destino);
+    int estado = tag_file(file_tag_origen,file_tag_destino,file,tag,file_destino, tag_destino);
 
     if(estado==0){
         log_info(logger,"##%u - Tag creado %s",query_id,key_file_tag_destino); 
@@ -362,6 +361,7 @@ int atender_commit(char* file, char* tag, int query_id){
 
     if(estado==0 && estado_dic == 0){ 
         log_info(logger,"##%u - Commit de File:Tag %s", query_id,key_file_tag);
+        free(key_file_tag);
         return 0; 
     }
     free(key_file_tag);
@@ -392,7 +392,6 @@ int atender_lectura(char* file, char* tag, int bloque_logico, int* tamanio_leido
     } else {
         *contenido_salida = lectura;
         estado_final = 0;
-        log_info(logger,"##%u - Bloque Lógico Leído %s - Número de Bloque: %u",query_id,key_file_tag,bloque_logico);
         log_contenido_legible(logger, "Contenido READ leido", *contenido_salida, *tamanio_leido);
         log_info(logger, "##%u - Bloque Lógico Leído %s - Número de Bloque: %u",query_id,key_file_tag,bloque_logico); 
     }
@@ -432,7 +431,7 @@ int atender_escritura(char* file, char* tag, int bloque, char* contenido,int tam
    
     if(bloque >= cantidad_bloques){
         log_error(logger, "Error-WRITE: Se intentó WRITE en un bloque no existente de File:Tag : %s", key_file_tag);
-        pthread_mutex_unlock(mutex_file_tag); 
+        pthread_mutex_unlock(mutex_file_tag);
         free(key_file_tag);
         return ERROR_FILE_TAG_INEXISTENTE;
     }

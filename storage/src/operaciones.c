@@ -20,9 +20,12 @@ int create(char* nombre_file, char* nombre_tag) {
     if (mkdir(nuevo_file, 0777) == -1) {
         if (errno == EEXIST) {
             log_info(logger, "File %s ya existe", nombre_file);
+             free(ruta_files);
+            free(nuevo_file);
             return ERROR_FILE_TAG_PREEXISTENTE;
         } else {
             log_error(logger, "No se pudo crear el File %s. Error: %s", nombre_file, strerror(errno));
+            free(ruta_files);
             free(nuevo_file);
             exit(EXIT_FAILURE);
         }
@@ -34,6 +37,8 @@ int create(char* nombre_file, char* nombre_tag) {
             return ERROR_FILE_TAG_PREEXISTENTE;
         } else {
             log_error(logger, "No se pudo crear el Tag %s. Error: %s", nombre_tag, strerror(errno));
+            free(ruta_files);
+            free(nuevo_file);
             free(nuevo_tag);
             exit(EXIT_FAILURE);
         }
@@ -45,6 +50,10 @@ int create(char* nombre_file, char* nombre_tag) {
     FILE* f = fopen(ruta_absoluta_metadata, "w");
         if (!f) {
             log_error(logger, "Error al crear metadata.config");
+            free(ruta_files);
+            free(nuevo_file);
+            free(nuevo_tag);
+            free(ruta_absoluta_metadata);
             exit(EXIT_FAILURE);
         }
     fprintf(f, "TAMAÑO=0\n");
@@ -60,6 +69,10 @@ int create(char* nombre_file, char* nombre_tag) {
             log_info(logger, "Directorio %s ya existe", ruta_absoluta_dir_log_block);
         } else {
             log_error(logger, "No se pudo crear el Directorio %s. Error: %s", ruta_absoluta_dir_log_block, strerror(errno));
+            free(ruta_files);
+            free(nuevo_file);
+            free(nuevo_tag);
+            free(ruta_absoluta_metadata);
             free(ruta_absoluta_dir_log_block);
             exit(EXIT_FAILURE);
         }
@@ -67,7 +80,7 @@ int create(char* nombre_file, char* nombre_tag) {
     else {
         log_info(logger, "Directorio %s creado correctamente", ruta_absoluta_dir_log_block); 
     }
-
+    free(ruta_files);
     free(nuevo_file);
     free(nuevo_tag);
     free(ruta_absoluta_metadata);
@@ -130,7 +143,7 @@ int truncar_archivo(char* file, char* tag, int nuevo_valor){
     return estado;           
 } // falta desasignar 
 
-int tag_file(char* origen, char* destino){
+int tag_file(char* origen, char* destino, char* file_origen, char* tag_origen,char* file_dest, char* tag_dest){
     char* ruta_files = add_seg_ruta(PUNTO_MONTAJE, "/files");
     char* ruta_tag_origen = add_seg_ruta(ruta_files, origen);          
     char* ruta_tag_destino  = add_seg_ruta(ruta_files, destino);          
@@ -155,7 +168,7 @@ int tag_file(char* origen, char* destino){
     char* ruta_metadata_destino = add_seg_ruta(ruta_tag_destino, "/metadata.config");
     copiar_archivo(ruta_metadata_origen,ruta_metadata_destino);
 
-    if (duplicar_enlaces_bloques(ruta_tag_origen, ruta_tag_destino)<0) {
+    if (duplicar_enlaces_bloques(ruta_tag_origen, ruta_tag_destino,file_origen, tag_origen,file_dest,tag_dest)<0) {
         log_error(logger, "TAG: Error al duplicar enlaces");
         borrar_directorio(ruta_tag_destino);
         borrar_directorio(ruta_blocks_destino);
@@ -177,7 +190,7 @@ int tag_file(char* origen, char* destino){
     free(ruta_metadata_destino); free(ruta_metadata_origen); 
     return 0; 
 }
-int duplicar_enlaces_bloques(char* ruta_tag_origen, char* ruta_tag_destino){
+int duplicar_enlaces_bloques(char* ruta_tag_origen, char* ruta_tag_destino,char* file_origen, char* tag_origen,char* file_dest, char* tag_dest){
     char* ruta_physical_blocks = add_seg_ruta(PUNTO_MONTAJE, "/physical_blocks");
     char* ruta_metadata_origen = add_seg_ruta(ruta_tag_origen, "/metadata.config");
     char* ruta_logical_blocks_destino= add_seg_ruta(ruta_tag_destino,"/logical_blocks");
@@ -195,12 +208,16 @@ int duplicar_enlaces_bloques(char* ruta_tag_origen, char* ruta_tag_destino){
         char* nombre_bloque_fisico_origen =  crear_nombre_block(nro_fisico_actual,4); 
         char* ruta_F_block_origen = add_seg_ruta(ruta_physical_blocks,nombre_bloque_fisico_origen);
 
-        if (link(ruta_F_block_origen, ruta_L_block_destino) == -1) {
+        if (link(ruta_F_block_origen, ruta_L_block_destino) == -1) { //LOG LISTO
             log_error(logger, "No se pudo crear Hard Link para %s. Error: %s", nombre_L_block_dest, strerror(errno));
             free(nombre_L_block_dest); free(nombre_bloque_fisico_origen); 
             free(ruta_L_block_destino); free(ruta_F_block_origen);
             return ERROR_DESCONOCIDO; 
         }
+        int duplic_bloque_f= obtener_nro_bloque_fisico(file_origen,tag_origen,i); 
+        log_info(logger,"##%u - %s:%s  Se agregó el hard link del bloque lógico %u al bloque físico %u",g_query_id_actual,file_dest,tag_dest,i,duplic_bloque_f);
+
+        
         
         free(nombre_L_block_dest); free(nombre_bloque_fisico_origen); 
         free(ruta_L_block_destino); free(ruta_F_block_origen);
@@ -237,14 +254,16 @@ int commit_tag(char* file, char* tag){
     char** blocks_array = config_get_array_value(config_tag, "BLOCKS");
     int i = 0;
     bool hubo_cambios = false; 
-
+    char* key_file_tag = crear_key_file_tag(file,tag); 
     while(blocks_array[i] != NULL) {
         int nro_fisico_actual = atoi(blocks_array[i]);
         
         char* nombre_L_block = crear_nombre_block(i, 6);
         char* ruta_L_block = add_seg_ruta(ruta_logical_blocks, nombre_L_block);
 
-        int nro_fisico_final = procesar_bloque_logico(ruta_L_block, nro_fisico_actual);
+        int nro_fisico_final = procesar_bloque_logico(ruta_L_block, nro_fisico_actual,file,tag,i);
+        log_info(logger,"##%u - %s Se agregó el hard link del bloque lógico %u al bloque físico %u",g_query_id_actual,key_file_tag,i,nro_fisico_final); 
+
 
         if (nro_fisico_final < 0) {
             log_error(logger, "Error en commit del bloque %d", i);
@@ -261,6 +280,7 @@ int commit_tag(char* file, char* tag){
         free(ruta_L_block);
         i++;
     }
+    free(key_file_tag); 
     // 4. Si hubo cambios (deduplicación), guardamos la nueva lista de bloques
         if (hubo_cambios) {
             char* joined_blocks = join_string_array(blocks_array, ",");
@@ -280,7 +300,7 @@ int commit_tag(char* file, char* tag){
         
         return 0;
 }
-int procesar_bloque_logico(char* ruta_bloque, int nro_bloque_fisico_actual) {
+int procesar_bloque_logico(char* ruta_bloque, int nro_bloque_fisico_actual, char* file , char* tag, int bloque_logico) {
     struct stat st;
     if (stat(ruta_bloque, &st) == -1) {
         log_error(logger, "Error en stat: %s", ruta_bloque);
@@ -313,17 +333,19 @@ int procesar_bloque_logico(char* ruta_bloque, int nro_bloque_fisico_actual) {
 
         if (nro_bloque_existente != nro_bloque_fisico_actual) {
             char* nombre_bloque_F = crear_nombre_block(nro_bloque_existente, 4);
-            char* ruta_files = add_seg_ruta(PUNTO_MONTAJE,"/files");
+            char* ruta_files = add_seg_ruta(PUNTO_MONTAJE,"/physical_blocks");
             char* ruta_bloque_F = add_seg_ruta(ruta_files, nombre_bloque_F);
 
-            unlink(ruta_bloque); 
+            unlink(ruta_bloque); //LOG LISTO
+            log_info(logger,"##%u - %s:%s Se eliminó el hard link del bloque lógico %u al bloque físico %u",g_query_id_actual,file,tag,bloque_logico,nro_bloque_fisico_actual);
+
             
-            if (link(ruta_bloque_F, ruta_bloque) == -1) {
+            if (link(ruta_bloque_F, ruta_bloque) == -1) {// log en otra funcion madre
                 log_error(logger, "Error al relinkear");
                 // Manejo de error...
             } else {
                 liberar_bloque_si_no_se_usa(nro_bloque_fisico_actual);
-                
+                //log_info(logger,"##%u - %s Se agregó el hard link del bloque lógico %u al bloque físico %u",g_query_id_actual,)
                 bloque_fisico_final = nro_bloque_existente;
             }
             free(nombre_bloque_F); free(ruta_bloque_F);free(ruta_files);
@@ -418,9 +440,14 @@ int escritura_bloque(char* file, char* tag, int num_L_block, char* contenido,int
         fwrite(contenido, 1, tamanio, f);
         fclose(f);
 
-        unlink(ruta_L_block);
+        unlink(ruta_L_block); //LOG LISTO
+        int bloque_fisico_viejo = obtener_nro_bloque_fisico(file,tag,num_L_block);
 
-        if (link(ruta_F_block, ruta_L_block) == -1) {
+        log_info(logger,"##%u - %s Se eliminó el hard link del bloque lógico %u al bloque físico %u",g_query_id_actual,key_file_tag,num_L_block,bloque_fisico_viejo);
+
+
+
+        if (link(ruta_F_block, ruta_L_block) == -1) { //LOG LISTO
 
             liberar_bloque_reservado(bloque_fisico);
             log_error(logger, "No se pudo crear Hard Link. Error: %s", strerror(errno));
@@ -428,6 +455,8 @@ int escritura_bloque(char* file, char* tag, int num_L_block, char* contenido,int
             free(nombre_block); free(pre_ruta); free(ruta_F_block);
             return ERROR_DESCONOCIDO; 
         }
+
+        log_info(logger,"##%u - %s Se agregó el hard link del bloque lógico %u al bloque físico %u",g_query_id_actual,key_file_tag,num_L_block,bloque_fisico);
 
         log_info(logger,"WRITE: COW finalizado. Bloque lógico %d ahora apunta a físico %d", num_L_block, bloque_fisico);
 
@@ -601,6 +630,8 @@ int incrementar(char*file,char*tag, int nuevo_valor, int valor_original, char* r
         int bloque_logico_a_crear = bloques_actuales + i;
 
         nuevo_bloque_f = asignar_bloque_logico_especifico(ruta_logical_block,bloque_logico_a_crear);
+        log_info(logger,"##%u - %s:%s  Se agregó el hard link del bloque lógico %u al bloque físico %u",g_query_id_actual,file,tag,i,nuevo_bloque_f);
+
 
         if(nuevo_bloque_f<0){
             rollback_falla_incrementar(bloques_fisicos_nuevos,i); 
@@ -670,7 +701,9 @@ int decrementar(int nuevo_valor, int valor_original, char* ruta_tag){
         }
         
         // Desasociar el bloque lógico
-        unlink(ruta_L_block);
+        unlink(ruta_L_block); //LOG PENDIENTE 
+        //log_info(logger,"##%u - %s:%s Se eliminó el hard link del bloque lógico %u al bloque físico %u",g_query_id_actual,file,tag,bloque_logico,nro_bloque_fisico_actual);
+
     }
     return 0;
 }
