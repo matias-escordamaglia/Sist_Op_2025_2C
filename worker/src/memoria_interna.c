@@ -10,6 +10,7 @@ char* algoritmo_reemplazo;
 uint32_t retardo_memoria;
 int puntero_clock_;
 t_list* lista_global_tablas;
+t_entrada_pagina** tabla_global_marcos;
 
 void iniciar_memoria_interna(t_config *config) {
     lista_global_tablas = list_create();
@@ -23,6 +24,7 @@ void iniciar_memoria_interna(t_config *config) {
 
     memoria_interna = malloc(tam_memoria);
     memset(memoria_interna, 0, tam_memoria);
+    tabla_global_marcos = calloc(cant_marcos, sizeof(t_entrada_pagina*));
 
     size_t bitmap_bytes = (cant_marcos + 7) / 8;
     void *bitmap_data = malloc(bitmap_bytes);
@@ -319,14 +321,16 @@ int cargar_pagina_desde_storage(t_tabla_paginas* tabla, uint32_t nro_pagina, int
 void liberar_marco_de_victima(t_entrada_pagina* victima, uint32_t id_query) {
     if (!victima) return;
 
+    tabla_global_marcos[victima->marco_num] = NULL;
     victima->presente = false;
     victima->modificado = false;
     victima->marco_num = -1;
+    
 }
 
 void devolver_marco(int marco) {
     bitarray_clean_bit(bitmap_marcos, marco); 
-    
+    tabla_global_marcos[marco] = NULL;
     log_info(logger, "Se devolvió el marco %d por error en carga", marco);
 }
 
@@ -349,7 +353,8 @@ t_entrada_pagina* indico_entrada_presente(t_tabla_paginas* tabla, uint32_t nro_p
     e->marco_num = (uint32_t)marco;
     e->modificado = false;  // Nueva o recargada, no modificada aún
     e->bit_uso = true;      // Recién accedida
-    
+    tabla_global_marcos[marco] = e;
+
     if (strcmp(algoritmo_reemplazo, "LRU") == 0) {
         e->ultimo_acceso = (uint64_t)time(NULL);  // Timestamp para LRU
     }
@@ -358,7 +363,7 @@ t_entrada_pagina* indico_entrada_presente(t_tabla_paginas* tabla, uint32_t nro_p
     // Log obligatorio (página 17: "Se asigna el Marco...")
     // Asumiendo id_query se pasa desde caller, pero si no, sacalo o pasalo como param
     // log_info(logger, "Query %u: Se asigna el Marco: %u a la Página: %u perteneciente al - File: %s - Tag: %s.", id_query, (uint32_t)marco, nro_pagina, tabla->file, tabla->tag);
-    
+    log_info(logger, "Query %u: Se asigna el Marco: %u a la Página: %u perteneciente al - File: %s - Tag: %s.", id_query, (uint32_t)marco, nro_pagina, tabla->file, tabla->tag);
     return e;
 }
 
@@ -452,53 +457,48 @@ t_entrada_pagina* get_entry(t_tabla_paginas* tabla, uint32_t nro_pagina) {
 }
 
 t_entrada_pagina* reemplazar_pagina_clock() {
-    t_entrada_pagina* victima = NULL;
-    int pasadas_completadas = 0;
+    //t_entrada_pagina* victima = NULL;
+    uint32_t inicio_pasada;
     //log por si acaso a
     log_info(logger, "[CLOCK-M] Iniciando búsqueda de víctima desde el marco %u...", puntero_clock_);
 
-    // El CLOCK-M hace dos pasadas cíclicas (Clases (0,0 y luego (0,X))
-    while (victima == NULL && pasadas_completadas < 2) {
-        
-        for (uint32_t i = 0; i < cant_marcos; i++) {
-            uint32_t marco_actual = (puntero_clock_ + i) % cant_marcos;
+   for (int pasada = 0; pasada < 2; pasada++) {
+        log_info(logger, "[CLOCK-M] Iniciando Pasada %d (busca %s) desde Marco %u...", 
+                 pasada + 1, (pasada == 0 ? "Clase (0,0)" : "Clase (0,X)"), puntero_clock_);
+        inicio_pasada = puntero_clock_;
+        do {
+            t_entrada_pagina* entrada = tabla_global_marcos[puntero_clock_];
+
+            // 1. Si el marco está libre (NULL), simplemente avanzamos el puntero y continuamos.
+            if (entrada == NULL) {
+                puntero_clock_ = (puntero_clock_ + 1) % cant_marcos; // Avanzar el puntero
+                continue; 
+            }
             
-            if (bitarray_test_bit(bitmap_marcos, marco_actual)) {
-                t_entrada_pagina* entrada = buscar_entrada_por_marco(marco_actual);
-                
-                if (entrada != NULL) {
-                    bool u = entrada->bit_uso;
-                    bool m = entrada->modificado;
-                    
-                    if (pasadas_completadas == 0) { // PASADA 1: Busca 0, 0 y limpia bit u
-                        if (!u && !m) {
-                            victima = entrada; // Encontrada la mejor candidata 0, 0
-                        } else if (u) {
-                            entrada->bit_uso = false; // Limpiar bit U
-                        }
-                    } else { // PASADA 2: Buscar (0, X). Reemplaza (0, 1) o (0, 0) si se limpió la U.
-                        if (!u) {
-                            victima = entrada; // Encontrada víctima (0, 0) o (0, 1)
-                        }
-                    }
+            bool u = entrada->bit_uso;
+            bool m = entrada->modificado;
+            
+            if (pasada == 0) { // PASADA 1: Busca (0,0)
+                if (!u && !m) {
+                    // Éxito P1
+                    puntero_clock_ = (puntero_clock_ + 1) % cant_marcos; // Avanzar y Retornar
+                    return entrada;
+                } else if (u) {
+                    entrada->bit_uso = false; // Limpiar U
+                }
+            } else { // PASADA 2: Busca (0,X)
+                if (!u) {
+                    // Éxito P2
+                    puntero_clock_ = (puntero_clock_ + 1) % cant_marcos; // Avanzar y Retornar
+                    return entrada;
                 }
             }
             
-            // Si encontramos la víctima, actualizamos el puntero y salimos
-            if (victima != NULL) {
-                puntero_clock_ = (marco_actual + 1) % cant_marcos;
-                log_info(logger, "[CLOCK-M] Víctima seleccionada: Marco %u (U=%d, M=%d). Nuevo puntero: %u", 
-                         victima->marco_num, 
-                         victima->bit_uso, 
-                         victima->modificado,
-                         puntero_clock_);
-                return victima;
-            }
-        }
-        // Si el bucle terminó sin encontrar víctima, pasamos al siguiente ciclo/pasada
-        pasadas_completadas++;
-    }
-    
+            // Si no se encontró víctima en esta iteración, el puntero AVANZA
+            puntero_clock_ = (puntero_clock_ + 1) % cant_marcos; 
+
+        } while (puntero_clock_ != inicio_pasada); // Repetir hasta dar la vuelta completa
+    }     
     log_error(logger, "[CLOCK-M] ERROR: No se encontró víctima después de dos pasadas. Esto no debería ocurrir.");
     return NULL; 
 }
@@ -510,45 +510,33 @@ t_entrada_pagina* reemplazar_pagina_lru() {
     
     // Iteramos sobre TODOS los posibles marcos (de 0 hasta cant_marcos - 1)
     for (uint32_t i = 0; i < cant_marcos; i++) {
+        // No necesitamos verificar el bitmap; si tabla_global_marcos[i] no es NULL, está ocupado.
+        t_entrada_pagina* entrada = tabla_global_marcos[i]; 
         
-        // 2. Comprobar si el marco 'i' está OCUPADO
-        if (bitarray_test_bit(bitmap_marcos, i)) {
+        // Solo evaluamos entradas presentes (no NULL)
+        if (entrada != NULL) {
             
-            // 3. Obtener la página (la 'persona') que vive en el marco 'i'
-            t_entrada_pagina* entrada = buscar_entrada_por_marco(i);
-            
-            // 4. Si el tiempo de esta página es MÁS PEQUEÑO que el 'tiempo_mas_antiguo' actual
-            if (entrada != NULL && entrada->ultimo_acceso < tiempo_mas_antiguo) {
+            // Si el tiempo de esta página es MÁS PEQUEÑO que el 'tiempo_mas_antiguo' actual
+            if (entrada->ultimo_acceso < tiempo_mas_antiguo) {
                 
-                // 5. Actualiza el récord: esta es la nueva víctima potencial, y su tiempo es el nuevo récord.
                 tiempo_mas_antiguo = entrada->ultimo_acceso;
                 victima = entrada;
             }
         }
     }
-    
+    if (victima == NULL) {
+        log_error(logger, "[LRU] ERROR: No se encontró víctima. La memoria debería estar llena.");
+    }
     return victima;
 }
 
 t_entrada_pagina* buscar_entrada_por_marco(uint32_t marco_num) {
-    // 1. Iterar sobre la lista global de todas las tablas de páginas (File:Tag).
-    for (int i = 0; i < list_size(lista_global_tablas); i++) {
-        t_tabla_paginas* tabla = (t_tabla_paginas*) list_get(lista_global_tablas, i);
-        
+        if (marco_num >= cant_marcos) return NULL;
         // 2. Iterar sobre todas las entradas de página dentro de esta tabla.
-        for (int j = 0; j < list_size(tabla->paginas_proceso); j++) {
-            t_entrada_pagina* entrada = (t_entrada_pagina*) list_get(tabla->paginas_proceso, j);
-            
-            // 3. Condición de búsqueda:
-            //    - La página debe estar presente en memoria (presente == true).
-            //    - Debe ocupar el número de marco exacto que estamos buscando.
-            if (entrada->presente && entrada->marco_num == marco_num) {
-                // Encontrada la metadata de la página que reside en el marco solicitado.
-                return entrada;
-            }
-        }
+            t_entrada_pagina* entrada = tabla_global_marcos[marco_num];
+            if (!entrada && bitarray_test_bit(bitmap_marcos, marco_num)) {
+         log_error(logger, "Error de consistencia CRÍTICO: Marco %u en Bitmap, pero NULL en Tabla Global.", marco_num);
     }
-    // 4. CRÍTICO: Si el bucle termina sin encontrar la entrada, devolvemos NULL
-    log_error(logger, "Error de consistencia: Se buscó marco %u sin entrada asociada.", marco_num);
-    return NULL;
+    
+    return entrada;
 }
