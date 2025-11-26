@@ -709,7 +709,7 @@ void manejar_worker_desconectado(uint32_t worker_id, uint32_t query_id_ejecutand
 
     if (worker_temp->worker_conectado) {
 
-        if (query_id_ejecutando >= 0) {
+        if ((int)query_id_ejecutando >= 0) {
 
             log_info(get_logger(), "Worker %d desconectado", worker_id);
 
@@ -786,7 +786,7 @@ void manejar_query_control_desconectado(uint32_t query_id_activo) {
 
         log_info(get_logger(), "Query Control %d desconectado", query_id_activo);
         
-        if (query_id_activo >= 0) {
+        if ((int)query_id_activo >= 0) {
             t_elemento_cola* elemento = NULL;
             
             // Buscar en READY primero

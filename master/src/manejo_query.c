@@ -178,7 +178,14 @@ void notificar_error_desconexion_a_query_control(int conexion_query) {
 
 }
 
-void notificar_finalizacion_especial_a_query_control(int conexion_query, char* mensaje_personalizado) {
+void notificar_finalizacion_especial_a_query_control(uint32_t query_id, char* mensaje_personalizado) {
+
+    t_query* query = obtener_query_por_id_uso_externo(query_id);
+
+    if (query == NULL) {
+        log_error(get_logger(), "Error al notificar finalización especial: Query ID %d no encontrada", query_id);
+        return;
+    }
 
     t_aviso_master_query* aviso_error = malloc(sizeof(t_aviso_master_query));
 
@@ -188,7 +195,7 @@ void notificar_finalizacion_especial_a_query_control(int conexion_query, char* m
 
     t_paquete* paquete = empaquetar_aviso_master_query(aviso_error);
 
-    enviar_paquete(paquete, conexion_query);
+    enviar_paquete(paquete, query->conexion);
 
     log_info(get_logger(), "[MANEJO_QUERY] Aviso de finalizacion enviado a Query");
 
@@ -199,6 +206,11 @@ void notificar_finalizacion_especial_a_query_control(int conexion_query, char* m
 void notificar_finalizacion_a_query_control(uint32_t query_id) {
 
     t_query* query = obtener_query_por_id_uso_externo(query_id);
+
+    if (query == NULL) {
+        log_error(get_logger(), "Error al notificar finalización: Query ID %d no encontrada", query_id);
+        return;
+    }
 
     t_aviso_master_query* aviso_error = malloc(sizeof(t_aviso_master_query));
 
