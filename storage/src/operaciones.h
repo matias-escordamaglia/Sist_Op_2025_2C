@@ -32,7 +32,7 @@ int eliminar_tag(char*,char*);
 
 int obtener_tamano(char*);
 int incrementar(char*file,char*tag,int, int, char*);
-int decrementar(int, int, char*);
+int decrementar(char* file, char* tag, int nuevo_valor, int valor_original, char* ruta_tag); 
 void copiar_archivo(char*, char*);
 int copiar_directorio(char*, char*);
 int duplicar_enlaces_bloques(char* ruta_tag_origen, char* ruta_tag_destino,char* file_origen, char* tag_origen,char* file_dest, char* tag_dest);

@@ -108,6 +108,7 @@ int asignar_bloque_logico_especifico(char* ruta_logical_block, int num_bloque_lo
 void log_contenido_legible(t_log* logger, const char* prefijo, char* contenido, int tamanio);
 void liberar_bloque_si_no_se_usa(int nro_bloque);
 int actualizar_metadata_incremento(char* file, char* tag, int* bloques_fisicos_nuevos, int cant_bloques_a_agregar);
+int actualizar_metadata_decremento(char* file, char* tag, int cant_bloques_final); 
 int obtener_nro_bloque_fisico(char* file, char* tag, int num_L_block);
 
 

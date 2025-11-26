@@ -48,6 +48,7 @@ __thread int g_query_id_actual = -1;
 
 int main(int argc, char **argv)
 {   
+    signal(SIGPIPE, SIG_IGN);
     if (argc < 3) { 
             fprintf(stderr, "Uso correcto: %s <archivo_config[path]> <archivo_superBlock[path]> \n", argv[0]);
             return EXIT_FAILURE;
@@ -1132,6 +1133,47 @@ int actualizar_metadata_incremento(char* file, char* tag, int* bloques_fisicos_n
     config_destroy(config);
     free(ruta_files); free(ruta_file); free(ruta_tag); free(ruta_metadata);
     
+    return 0;
+}
+int actualizar_metadata_decremento(char* file, char* tag, int cant_bloques_final) {
+    char* ruta_files = add_seg_ruta(PUNTO_MONTAJE, "/files");
+    char* ruta_file = add_seg_ruta(ruta_files, file);
+    char* ruta_tag = add_seg_ruta(ruta_file, tag);
+    char* ruta_metadata = add_seg_ruta(ruta_tag, "/metadata.config");
+
+    t_config* config = config_create(ruta_metadata);
+    if (!config) {
+       log_error(logger, "TRUNCATE: Error al abrir metadata: %s", ruta_metadata);
+        free(ruta_files); free(ruta_file); free(ruta_tag); free(ruta_metadata);
+        return ERROR_DESCONOCIDO;
+        
+    }
+
+    char** bloques_array = config_get_array_value(config, "BLOCKS");
+    
+    // Aquí está el truco: Forzamos un NULL en la nueva posición final
+    // para "cortar" el array.
+    if (bloques_array[cant_bloques_final] != NULL) {
+        
+        int j = cant_bloques_final;
+        while(bloques_array[j] != NULL) {
+            free(bloques_array[j]);
+            bloques_array[j] = NULL; // Cortamos aquí
+            j++;
+        }
+    }
+
+    // Reconstruimos el string: [1,2,3]
+    char* joined = join_string_array(bloques_array, ",");
+    char* final_str = string_from_format("[%s]", joined);
+
+    config_set_value(config, "BLOCKS", final_str);
+    config_save(config);
+
+    free(joined); free(final_str);
+    string_array_destroy(bloques_array); 
+    config_destroy(config);
+    free(ruta_files); free(ruta_file); free(ruta_tag); free(ruta_metadata);
     return 0;
 }
 int obtener_nro_bloque_fisico(char* file, char* tag, int num_L_block) {

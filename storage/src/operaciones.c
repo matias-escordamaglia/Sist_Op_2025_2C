@@ -117,7 +117,7 @@ int truncar_archivo(char* file, char* tag, int nuevo_valor){
     }
     else if (nuevo_valor < tamanio_archivo) {
         log_info(logger, "TRUNCATE: Decrementando FILE:TAG: %s:%s",file,tag);
-        estado = decrementar(nuevo_valor, tamanio_archivo, ruta_tag);
+        estado = decrementar(file,tag,nuevo_valor, tamanio_archivo, ruta_tag);
     }
     if(estado==0){ 
         t_config* config_final = config_create(ruta_metadata);
@@ -141,8 +141,117 @@ int truncar_archivo(char* file, char* tag, int nuevo_valor){
     free(ruta_L_blocks);  
 
     return estado;           
-} // falta desasignar 
+} 
 
+// funciones para truncate
+
+int incrementar(char*file,char*tag, int nuevo_valor, int valor_original, char* ruta_logical_block){
+    int bloques_actuales = (int)ceil((double)valor_original / (double)BLOCK_SIZE);
+    int bloques_necesarios = (int)ceil((double)nuevo_valor / (double)BLOCK_SIZE);
+    int cant_bloques_a_agregar = bloques_necesarios - bloques_actuales;
+
+    if (cant_bloques_a_agregar <= 0) {
+        log_warning(logger, "TRUNCATE: Incremento no resultó en bloques nuevos.");
+        return 0; 
+    }
+
+    int* bloques_fisicos_nuevos = malloc(cant_bloques_a_agregar * sizeof(int));
+    if (!bloques_fisicos_nuevos) {
+        log_error(logger, "TRUNCATE: Falló malloc para el array de bloques");
+        return ERROR_DESCONOCIDO;
+    }
+
+    int nuevo_bloque_f;
+
+    for(int i = 0; i < cant_bloques_a_agregar; i++){
+
+        int bloque_logico_a_crear = bloques_actuales + i;
+
+        nuevo_bloque_f = asignar_bloque_logico_especifico(ruta_logical_block,bloque_logico_a_crear);
+        log_info(logger,"##%u - %s:%s  Se agregó el hard link del bloque lógico %u al bloque físico %u",g_query_id_actual,file,tag,i,nuevo_bloque_f);
+
+
+        if(nuevo_bloque_f<0){
+            rollback_falla_incrementar(bloques_fisicos_nuevos,i); 
+            free(bloques_fisicos_nuevos);
+            return ERROR_ESPACIO_INSUFICIENTE; 
+        }
+
+        bloques_fisicos_nuevos[i]=nuevo_bloque_f;
+    }
+    
+    int estado_meta = actualizar_metadata_incremento(file, tag, bloques_fisicos_nuevos, cant_bloques_a_agregar);
+    
+    free(bloques_fisicos_nuevos);
+    return estado_meta; 
+}
+
+
+int decrementar(char* file, char* tag, int nuevo_valor, int valor_original, char* ruta_tag) {
+    // 1. Cálculo correcto de bloques
+    int bloques_actuales = (int)ceil((double)valor_original / (double)BLOCK_SIZE);
+    int bloques_deseados = (int)ceil((double)nuevo_valor / (double)BLOCK_SIZE);
+    int cant_a_borrar = bloques_actuales - bloques_deseados;
+
+    if (cant_a_borrar <= 0) return 0;
+
+    log_info(logger, "TRUNCATE: Eliminando %d bloques del final.", cant_a_borrar);
+
+    // 2. Cargar Metadata para saber qué bloques físicos son
+    char* ruta_metadata = add_seg_ruta(ruta_tag, "/metadata.config");
+    t_config* config = config_create(ruta_metadata);
+    if (!config) { 
+        log_error(logger, "TRUNCATE: Error al abrir metadata: %s", ruta_metadata);
+        free(ruta_metadata);
+        return ERROR_DESCONOCIDO;
+    }
+    
+    char** blocks_array = config_get_array_value(config, "BLOCKS");
+    char* ruta_L_blocks_dir = add_seg_ruta(ruta_tag, "/logical_blocks");
+
+    // 3. Iterar desde el último hacia atrás
+    for (int i = bloques_actuales - 1; i >= bloques_deseados; i--) {
+        
+        // A. Identificar Bloque Físico (Directo de metadata, SIN hash)
+        int nro_bloque_fisico = atoi(blocks_array[i]);
+        
+        // B. Construir rutas
+        char* nombre_L_block = crear_nombre_block(i, 6); // ej: 000005.dat
+        char* ruta_L_block = add_seg_ruta(ruta_L_blocks_dir, nombre_L_block);
+        
+        char* nombre_F_block = crear_nombre_block(nro_bloque_fisico, 4);
+        char* pre_ruta_F = add_seg_ruta("/physical_blocks", nombre_F_block);
+        char* ruta_F_block = add_seg_ruta(PUNTO_MONTAJE, pre_ruta_F);
+
+        // C. Borrar enlace lógico
+        unlink(ruta_L_block);
+        
+        // LOG OBLIGATORIO
+        log_info(logger, "##%u - %s:%s Se eliminó el hard link del bloque lógico %d al bloque físico %d", 
+                 g_query_id_actual, file, tag, i, nro_bloque_fisico);
+
+        // D. Verificar Físico (Si quedó en 1, liberar)
+        struct stat st;
+        if (stat(ruta_F_block, &st) == 0) {
+            if (st.st_nlink == 1) {
+                log_info(logger, "TRUNCATE: Liberando bloque físico %d (nlink=1)", nro_bloque_fisico);
+                liberar_bloque_reservado(nro_bloque_fisico);
+            }
+        }
+
+        free(nombre_L_block); free(ruta_L_block);
+        free(nombre_F_block); free(pre_ruta_F); free(ruta_F_block);
+    }
+
+    // 4. Limpieza y Actualización
+    string_array_destroy(blocks_array);
+    config_destroy(config);
+    free(ruta_metadata);
+    free(ruta_L_blocks_dir);
+
+    // 5. Actualizar Metadata (Recortar lista)
+    return actualizar_metadata_decremento(file, tag, bloques_deseados);
+}
 int tag_file(char* origen, char* destino, char* file_origen, char* tag_origen,char* file_dest, char* tag_dest){
     char* ruta_files = add_seg_ruta(PUNTO_MONTAJE, "/files");
     char* ruta_tag_origen = add_seg_ruta(ruta_files, origen);          
@@ -610,108 +719,6 @@ int obtener_tamano(char* ruta) {
     return tamano;
 }
 
-// funciones para truncate
-
-int incrementar(char*file,char*tag, int nuevo_valor, int valor_original, char* ruta_logical_block){
-    int bloques_actuales = (int)ceil((double)valor_original / (double)BLOCK_SIZE);
-    int bloques_necesarios = (int)ceil((double)nuevo_valor / (double)BLOCK_SIZE);
-    int cant_bloques_a_agregar = bloques_necesarios - bloques_actuales;
-
-    if (cant_bloques_a_agregar <= 0) {
-        log_warning(logger, "TRUNCATE: Incremento no resultó en bloques nuevos.");
-        return 0; 
-    }
-
-    int* bloques_fisicos_nuevos = malloc(cant_bloques_a_agregar * sizeof(int));
-    if (!bloques_fisicos_nuevos) {
-        log_error(logger, "TRUNCATE: Falló malloc para el array de bloques");
-        return ERROR_DESCONOCIDO;
-    }
-
-    int nuevo_bloque_f;
-
-    for(int i = 0; i < cant_bloques_a_agregar; i++){
-
-        int bloque_logico_a_crear = bloques_actuales + i;
-
-        nuevo_bloque_f = asignar_bloque_logico_especifico(ruta_logical_block,bloque_logico_a_crear);
-        log_info(logger,"##%u - %s:%s  Se agregó el hard link del bloque lógico %u al bloque físico %u",g_query_id_actual,file,tag,i,nuevo_bloque_f);
-
-
-        if(nuevo_bloque_f<0){
-            rollback_falla_incrementar(bloques_fisicos_nuevos,i); 
-            free(bloques_fisicos_nuevos);
-            return ERROR_ESPACIO_INSUFICIENTE; 
-        }
-
-        bloques_fisicos_nuevos[i]=nuevo_bloque_f;
-    }
-    
-    int estado_meta = actualizar_metadata_incremento(file, tag, bloques_fisicos_nuevos, cant_bloques_a_agregar);
-    
-    free(bloques_fisicos_nuevos);
-    return estado_meta; 
-}
-
-
-int decrementar(int nuevo_valor, int valor_original, char* ruta_tag){
-    int cant_eliminar_bloques = (valor_original - nuevo_valor) / BLOCK_SIZE;
-    char* ruta_L_blocks = add_seg_ruta(ruta_tag,"/logical_blocks");
-    char* ruta_metadata = add_seg_ruta(ruta_tag, "/metadata.config");
-    t_config* config = config_create(ruta_metadata);
-    char **bloques = config_get_array_value(config, "BLOCKS");
-    
-    
-    int cantidad_bloques = 0;
-    while (bloques[cantidad_bloques] != NULL) {
-        cantidad_bloques++;
-    }
-    
-    for (int pos = cantidad_bloques - 1; pos >= cantidad_bloques - cant_eliminar_bloques; pos--) {
-        char* nombre_bloque = crear_nombre_block(pos, 6);
-        char* ruta_L_block = add_seg_ruta(ruta_L_blocks, nombre_bloque);
-        
-        struct stat st;
-        if (stat(ruta_L_block, &st) == -1) {
-            log_error(logger, "Bloque lógico no asignado o inexistente");
-            return ERROR_DESCONOCIDO;
-        }
-        if (st.st_nlink == 1) { // verifica que solo hay un bloque logico asignado
-            FILE* f = fopen(ruta_L_block, "rb");
-            if (!f) {
-                log_error(logger, "No se pudo abrir el bloque");
-                return ERROR_DESCONOCIDO;
-            }
-
-            void* buffer = malloc(st.st_size);
-            if (!buffer) {
-                log_error(logger, "No se pudo reservar memoria");
-                fclose(f);
-                return ERROR_DESCONOCIDO;
-            }
-
-            fread(buffer, 1, st.st_size, f);
-            fclose(f);
-
-            // se calcula el hash del contenido
-            char* hash = crypto_md5(buffer, st.st_size);
-            free(buffer);
-
-            if (!hash) {
-                log_error(logger, "Error calculando hash MD5");
-                return ERROR_DESCONOCIDO;
-            }
-            int bloque_F = config_get_int_value(config_hash, hash);
-            liberar_bloque_reservado(bloque_F);
-        }
-        
-        // Desasociar el bloque lógico
-        unlink(ruta_L_block); //LOG PENDIENTE 
-        //log_info(logger,"##%u - %s:%s Se eliminó el hard link del bloque lógico %u al bloque físico %u",g_query_id_actual,file,tag,bloque_logico,nro_bloque_fisico_actual);
-
-    }
-    return 0;
-}
 
 // Funciones para tag_file
 void copiar_archivo(char* archivo_origen, char* archivo_destino) {

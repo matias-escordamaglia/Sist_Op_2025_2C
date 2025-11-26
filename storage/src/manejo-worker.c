@@ -101,9 +101,16 @@ void* atender_conexion_worker(void* arg) {
     // Bucle principal
     while (1) {
         printf("----------------------------------------------------------------------------------\n");
+        printf("----------------------------------------------------------------------------------\n");
+
         int cod_op = recibir_operacion(cliente_fd, logger_worker);
         if (cod_op == -1) {
             log_warning(logger_worker, "[WORKER] WORKER %u se desconectó (FD %d)", id_worker, cliente_fd);
+            
+            pthread_mutex_lock(&mutex_cant_workers);
+            cantidad_workers--; 
+            log_info(logger_worker, "##Se desconecta el Worker %u - Cantidad de Workers: %u",id_worker, cantidad_workers);
+            pthread_mutex_unlock(&mutex_cant_workers);           
             break;
         }
 
