@@ -77,12 +77,19 @@ void* recibir_buffer(int* size, int socket_cliente);
 void* recibir_buffer_con_logger(int* size, int socket_cliente, t_log* logger);
 void crear_buffer(t_paquete* paquete);
 
+/** 
+* @brief Transforma un Int a un Char*
+* @param valor Número a convertir a String
+* @return char*
+*/
+char* convertir_int_a_string(int valor);
+
 
 // ------------------------------------------------------------------------------------------
 // -- Enums --
 // ------------------------------------------------------------------------------------------
 
-typedef enum {
+typedef enum ResultadoOKError{
     OK,
     ERROR,
 } t_resultado_operacion_default;
@@ -107,17 +114,31 @@ typedef enum MotivoMasterWorker{
     INTERRUPCION
 } t_motivo_pedido_master_worker;
 
-typedef enum TipoAvisoMasterWorker{
+typedef enum TipoAvisoWorkerMaster{
     FINALIZACION_QUERY, // cuando ejecuto un "END"
     NUEVA_LECTURA, //lo mando al ejecutar un "READ"
-    DEVOLUCION_X_INTERRUPCION // tengo que devoler esto, cuando master me mande en "MotivoMasterWorker"
+    DEVOLUCION_X_INTERRUPCION, // tengo que devoler esto, cuando master me mande en "MotivoMasterWorker"
+    RESPUESTA_SIG_QUERY,
     // : INTERRUPCION , entonces devuelvo "DEVOLUCION_X_INTERRUPCION".
+    DESALOJO_QUERY_DIFERENTE_RESPUESTA,
+    ERROR_QUERY
 } t_tipo_aviso_worker_master;
 
 typedef enum TipoAvisoMasterQuery{
     LECTURA_QUERY,
     QUERY_FINALIZADO
 } t_motivo_aviso_master_query;
+
+typedef enum {
+    ERROR_OK = 0, 
+    ERROR_FILE_TAG_INEXISTENTE = -1, 
+    ERROR_FILE_TAG_PREEXISTENTE = -2, 
+    ERROR_ESPACIO_INSUFICIENTE = -3, 
+    ERROR_ESCRITURA_NO_PERMITIDA = -4, 
+    ERROR_FUERA_DE_LIMITE = -5,  
+    ERROR_NO_CRITICO= -6,
+    ERROR_DESCONOCIDO = -7
+} t_storage_error_code;
 
 
 // ------------------------------------------------------------------------------------------

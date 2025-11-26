@@ -1,23 +1,49 @@
 
 #include "queryInterpreter.h"
 
-void envioAQueryInterpreter(t_pedido_master_worker* pedido){
+void envioAQueryInterpreter(){
     size_t cant = 0;
+    // aca iba lo de pedido, osea pedido->program_counter y pedido->query_path
+    // char* const* vec = instrucciones_desde("querie1.txt", 4, &cant);
+    // printf("DEBUG CHECK: Puntero: %p, Contenido: '%s'\n", 
+    //        (void*)query_actual.query_path, 
+    //        query_actual.query_path);
+           
     char* const* vec = instrucciones_desde("querie1.txt", 4, &cant);
     if (!vec) {
         log_error(logger, "No hay instrucciones desde la 4 para %s", "querie1.txt");
         return;
     }
 
-    ejecutarOperacion(pedido, vec, cant);
+    ejecutarOperacion(vec, cant);
 }
 
-void ejecutarOperacion(t_pedido_master_worker* pedido, char* const* instrucciones, size_t cantidad)
+
+/*
+Motivo de este hilo es el de desacoplar la ejecución de las queries de la escucha de master y no bloquearla;
+De esta forma podrá escuchar los pedidos de interrupción en tiempo real
+*/
+void* main_lanzamiento_ejecucion(void* _){
+
+    while(true) {
+
+        sem_wait(sem_ejecucion_pendiente);
+
+        envioAQueryInterpreter();
+
+
+    }
+    
+}
+
+
+void ejecutarOperacion(char* const* instrucciones, size_t cantidad)
+
 {
-    if (!pedido || !instrucciones) { log_error(logger, "Argumentos nulos"); return; }
+    if (!instrucciones) { log_error(logger, "Argumentos nulos"); return; }
 
     // PC 1-based (si viene 0, arrancamos en 1)
-    size_t pc = pedido->program_counter ? pedido->program_counter : 1;
+    size_t pc = query_actual.pc_actual ? query_actual.pc_actual : 1;
     if (pc < 1) pc = 1;
     if (pc > cantidad) {
         log_info(logger, "PC=%zu ya está al final (cant=%zu). Nada que ejecutar.", pc, cantidad);
@@ -29,28 +55,55 @@ void ejecutarOperacion(t_pedido_master_worker* pedido, char* const* instruccione
         char* linea = instrucciones[i];
         log_info(logger, "INST %zu: %s", i + 1, linea);
 
-        bool ok = ejecutar_linea(linea, pedido->query_id);
+
+        bool ok = ejecutar_linea(linea, query_actual.qid_actual);
+
 
         if (!ok) {
             log_error(logger, "Fallo la instruccion %zu. Deteniendo.", i + 1);
-            pedido->program_counter = i + 1; // PC queda apuntando a la fallida (1-based)
+            query_actual.pc_actual = i + 1; // PC queda apuntando a la fallida (1-based)
+
+        
+            char* texto_mockeado = strdup("Error de mockeo");
+            
+
+            deterner_ejecucion_query_error(texto_mockeado);
             return;
         }
-
+        
         // Si fue END, cortamos ejecución (ya ejecutada)
-        Operation op; 
+        Operation op;
         char* params=NULL;
         if (detectar_operacion(linea, &op, &params) && op == END) {
-            pedido->program_counter = i + 1;
-            log_info(logger, "END ejecutado. PC=%u", pedido->program_counter);
+            query_actual.pc_actual = i + 1;
+            log_info(logger, "END ejecutado. PC=%d", query_actual.pc_actual);
+            
+            if (hay_pedido_desalojo) {
+                
+                hay_pedido_desalojo = false; 
+                
+                sem_post(sem_desalojo_pendiente); 
+                log_info(logger, "Desalojo ignorado por finalización natural (END).");
+            }
+
+            deterner_ejecucion_query_finalizado();
             return;
         }
 
-        // Avanza al siguiente
-        pedido->program_counter = i + 2; // próximo a ejecutar en 1-based
+        query_actual.pc_actual = i + 2; 
+
+
+        if(hay_pedido_desalojo) {
+            log_info(logger, "Deteniendo ejecución por pedido de desalojo...");
+            
+            sem_post(sem_desalojo_pendiente);
+            return;
+        }
     }
 
-    log_info(logger, "Ejecución completa. PC final=%u (cant=%zu)", pedido->program_counter, cantidad);
+
+    log_info(logger, "Ejecución completa. PC final=%d (cant=%ld)", query_actual.pc_actual, cantidad);
+
 }
 
 bool ejecutar_linea(char* linea, uint32_t queryid) {
@@ -71,12 +124,12 @@ bool ejecutar_linea(char* linea, uint32_t queryid) {
                 return false;
             }
 
-            int ok = ejecutar_create(&c); // en caso de retornar -1, es pq los parametros son invalidos
-
-            if(ok != 1){
-              // el ok va a ser un entero, perteneciente a un enum, el cual query_control lo va a usar
-              // para saber de que error estoy hablando.
-              finalizar_query_con_error(queryid, ok);
+            int ok = ejecutar_create(&c,queryid);
+            // 
+            // en caso de retornar  1 => son parametros invalidos
+            // en caso de retornar 2 => fallo la recepcion de la respuesta de storage.
+            if(ok != ERROR_OK){
+              finalizar_query_con_error(ERROR_QUERY, ok);
               destruir_create(&c);
               return false;
             }
@@ -95,9 +148,9 @@ bool ejecutar_linea(char* linea, uint32_t queryid) {
                 return false;
             }
 
-            int ok = ejecutar_truncate(&tr);
-             if(ok != 1){
-              finalizar_query_con_error(queryid, ok);
+            int ok = ejecutar_truncate(&tr, queryid);
+             if(ok != ERROR_OK){
+              finalizar_query_con_error(ERROR_QUERY, ok);
               destruir_truncate(&tr);
               return false;
             }
@@ -107,30 +160,59 @@ bool ejecutar_linea(char* linea, uint32_t queryid) {
             return true;
         }
         case WRITE: {
-            // t_write w = {0};
-            // if (!parsear_write_params(params, &w)) {
-            //     log_error(logger, "Sintaxis WRITE inválida: %s", linea);
-            //     return false;
-            // }
-            // log_info(logger, "VA A EJECUTAR EL WRITE");
+            t_write w = {0};
+            if (!parsear_write_params(params, &w)) {
+                log_error(logger, "Sintaxis WRITE inválida: %s", linea);
+                return false;
+            }
 
-            // // Llama directo a memoria (asume query_id en pedido, ajusta si no)
-            // int ok = memoria_write(&w); 
-            // if (ok < 0) {
-            //     log_error(logger, "[WORKER] WRITE falló para %s:%s base=%u", w.nombre_archivo, w.tag, w.dir_base);
-            //     destruir_write(&w);
-            //     return false;
-            // }
+            // Llama directo a memoria (asume query_id en pedido, ajusta si no)
+            int ok = memoria_write(&w, queryid);
+            if (ok < 0) {
+              finalizar_query_con_error(ERROR_QUERY, ok);
+              destruir_write(&w);
+              return false;
+            }
 
-            // // log_info(logger, "## Query %u: - Instrucción realizada: WRITE", pedido->query_id); // Log obligatorio sin params
-            // destruir_write(&w);
-            log_warning(logger, "READ aún no implementado: %s", linea);
+            // log_info(logger, "## Query %u: - Instrucción realizada: WRITE", pedido->query_id); // Log obligatorio sin params
+            destruir_write(&w);
             return true;
         }
         case READ: {
-            // TODO: parsear y ejecutar READ <file>:<tag> <offset|bloque> <tamanio>
-            log_warning(logger, "READ aún no implementado: %s", linea);
-            return false;
+            t_write r = {0};
+            if (!parsear_write_params(params, &r)) {
+                log_error(logger, "Sintaxis READ inválida: %s", linea);
+                return false;
+            }
+
+            // 1. Preparamos un buffer para recibir los datos leídos desde memoria
+            void* buffer_leido = malloc(r.len);
+            if (!buffer_leido) {
+                log_error(logger, "Fallo malloc en READ");
+                destruir_write(&r);
+                return false;
+            }
+            // Inicializo en 0 por seguridad
+            memset(buffer_leido, 0, r.len); 
+
+            // 2. Llamada a memoria (igual que write, pero pasando el buffer vacio para llenar)
+            int ok = memoria_read(&r, buffer_leido, queryid);
+            
+            if (ok < 0) {
+                finalizar_query_con_error(ERROR_QUERY, ok);
+                free(buffer_leido);
+                destruir_write(&r);
+                return false;
+            }
+
+            enviar_lectura_a_master(r.file, r.tag, buffer_leido, r.len, queryid);
+            // Log obligatorio
+            log_info(logger, "## Query %u: - Instrucción realizada: READ", queryid);
+
+            // Limpieza
+            free(buffer_leido);
+            destruir_write(&r);
+            return true;
         }
         case TAG: {
             t_tag t = {0};
@@ -138,9 +220,9 @@ bool ejecutar_linea(char* linea, uint32_t queryid) {
                 log_error(logger, "Sintaxis TAG inválida: %s", linea);
                 return false;
             }
-            int ok = ejecutar_tag(&t);
-             if(ok != 1){
-              finalizar_query_con_error(queryid, ok);
+            int ok = ejecutar_tag(&t,queryid);
+             if(ok != ERROR_OK){
+              finalizar_query_con_error(ERROR_QUERY, ok);
               destruir_tag(&t);
               return false;
             }
@@ -152,13 +234,14 @@ bool ejecutar_linea(char* linea, uint32_t queryid) {
         case COMMIT: {
             //aplicar FLUSH
             t_create c = {0};
+            flush_file_tag_en_memoria(c.nombre_archivo, c.tag, queryid);
             if (!parsear_create_params(params, &c)) {
                 log_error(logger, "Sintaxis COMMIT inválida: %s", linea);
                 return false;
             }
-            int code = ejecutar_commit(&c);                   // 1=OK, ≠1 = enum/código de error
-            if (code != 1) {
-                finalizar_query_con_error(queryid, code);
+            int code = ejecutar_commit(&c,queryid);
+            if (code != ERROR_OK) {
+                finalizar_query_con_error(ERROR_QUERY, code);
                 destruir_create(&c);
                 return false;
             }
@@ -170,21 +253,32 @@ bool ejecutar_linea(char* linea, uint32_t queryid) {
             return true;
         }
         case FLUSH: {
-            // TODO: parsear/ejecutar FLUSH <file>:<tag>
-            log_warning(logger, "FLUSH aún no implementado: %s", linea);
-            return false;
+            t_create c = {0}; 
+            if (!parsear_create_params(params, &c)) {
+                log_error(logger, "Sintaxis FLUSH inválida: %s", linea);
+                return false;
+            }
+
+            flush_file_tag_en_memoria(c.nombre_archivo, c.tag, queryid);
+            
+            log_info(logger, "## Query %u: - Instrucción realizada: FLUSH", queryid);
+
+            // 4. Limpieza
+            destruir_create(&c);
+            return true;
         }
         case DELETE: {
             t_create c = {0};
+            flush_file_tag_en_memoria(c.nombre_archivo, c.tag, queryid);
             if (!parsear_create_params(params, &c)) {
                 log_error(logger, "Sintaxis DELETE inválida: %s", linea);
                 return false;
             }
             c.op = DELETE;
 
-            int code = ejecutar_delete(&c);     // 1 = OK, ≠1 = enum/código de error
-            if (code != 1) {
-                finalizar_query_con_error(queryid, code);
+            int code = ejecutar_delete(&c,queryid);     // 1 = OK, ≠1 = enum/código de error
+            if (code != ERROR_OK) {
+                finalizar_query_con_error(ERROR_QUERY, code);
                 destruir_create(&c);
                 return false;
             }
@@ -195,7 +289,6 @@ bool ejecutar_linea(char* linea, uint32_t queryid) {
             destruir_create(&c);
             return true;
         }
-        // ===== switch =====
         case END: {
             t_paquete* p = empaquetar_operacion_end(queryid);
 
@@ -216,62 +309,116 @@ bool ejecutar_linea(char* linea, uint32_t queryid) {
             return false;
     }
 }
+void flush_file_tag_en_memoria(char* file, char* tag, uint32_t id_query) {
+    pthread_mutex_lock(&mutex_mem);
 
-void finalizar_query_con_error(uint32_t queryid, int error_code) {
-    // 1) Empaquetar <queryid, error_code>
-    t_paquete* paquete = empaquetar_operacion_fin_error(queryid, error_code);
+    t_tabla_paginas* tabla = buscar_en_lista_global(file, tag);
+
+    if (tabla == NULL) {
+        pthread_mutex_unlock(&mutex_mem);
+        return;
+    }
+
+    int cantidad_paginas = list_size(tabla->paginas_proceso);
+
+    for (int i = 0; i < cantidad_paginas; i++) {
+        t_entrada_pagina* entrada = (t_entrada_pagina*)list_get(tabla->paginas_proceso, i);
+
+        if (entrada->presente && entrada->modificado) {
+            if (escribir_pagina_a_storage(entrada, id_query) == 0) {
+                entrada->modificado = false;
+            } else {
+                log_error(logger, "Query %u: Error al hacer FLUSH de página %u", id_query, entrada->nro_pagina);
+            }
+        }
+    }
+
+    pthread_mutex_unlock(&mutex_mem);
+}
+
+void enviar_lectura_a_master(char* file, char* tag, void* contenido, uint32_t tamanio, uint32_t query_id) {
+    t_paquete* paquete = crear_paquete();
+    
+    // Opción recomendada (Protocolo custom):
+    insertar_uint32_a_paquete(paquete, NUEVA_LECTURA);
+    insertar_uint32_a_paquete(paquete, query_id);
+    insertar_string_a_paquete(paquete, file);
+    insertar_string_a_paquete(paquete, tag);
+    
+    insertar_bytes_a_paquete(paquete, contenido, tamanio);
+
+    enviar_paquete(paquete, conexion_master);
+    eliminar_paquete(paquete);
+}
+
+
+void finalizar_query_con_error(t_tipo_aviso_worker_master tipodeerror, int motivo) {
+    
+    char* error_code = storage_error_to_string(motivo);
+    t_paquete* paquete = empaquetar_operacion_fin_error(tipodeerror, error_code);
     if (!paquete) {
-        log_error(logger, "[WORKER] No pude empaquetar FIN-ERROR (q=%u, code=%d)", queryid, error_code);
         return;
     }
     // 2) Enviar a Master
     enviar_paquete(paquete, conexion_master);
-
-    log_info(logger, "## Query %u: FINALIZADA CON ERROR (code=%d)", queryid, error_code);
+    // 24/11 en caso de una falla en una query, se desconecta de master, pero no corta la consola.
+    // 24/11 
 }
 
+char* storage_error_to_string(int motivo) {
+    switch (motivo) {
+        case ERROR_OK:                     return "ERROR_OK";
+        case ERROR_FILE_TAG_INEXISTENTE:   return "ERROR_FILE_TAG_INEXISTENTE";
+        case ERROR_FILE_TAG_PREEXISTENTE:  return "ERROR_FILE_TAG_PREEXISTENTE";
+        case ERROR_ESPACIO_INSUFICIENTE:   return "ERROR_ESPACIO_INSUFICIENTE";
+        case ERROR_ESCRITURA_NO_PERMITIDA: return "ERROR_ESCRITURA_NO_PERMITIDA";
+        case ERROR_FUERA_DE_LIMITE:        return "ERROR_FUERA_DE_LIMITE";
+        case ERROR_DESCONOCIDO:            return "ERROR_DESCONOCIDO";
+        default:                           return "ERROR_DESCONOCIDO";
+    }
+}
 ///////////// EJECUCION DE INSTRUCCIONES ///////////////////////7
 
-int ejecutar_create(t_create* c) {
+int ejecutar_create(t_create* c, uint32_t query_id) {
 
     if (!c || !c->nombre_archivo || !c->tag) {
         log_error(logger, "[WORKER] CREATE con parámetros inválidos");
-        return -1;
+        return 1; // no llego a enviarse los datos a storage
     }
 
     // Envío a Storage
     log_info(logger, "[STUB] Enviar a Storage: %s:%s", c->nombre_archivo, c->tag);
-    t_paquete* paquete = empaquetar_operacion_create(c->nombre_archivo, c->tag);
+    t_paquete* paquete = empaquetar_operacion_create(c->nombre_archivo, c->tag, query_id);
 
 	enviar_paquete(paquete, conexion_storage);
 
-    int flag = recibir_respuesta_storage(conexion_storage, logger);
-    
-    if (flag == 1) {
+    int resultado = recibir_respuesta_storage(conexion_storage, logger);
+
+    if (resultado == ERROR_OK) {
         log_info(logger, "[WORKER] Respuesta OK de Storage para CREATE %s:%s", c->nombre_archivo, c->tag);
     } else {
         // IMPORTANTE: Aca deberia finalizar la query
         log_error(logger, "[WORKER] Respuesta ERROR de Storage para CREATE %s:%s", c->nombre_archivo, c->tag);
     }
-    return flag;
+    return resultado;
 }
 
-int ejecutar_truncate(t_truncate* c) {
+int ejecutar_truncate(t_truncate* c,uint32_t queryid) {
 
      if (!c->nombre_archivo || !c->tag) {
         log_error(logger, "TRUNCATE con parametros invalidos: file=%p tag=%p", (void*)c->nombre_archivo, (void*)c->tag);
-        return -1;
+        return 1;
     }
 
     log_info(logger, "[STUB] Enviar a Storage: TRUNCATE %s:%s tam=%zu", c->nombre_archivo, c->tag, c->tam);
 
-    t_paquete* paquete = empaquetar_operacion_truncate(c->nombre_archivo, c->tag, c->tam);
+    t_paquete* paquete = empaquetar_operacion_truncate(c->nombre_archivo, c->tag, c->tam, queryid);
 
     enviar_paquete(paquete, conexion_storage);
 
     int flag = recibir_respuesta_storage(conexion_storage, logger);
-    
-    if (flag == 1) {
+
+    if (flag == ERROR_OK) {
         log_info(logger, "[WORKER] Respuesta OK de Storage para TRUNCATE %s:%s", c->nombre_archivo, c->tag);
     } else {
         log_error(logger, "[WORKER] Respuesta ERROR de Storage para TRUNCATE %s:%s", c->nombre_archivo, c->tag);
@@ -281,25 +428,25 @@ int ejecutar_truncate(t_truncate* c) {
     return flag;
 }
 
-int ejecutar_tag(t_tag* t) {
+int ejecutar_tag(t_tag* t, uint32_t queryid) {
     if (!t || !t->file_origen || !t->tag_origen || !t->file_dest || !t->tag_dest) {
         log_error(logger, "TAG parámetros inválidos: fo=%p to=%p fd=%p td=%p",
                   (void*)(t ? t->file_origen : NULL),
                   (void*)(t ? t->tag_origen  : NULL),
                   (void*)(t ? t->file_dest   : NULL),
                   (void*)(t ? t->tag_dest    : NULL));
-        return -1;
+        return 1;
     }
 
     log_info(logger, "[STUB] Enviar a Storage: TAG %s:%s -> %s:%s", t->file_origen, t->tag_origen, t->file_dest, t->tag_dest);
 
-    t_paquete* paquete = empaquetar_operacion_tag(t->file_origen, t->tag_origen, t->file_dest, t->tag_dest);
-    
+    t_paquete* paquete = empaquetar_operacion_tag(t->file_origen, t->tag_origen, t->file_dest, t->tag_dest, queryid);
+
     enviar_paquete(paquete, conexion_storage);
 
     int flag = recibir_respuesta_storage(conexion_storage, logger);
 
-    if (flag == 1) {
+    if (flag == ERROR_OK) {
         log_info(logger, "[WORKER] TAG OK %s:%s -> %s:%s", t->file_origen, t->tag_origen, t->file_dest, t->tag_dest);
     } else {
         log_error(logger, "[WORKER] Respuesta ERROR de Storage para TAG %s:%s -> %s:%s",t->file_origen, t->tag_origen, t->file_dest, t->tag_dest);
@@ -307,21 +454,21 @@ int ejecutar_tag(t_tag* t) {
     return flag; // 1=OK, ≠1=error
 }
 
-int ejecutar_commit(t_create* c) {
+int ejecutar_commit(t_create* c, uint32_t queryid) {
     if (!c || !c->nombre_archivo || !c->tag) {
         log_error(logger, "[WORKER] COMMIT con parámetros inválidos");
-        return -1;
+        return 1;
     }
 
     log_info(logger, "[STUB] Enviar a Storage: COMMIT %s:%s",  c->nombre_archivo, c->tag);
 
-    t_paquete* paquete = empaquetar_operacion_commit(c->nombre_archivo, c->tag);
+    t_paquete* paquete = empaquetar_operacion_commit(c->nombre_archivo, c->tag, queryid);
 
     enviar_paquete(paquete, conexion_storage);
 
     int flag = recibir_respuesta_storage(conexion_storage, logger);
 
-    if (flag == 1) {
+    if (flag == ERROR_OK) {
         log_info(logger, "[WORKER] COMMIT OK %s:%s", c->nombre_archivo, c->tag);
     } else {
         log_error(logger, "[WORKER] Respuesta ERROR de Storage para COMMIT %s:%s", c->nombre_archivo, c->tag);
@@ -329,21 +476,21 @@ int ejecutar_commit(t_create* c) {
     return flag; // 1=OK, ≠1=error
 }
 
-int ejecutar_delete(t_create* c) {
+int ejecutar_delete(t_create* c , uint32_t queryid) {
     if (!c || !c->nombre_archivo || !c->tag) {
         log_error(logger, "[WORKER] DELETE con parámetros inválidos");
-        return -1;
-    }
+        return 1;
+    };
 
     log_info(logger, "[STUB] Enviar a Storage: DELETE %s:%s", c->nombre_archivo, c->tag);
 
-    t_paquete* paquete = empaquetar_operacion_delete(c->nombre_archivo, c->tag);
+    t_paquete* paquete = empaquetar_operacion_delete(c->nombre_archivo, c->tag, queryid);
 
     enviar_paquete(paquete, conexion_storage);
 
     int flag = recibir_respuesta_storage(conexion_storage, logger); // 1=OK, ≠1=error
 
-    if (flag == 1) {
+    if (flag == ERROR_OK) {
         log_info(logger, "[WORKER] DELETE OK %s:%s", c->nombre_archivo, c->tag);
     } else {
         log_error(logger, "[WORKER] Respuesta ERROR de Storage para DELETE %s:%s",
@@ -360,34 +507,47 @@ int recibir_respuesta_storage(int conexion, t_log* logger) {
     int opcode_respuesta = recibir_operacion(conexion, logger);
     if (opcode_respuesta < 0) {
         log_error(logger, "[WORKER] Error al recibir opcode de respuesta de Storage (conexión caída?)");
-        return 0;  // Asumimos error
+        return 2; //fallo en la recepcion de la respuesta
     }
 
-    if (opcode_respuesta != RESPONSE) {
+    if (opcode_respuesta != PAQUETE) {
         log_error(logger, "[WORKER] Opcode inesperado de Storage: %d (esperaba RESPONSE=%d)", opcode_respuesta, RESPONSE);
-        return 0;
+        return 2;
     }
 
-    int size_buffer;
+    int size_buffer = 0;
     void* buffer = recibir_buffer(&size_buffer, conexion);
     if (buffer == NULL) {
         log_error(logger, "[WORKER] Error al recibir buffer de respuesta de Storage");
-        return 0;
+        return 2;
     }
 
     if (size_buffer < sizeof(int)) {
         log_error(logger, "[WORKER] Buffer de respuesta inválido (demasiado chico)");
         free(buffer);
-        return 0;
+        return 2;
     }
 
-    int flag;
-    int offset = 0;
-    memcpy(&flag, buffer + offset, sizeof(int));
-    free(buffer);  // Limpia siempre
-
-    return flag;  // 1=OK, 0=Error
+   // 4. Deserialización: Sacamos el entero del buffer
+    int resultado_operacion;
+    memcpy(&resultado_operacion, buffer, sizeof(int));
+    free(buffer);
+    return resultado_operacion; // si salio bien la operacion => resultado_operacion = ERROR_OK(0)
 }
+
+// int recibir_respuesta_storage(int conexion, t_log* logger) {
+//     // MOCK ACTIVADO: Simulamos que Storage respondió OK
+    
+//     // Simulamos que recibimos el OpCode RESPONSE (100)
+//     log_trace(logger, "[MOCK] Storage envió OpCode: %d (RESPONSE)", RESPONSE);
+
+//     // Simulamos que leímos el buffer y adentro venía un 0 (ERROR_OK)
+//     int valor_simulado_del_buffer = 1; // 1 = ÉXITO, cambialo a otro número para probar errores
+    
+//     log_info(logger, "[MOCK] Simulando respuesta exitosa del Storage -> Retorno: %d", valor_simulado_del_buffer);
+
+//     return valor_simulado_del_buffer;
+// }
 
 
 
@@ -472,6 +632,10 @@ t_programa* obtener_programa(char* nombre){
 
 char* const* instrucciones_desde(char* nombre, size_t idx_1based, size_t* out_cant) {
     t_programa* p = obtener_programa(nombre);
+    if (!p) {
+        printf("[DEBUG] Error: No se encontró el programa '%s' en el diccionario.\n", nombre);
+        return NULL;
+    }
     if (!out_cant) return NULL;
     *out_cant = 0;
     if (!p || idx_1based == 0 || idx_1based > p->cant) return NULL;
@@ -556,7 +720,7 @@ bool parsear_tag_params(  char* params, t_tag* out) {
     char* origen = p;
 
     // tomar segundo token (destino)
-    char* p2 = saltar_blancos(sp1 + 1);
+    const char* p2 = saltar_blancos(sp1 + 1);
     if (*p2 == '\0') { free(tmp); return false; }
     // p2 debería ser el último token (FD:TD). Si hubiera más, lo ignoramos/validamos:
     char* sp2 = strpbrk(p2, " \t");
@@ -565,7 +729,7 @@ bool parsear_tag_params(  char* params, t_tag* out) {
         // *sp2 = '\0'; // o return false;
         *sp2 = '\0';
     }
-    char* destino = p2;
+    const char* destino = p2;
 
     // split origen "FO:TO"
     char* colon1 = strchr(origen, ':');
