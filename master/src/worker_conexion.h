@@ -24,6 +24,7 @@
 
 void* manejar_worker(void* arg);
 void alta_aviso_confirmacion(t_motivo_pedido_master_worker motivo_pedido, uint32_t query_id, uint32_t id_worker, uint32_t dato_extra);
+void liberar_aviso_completo(t_aviso_worker_master* aviso);
 
 void agregar_siguiente_query_a_enviar(t_query* query, t_worker_conectado* worker_libre, t_confirmacion_pedido* conf);
 void agregar_pedido_interrupcion(t_worker_conectado* worker, uint32_t query_id, t_confirmacion_pedido* conf);

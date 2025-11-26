@@ -12,9 +12,8 @@
 #include <commons/config.h>
 #include <readline/readline.h>
 #include "queryInterpreter.h"
-#include "./utils/utils.h"
-#include "./utils/empaquetar.h"
-#include "./utils/desempaquetar.h"
+#include "utilsWorker.h"
+
 //#include "utilsWorker.h"
 #include "memoria_interna_.h"
 
@@ -39,5 +38,8 @@ t_programa* leer_y_partir(const char* path);
 bool vacia_o_coment(const char* s);
 void rstrip(char* s);
 void cargar_scripts(const char* path_base, t_log* logger);
+
+bool armar_y_enviar_confirmacion_a_master(t_aviso_worker_master* aviso_confirmacion, int conexion);
+
 
 #endif /* WORKER_H_ */

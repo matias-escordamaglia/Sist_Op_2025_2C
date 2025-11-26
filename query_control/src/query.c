@@ -112,6 +112,10 @@ int main(int argc, char** argv)
 					break;
 				}
 
+				free(aviso->file_tag);
+                free(aviso->mensaje);
+                free(aviso);
+
 				break;
 			}
 

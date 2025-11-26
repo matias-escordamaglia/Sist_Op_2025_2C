@@ -1,3 +1,8 @@
+# Link TP
+
+[Master of Files](https://docs.google.com/document/d/1mEGwXjwtQzD0T6Pl8gEhgJcmQR_3nmVI6BxukAmumsM/edit?tab=t.0)
+
+
 # tp-scaffold
 
 Esta es una plantilla de proyecto diseñada para generar un TP de Sistemas

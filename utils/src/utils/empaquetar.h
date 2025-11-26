@@ -11,6 +11,7 @@
 void insertar_variable_a_paquete(t_paquete* paquete, void* valor, int tamanio);
 void insertar_string_a_paquete(t_paquete* paquete, char* string);
 void insertar_binario_a_paquete(t_paquete* paquete, char* string, int tamanio);
+void insertar_bytes_a_paquete(t_paquete* paquete, void* datos, int tamanio);
 
 void insertar_uint32_a_paquete(t_paquete* paquete, uint32_t valor);
 void insertar_int_a_paquete(t_paquete* paquete, int valor);

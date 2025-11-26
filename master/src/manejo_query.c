@@ -11,7 +11,7 @@ void* manejar_query(void* arg) {
     uint32_t confirmacion = HANDSHAKE_OK;
     send(cliente_fd, &confirmacion, sizeof(uint32_t), 0);
 
-    t_query* query;
+    t_query* query = NULL;
     
     while (1) {
         int cod_op = recibir_operacion(cliente_fd, get_logger());
@@ -82,14 +82,25 @@ bool mandar_lectura_a_query_con_id(char* string_crudo, uint32_t id_query) {
         printf("FILE:TAG: %s\n", file_tag);
         printf("Lectura: %s\n", lectura);
        
-    } else {
+    } else {        
         printf("Error al separar el string\n");
+        free(file_tag);
+        free(lectura);
         return false;
     }
 
     t_aviso_master_query* aviso_lectura = malloc(sizeof(t_aviso_master_query));
 
     t_query* query = obtener_query_por_id_uso_externo(id_query);
+    
+
+    if(query == NULL) {
+        log_error(get_logger(), "[MANEJO_QUERY] Error: No se encontró query ID %d", id_query);
+        free(file_tag);
+        free(lectura);
+        free(aviso_lectura);
+        return false;
+    }
 
     aviso_lectura->motivo = LECTURA_QUERY;
     aviso_lectura->file_tag = file_tag;
@@ -98,6 +109,9 @@ bool mandar_lectura_a_query_con_id(char* string_crudo, uint32_t id_query) {
     t_paquete* paquete = empaquetar_aviso_master_query(aviso_lectura);
     if (!paquete) {
         log_error(get_logger(), "[MANEJO_QUERY] No se pudo empaquetar el aviso a query");
+        free(file_tag);
+        free(lectura);
+        free(aviso_lectura);
         return false;
     }
 
@@ -108,7 +122,6 @@ bool mandar_lectura_a_query_con_id(char* string_crudo, uint32_t id_query) {
     free(file_tag);
     free(lectura);
     free(aviso_lectura);
-    free(string_crudo);
 
     return true;
     
@@ -147,13 +160,13 @@ bool separar_string(char* input, char** file_tag, char** lectura) {
     return true;
 }
 
-void notificar_error_a_query_control(int conexion_query) {
+void notificar_error_desconexion_a_query_control(int conexion_query) {
 
     t_aviso_master_query* aviso_error = malloc(sizeof(t_aviso_master_query));
 
     aviso_error->motivo = QUERY_FINALIZADO;
     aviso_error->file_tag = "No se debe leer esto (file:tag desde master)";
-    aviso_error->mensaje = "Error"; 
+    aviso_error->mensaje = "ERROR; worker se desconectó durante la ejecución"; 
 
     t_paquete* paquete = empaquetar_aviso_master_query(aviso_error);
 
@@ -165,15 +178,45 @@ void notificar_error_a_query_control(int conexion_query) {
 
 }
 
-void notificar_finalizacion_a_query_control(uint32_t query_id) {
+void notificar_finalizacion_especial_a_query_control(uint32_t query_id, char* mensaje_personalizado) {
 
     t_query* query = obtener_query_por_id_uso_externo(query_id);
+
+    if (query == NULL) {
+        log_error(get_logger(), "Error al notificar finalización especial: Query ID %d no encontrada", query_id);
+        return;
+    }
 
     t_aviso_master_query* aviso_error = malloc(sizeof(t_aviso_master_query));
 
     aviso_error->motivo = QUERY_FINALIZADO;
     aviso_error->file_tag = "No se debe leer esto (file:tag desde master)";
-    aviso_error->mensaje = "Ejecucion exitosa"; 
+    aviso_error->mensaje = mensaje_personalizado; 
+
+    t_paquete* paquete = empaquetar_aviso_master_query(aviso_error);
+
+    enviar_paquete(paquete, query->conexion);
+
+    log_info(get_logger(), "[MANEJO_QUERY] Aviso de finalizacion enviado a Query");
+
+    free(aviso_error);
+
+}
+
+void notificar_finalizacion_a_query_control(uint32_t query_id) {
+
+    t_query* query = obtener_query_por_id_uso_externo(query_id);
+
+    if (query == NULL) {
+        log_error(get_logger(), "Error al notificar finalización: Query ID %d no encontrada", query_id);
+        return;
+    }
+
+    t_aviso_master_query* aviso_error = malloc(sizeof(t_aviso_master_query));
+
+    aviso_error->motivo = QUERY_FINALIZADO;
+    aviso_error->file_tag = "No se debe leer esto (file:tag desde master)";
+    aviso_error->mensaje = "Ejecucion exitosa!!"; 
 
     t_paquete* paquete = empaquetar_aviso_master_query(aviso_error);
 

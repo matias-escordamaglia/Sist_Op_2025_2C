@@ -23,7 +23,7 @@
 
 int create(char* , char*);
 int truncar_archivo(char*, char*, int);
-int tag_file(char*, char*);
+int tag_file(char*, char*,char* , char* ,char* , char* );
 int commit_tag(char* , char* );
 int escritura_bloque(char*, char*, int, char*,int);
 char* lectura_bloque(char*, char*, int,int*  );
@@ -31,14 +31,15 @@ int eliminar_tag(char*,char*);
 
 
 int obtener_tamano(char*);
-int incrementar(int, int, char*);
-int decrementar(int, int, char*);
+int incrementar(char*file,char*tag,int, int, char*);
+int decrementar(char* file, char* tag, int nuevo_valor, int valor_original, char* ruta_tag); 
 void copiar_archivo(char*, char*);
-void copiar_directorio(char*, char*);
+int copiar_directorio(char*, char*);
+int duplicar_enlaces_bloques(char* ruta_tag_origen, char* ruta_tag_destino,char* file_origen, char* tag_origen,char* file_dest, char* tag_dest);
 void eliminar_directorio(char*);
 int bloq_L_apuntan_bloq_F_0(char*);
-void recorrer_logical_blocks(char*, char*);
-int procesar_bloque_logico(char*, int);
-void eliminar_block_metadata(char*, int);
+int procesar_bloque_logico(char*, int, char*  , char*, int  );
+
+
 
 #endif /* OPERACIONES_H_ */
