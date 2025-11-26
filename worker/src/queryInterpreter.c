@@ -1,23 +1,49 @@
 
 #include "queryInterpreter.h"
 
-void envioAQueryInterpreter(t_pedido_master_worker* pedido){
+void envioAQueryInterpreter(){
     size_t cant = 0;
-    char* const* vec = instrucciones_desde("querie1.txt", 4, &cant);
+    // aca iba lo de pedido, osea pedido->program_counter y pedido->query_path
+    // char* const* vec = instrucciones_desde("querie1.txt", 4, &cant);
+    // printf("DEBUG CHECK: Puntero: %p, Contenido: '%s'\n", 
+    //        (void*)query_actual.query_path, 
+    //        query_actual.query_path);
+           
+    char* const* vec = instrucciones_desde(query_actual.query_path, 4, &cant);
     if (!vec) {
         log_error(logger, "No hay instrucciones desde la 4 para %s", "querie1.txt");
         return;
     }
 
-    ejecutarOperacion(pedido, vec, cant);
+    ejecutarOperacion(vec, cant);
 }
 
-void ejecutarOperacion(t_pedido_master_worker* pedido, char* const* instrucciones, size_t cantidad)
+
+/*
+Motivo de este hilo es el de desacoplar la ejecución de las queries de la escucha de master y no bloquearla;
+De esta forma podrá escuchar los pedidos de interrupción en tiempo real
+*/
+void* main_lanzamiento_ejecucion(void* _){
+
+    while(true) {
+
+        sem_wait(sem_ejecucion_pendiente);
+
+        envioAQueryInterpreter();
+
+
+    }
+    
+}
+
+
+void ejecutarOperacion(char* const* instrucciones, size_t cantidad)
+
 {
-    if (!pedido || !instrucciones) { log_error(logger, "Argumentos nulos"); return; }
+    if (!instrucciones) { log_error(logger, "Argumentos nulos"); return; }
 
     // PC 1-based (si viene 0, arrancamos en 1)
-    size_t pc = pedido->program_counter ? pedido->program_counter : 1;
+    size_t pc = query_actual.pc_actual ? query_actual.pc_actual : 1;
     if (pc < 1) pc = 1;
     if (pc > cantidad) {
         log_info(logger, "PC=%zu ya está al final (cant=%zu). Nada que ejecutar.", pc, cantidad);
@@ -29,28 +55,55 @@ void ejecutarOperacion(t_pedido_master_worker* pedido, char* const* instruccione
         char* linea = instrucciones[i];
         log_info(logger, "INST %zu: %s", i + 1, linea);
 
-        bool ok = ejecutar_linea(linea, pedido->query_id);
+
+        bool ok = ejecutar_linea(linea, query_actual.qid_actual);
+
 
         if (!ok) {
             log_error(logger, "Fallo la instruccion %zu. Deteniendo.", i + 1);
-            pedido->program_counter = i + 1; // PC queda apuntando a la fallida (1-based)
+            query_actual.pc_actual = i + 1; // PC queda apuntando a la fallida (1-based)
+
+        
+            char* texto_mockeado = strdup("Error de mockeo");
+            
+
+            deterner_ejecucion_query_error(texto_mockeado);
             return;
         }
-
+        
         // Si fue END, cortamos ejecución (ya ejecutada)
         Operation op;
         char* params=NULL;
         if (detectar_operacion(linea, &op, &params) && op == END) {
-            pedido->program_counter = i + 1;
-            log_info(logger, "END ejecutado. PC=%u", pedido->program_counter);
+            query_actual.pc_actual = i + 1;
+            log_info(logger, "END ejecutado. PC=%d", query_actual.pc_actual);
+            
+            if (hay_pedido_desalojo) {
+                
+                hay_pedido_desalojo = false; 
+                
+                sem_post(sem_desalojo_pendiente); 
+                log_info(logger, "Desalojo ignorado por finalización natural (END).");
+            }
+
+            deterner_ejecucion_query_finalizado();
             return;
         }
 
-        // Avanza al siguiente
-        pedido->program_counter = i + 2; // próximo a ejecutar en 1-based
+        query_actual.pc_actual = i + 2; 
+
+
+        if(hay_pedido_desalojo) {
+            log_info(logger, "Deteniendo ejecución por pedido de desalojo...");
+            
+            sem_post(sem_desalojo_pendiente);
+            return;
+        }
     }
 
-    log_info(logger, "Ejecución completa. PC final=%u (cant=%zu)", pedido->program_counter, cantidad);
+
+    log_info(logger, "Ejecución completa. PC final=%d (cant=%ld)", query_actual.pc_actual, cantidad);
+
 }
 
 bool ejecutar_linea(char* linea, uint32_t queryid) {
@@ -71,11 +124,9 @@ bool ejecutar_linea(char* linea, uint32_t queryid) {
                 return false;
             }
 
-            int ok = ejecutar_create(&c,queryid); // en caso de retornar -1, es pq los parametros son invalidos
-
-            if(ok != 0){
-              // el ok va a ser un entero, perteneciente a un enum, el cual query_control lo va a usar
-              // para saber de que error estoy hablando.
+            int ok = ejecutar_create(&c,queryid);
+            // en caso de retornar != 1 => ese "ok" va a ser el motivo del error
+            if(ok != ERROR_OK){
               finalizar_query_con_error(ERROR_QUERY, ok);
               destruir_create(&c);
               return false;
@@ -96,7 +147,7 @@ bool ejecutar_linea(char* linea, uint32_t queryid) {
             }
 
             int ok = ejecutar_truncate(&tr, queryid);
-             if(ok != 1){
+             if(ok != ERROR_OK){
               finalizar_query_con_error(ERROR_QUERY, ok);
               destruir_truncate(&tr);
               return false;
@@ -168,7 +219,7 @@ bool ejecutar_linea(char* linea, uint32_t queryid) {
                 return false;
             }
             int ok = ejecutar_tag(&t,queryid);
-             if(ok != 1){
+             if(ok != ERROR_OK{
               finalizar_query_con_error(ERROR_QUERY, ok);
               destruir_tag(&t);
               return false;
@@ -187,7 +238,7 @@ bool ejecutar_linea(char* linea, uint32_t queryid) {
                 return false;
             }
             int code = ejecutar_commit(&c,queryid);
-            if (code != 1) {
+            if (code != ERROR_OK {
                 finalizar_query_con_error(ERROR_QUERY, code);
                 destruir_create(&c);
                 return false;
@@ -224,7 +275,7 @@ bool ejecutar_linea(char* linea, uint32_t queryid) {
             c.op = DELETE;
 
             int code = ejecutar_delete(&c,queryid);     // 1 = OK, ≠1 = enum/código de error
-            if (code != 1) {
+            if (code != ERROR_OK) {
                 finalizar_query_con_error(ERROR_QUERY, code);
                 destruir_create(&c);
                 return false;
@@ -298,6 +349,7 @@ void enviar_lectura_a_master(char* file, char* tag, void* contenido, uint32_t ta
     eliminar_paquete(paquete);
 }
 
+
 void finalizar_query_con_error(t_tipo_aviso_worker_master tipodeerror, int motivo) {
     
     char* error_code = storage_error_to_string(motivo);
@@ -307,6 +359,8 @@ void finalizar_query_con_error(t_tipo_aviso_worker_master tipodeerror, int motiv
     }
     // 2) Enviar a Master
     enviar_paquete(paquete, conexion_master);
+    // 24/11 en caso de una falla en una query, se desconecta de master, pero no corta la consola.
+    // 24/11 
 }
 
 char* storage_error_to_string(int motivo) {
@@ -336,15 +390,15 @@ int ejecutar_create(t_create* c, uint32_t query_id) {
 
 	enviar_paquete(paquete, conexion_storage);
 
-    int flag = recibir_respuesta_storage(conexion_storage, logger);
+    int resultado = recibir_respuesta_storage(conexion_storage, logger);
 
-    if (flag == 1) {
+    if (resultado == ERROR_OK) {
         log_info(logger, "[WORKER] Respuesta OK de Storage para CREATE %s:%s", c->nombre_archivo, c->tag);
     } else {
         // IMPORTANTE: Aca deberia finalizar la query
         log_error(logger, "[WORKER] Respuesta ERROR de Storage para CREATE %s:%s", c->nombre_archivo, c->tag);
     }
-    return flag;
+    return resultado;
 }
 
 int ejecutar_truncate(t_truncate* c,uint32_t queryid) {
@@ -362,7 +416,7 @@ int ejecutar_truncate(t_truncate* c,uint32_t queryid) {
 
     int flag = recibir_respuesta_storage(conexion_storage, logger);
 
-    if (flag == 1) {
+    if (flag == ERROR_OK) {
         log_info(logger, "[WORKER] Respuesta OK de Storage para TRUNCATE %s:%s", c->nombre_archivo, c->tag);
     } else {
         log_error(logger, "[WORKER] Respuesta ERROR de Storage para TRUNCATE %s:%s", c->nombre_archivo, c->tag);
@@ -390,7 +444,7 @@ int ejecutar_tag(t_tag* t, uint32_t queryid) {
 
     int flag = recibir_respuesta_storage(conexion_storage, logger);
 
-    if (flag == 1) {
+    if (flag == ERROR_OK) {
         log_info(logger, "[WORKER] TAG OK %s:%s -> %s:%s", t->file_origen, t->tag_origen, t->file_dest, t->tag_dest);
     } else {
         log_error(logger, "[WORKER] Respuesta ERROR de Storage para TAG %s:%s -> %s:%s",t->file_origen, t->tag_origen, t->file_dest, t->tag_dest);
@@ -412,7 +466,7 @@ int ejecutar_commit(t_create* c, uint32_t queryid) {
 
     int flag = recibir_respuesta_storage(conexion_storage, logger);
 
-    if (flag == 1) {
+    if (flag == ERROR_OK) {
         log_info(logger, "[WORKER] COMMIT OK %s:%s", c->nombre_archivo, c->tag);
     } else {
         log_error(logger, "[WORKER] Respuesta ERROR de Storage para COMMIT %s:%s", c->nombre_archivo, c->tag);
@@ -434,7 +488,7 @@ int ejecutar_delete(t_create* c , uint32_t queryid) {
 
     int flag = recibir_respuesta_storage(conexion_storage, logger); // 1=OK, ≠1=error
 
-    if (flag == 1) {
+    if (flag == ERROR_OK) {
         log_info(logger, "[WORKER] DELETE OK %s:%s", c->nombre_archivo, c->tag);
     } else {
         log_error(logger, "[WORKER] Respuesta ERROR de Storage para DELETE %s:%s",
@@ -451,34 +505,47 @@ int recibir_respuesta_storage(int conexion, t_log* logger) {
     int opcode_respuesta = recibir_operacion(conexion, logger);
     if (opcode_respuesta < 0) {
         log_error(logger, "[WORKER] Error al recibir opcode de respuesta de Storage (conexión caída?)");
-        return 0;  // Asumimos error
+        return -1;  // Asumimos error
     }
 
-    if (opcode_respuesta != RESPONSE) {
+    if (opcode_respuesta != PAQUETE) {
         log_error(logger, "[WORKER] Opcode inesperado de Storage: %d (esperaba RESPONSE=%d)", opcode_respuesta, RESPONSE);
-        return 0;
+        return -1;
     }
 
-    int size_buffer;
+    int size_buffer = 0;
     void* buffer = recibir_buffer(&size_buffer, conexion);
     if (buffer == NULL) {
         log_error(logger, "[WORKER] Error al recibir buffer de respuesta de Storage");
-        return 0;
+        return -1;
     }
 
     if (size_buffer < sizeof(int)) {
         log_error(logger, "[WORKER] Buffer de respuesta inválido (demasiado chico)");
         free(buffer);
-        return 0;
+        return -1;
     }
 
-    int flag;
-    int offset = 0;
-    memcpy(&flag, buffer + offset, sizeof(int));
-    free(buffer);  // Limpia siempre
-
-    return flag;  // 1=OK, 0=Error
+   // 4. Deserialización: Sacamos el entero del buffer
+    int resultado_operacion;
+    memcpy(&resultado_operacion, buffer, sizeof(int));
+    free(buffer);
+    return resultado_operacion; // si salio bien la operacion => resultado_operacion = ERROR_OK(0)
 }
+
+// int recibir_respuesta_storage(int conexion, t_log* logger) {
+//     // MOCK ACTIVADO: Simulamos que Storage respondió OK
+    
+//     // Simulamos que recibimos el OpCode RESPONSE (100)
+//     log_trace(logger, "[MOCK] Storage envió OpCode: %d (RESPONSE)", RESPONSE);
+
+//     // Simulamos que leímos el buffer y adentro venía un 0 (ERROR_OK)
+//     int valor_simulado_del_buffer = 1; // 1 = ÉXITO, cambialo a otro número para probar errores
+    
+//     log_info(logger, "[MOCK] Simulando respuesta exitosa del Storage -> Retorno: %d", valor_simulado_del_buffer);
+
+//     return valor_simulado_del_buffer;
+// }
 
 
 
@@ -563,6 +630,10 @@ t_programa* obtener_programa(char* nombre){
 
 char* const* instrucciones_desde(char* nombre, size_t idx_1based, size_t* out_cant) {
     t_programa* p = obtener_programa(nombre);
+    if (!p) {
+        printf("[DEBUG] Error: No se encontró el programa '%s' en el diccionario.\n", nombre);
+        return NULL;
+    }
     if (!out_cant) return NULL;
     *out_cant = 0;
     if (!p || idx_1based == 0 || idx_1based > p->cant) return NULL;
@@ -647,7 +718,7 @@ bool parsear_tag_params(  char* params, t_tag* out) {
     char* origen = p;
 
     // tomar segundo token (destino)
-    char* p2 = saltar_blancos(sp1 + 1);
+    const char* p2 = saltar_blancos(sp1 + 1);
     if (*p2 == '\0') { free(tmp); return false; }
     // p2 debería ser el último token (FD:TD). Si hubiera más, lo ignoramos/validamos:
     char* sp2 = strpbrk(p2, " \t");
@@ -656,7 +727,7 @@ bool parsear_tag_params(  char* params, t_tag* out) {
         // *sp2 = '\0'; // o return false;
         *sp2 = '\0';
     }
-    char* destino = p2;
+    const char* destino = p2;
 
     // split origen "FO:TO"
     char* colon1 = strchr(origen, ':');
