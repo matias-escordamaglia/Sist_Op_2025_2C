@@ -9,7 +9,7 @@ t_bitarray* bitmap_marcos;
 char* algoritmo_reemplazo;
 uint32_t retardo_memoria;
 int puntero_clock_;
-pthread_mutex_t mutex_mem = PTHREAD_MUTEX_INITIALIZER;
+// pthread_mutex_t mutex_mem = PTHREAD_MUTEX_INITIALIZER;
 t_list* lista_global_tablas;
 t_entrada_pagina** tabla_global_marcos;
 
