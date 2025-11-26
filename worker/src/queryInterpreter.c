@@ -9,7 +9,7 @@ void envioAQueryInterpreter(){
     //        (void*)query_actual.query_path, 
     //        query_actual.query_path);
            
-    char* const* vec = instrucciones_desde(query_actual.query_path, 4, &cant);
+    char* const* vec = instrucciones_desde("querie1.txt", 4, &cant);
     if (!vec) {
         log_error(logger, "No hay instrucciones desde la 4 para %s", "querie1.txt");
         return;
@@ -125,7 +125,9 @@ bool ejecutar_linea(char* linea, uint32_t queryid) {
             }
 
             int ok = ejecutar_create(&c,queryid);
-            // en caso de retornar != 1 => ese "ok" va a ser el motivo del error
+            // 
+            // en caso de retornar  1 => son parametros invalidos
+            // en caso de retornar 2 => fallo la recepcion de la respuesta de storage.
             if(ok != ERROR_OK){
               finalizar_query_con_error(ERROR_QUERY, ok);
               destruir_create(&c);
@@ -219,7 +221,7 @@ bool ejecutar_linea(char* linea, uint32_t queryid) {
                 return false;
             }
             int ok = ejecutar_tag(&t,queryid);
-             if(ok != ERROR_OK{
+             if(ok != ERROR_OK){
               finalizar_query_con_error(ERROR_QUERY, ok);
               destruir_tag(&t);
               return false;
@@ -238,7 +240,7 @@ bool ejecutar_linea(char* linea, uint32_t queryid) {
                 return false;
             }
             int code = ejecutar_commit(&c,queryid);
-            if (code != ERROR_OK {
+            if (code != ERROR_OK) {
                 finalizar_query_con_error(ERROR_QUERY, code);
                 destruir_create(&c);
                 return false;
@@ -381,7 +383,7 @@ int ejecutar_create(t_create* c, uint32_t query_id) {
 
     if (!c || !c->nombre_archivo || !c->tag) {
         log_error(logger, "[WORKER] CREATE con parámetros inválidos");
-        return -1;
+        return 1; // no llego a enviarse los datos a storage
     }
 
     // Envío a Storage
@@ -405,7 +407,7 @@ int ejecutar_truncate(t_truncate* c,uint32_t queryid) {
 
      if (!c->nombre_archivo || !c->tag) {
         log_error(logger, "TRUNCATE con parametros invalidos: file=%p tag=%p", (void*)c->nombre_archivo, (void*)c->tag);
-        return -1;
+        return 1;
     }
 
     log_info(logger, "[STUB] Enviar a Storage: TRUNCATE %s:%s tam=%zu", c->nombre_archivo, c->tag, c->tam);
@@ -433,7 +435,7 @@ int ejecutar_tag(t_tag* t, uint32_t queryid) {
                   (void*)(t ? t->tag_origen  : NULL),
                   (void*)(t ? t->file_dest   : NULL),
                   (void*)(t ? t->tag_dest    : NULL));
-        return -1;
+        return 1;
     }
 
     log_info(logger, "[STUB] Enviar a Storage: TAG %s:%s -> %s:%s", t->file_origen, t->tag_origen, t->file_dest, t->tag_dest);
@@ -455,7 +457,7 @@ int ejecutar_tag(t_tag* t, uint32_t queryid) {
 int ejecutar_commit(t_create* c, uint32_t queryid) {
     if (!c || !c->nombre_archivo || !c->tag) {
         log_error(logger, "[WORKER] COMMIT con parámetros inválidos");
-        return -1;
+        return 1;
     }
 
     log_info(logger, "[STUB] Enviar a Storage: COMMIT %s:%s",  c->nombre_archivo, c->tag);
@@ -477,7 +479,7 @@ int ejecutar_commit(t_create* c, uint32_t queryid) {
 int ejecutar_delete(t_create* c , uint32_t queryid) {
     if (!c || !c->nombre_archivo || !c->tag) {
         log_error(logger, "[WORKER] DELETE con parámetros inválidos");
-        return -1;
+        return 1;
     };
 
     log_info(logger, "[STUB] Enviar a Storage: DELETE %s:%s", c->nombre_archivo, c->tag);
@@ -505,25 +507,25 @@ int recibir_respuesta_storage(int conexion, t_log* logger) {
     int opcode_respuesta = recibir_operacion(conexion, logger);
     if (opcode_respuesta < 0) {
         log_error(logger, "[WORKER] Error al recibir opcode de respuesta de Storage (conexión caída?)");
-        return -1;  // Asumimos error
+        return 2; //fallo en la recepcion de la respuesta
     }
 
     if (opcode_respuesta != PAQUETE) {
         log_error(logger, "[WORKER] Opcode inesperado de Storage: %d (esperaba RESPONSE=%d)", opcode_respuesta, RESPONSE);
-        return -1;
+        return 2;
     }
 
     int size_buffer = 0;
     void* buffer = recibir_buffer(&size_buffer, conexion);
     if (buffer == NULL) {
         log_error(logger, "[WORKER] Error al recibir buffer de respuesta de Storage");
-        return -1;
+        return 2;
     }
 
     if (size_buffer < sizeof(int)) {
         log_error(logger, "[WORKER] Buffer de respuesta inválido (demasiado chico)");
         free(buffer);
-        return -1;
+        return 2;
     }
 
    // 4. Deserialización: Sacamos el entero del buffer
