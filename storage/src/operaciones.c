@@ -531,34 +531,62 @@ int eliminar_tag(char* file, char* tag){
     char* ruta_tag  = add_seg_ruta(ruta_file, tag); 
     char* ruta_metadata = add_seg_ruta(ruta_tag, "/metadata.config");
     char* ruta_L_blocks = add_seg_ruta(ruta_tag,"/logical_blocks");  
-    char **bloques = config_get_array_value(config, "BLOCKS");
-    t_config* config = config_create(ruta_metadata);
 
+
+    t_config* config_metadata = config_create(ruta_metadata);
     if (config == NULL) {
         log_error(logger, "DELETE: No se pudo leer metadata de %s", ruta_metadata);
         free(ruta_files);free(ruta_file);
         free(ruta_tag);free(ruta_metadata);        
         return ERROR_DESCONOCIDO;
     }
-    int cantidad_bloques = 0;
-    while (bloques[cantidad_bloques] != NULL) {
-        cantidad_bloques++;
-    }
-    for(int i = 0; i < cantidad_bloques; i++){
-        char* nombre_L_block = crear_nombre_block(i, 6);
-        char* ruta_L_block = add_seg_ruta(nombre_L_block, ruta_L_blocks);
-        struct stat st;
-        if (st.st_nlink == 2) { 
-            if (stat(ruta_L_block, &st) == -1) {
-                log_error(logger, "Bloque lógico no asignado o inexistente");
-                return ERROR_DESCONOCIDO;
-            }
-            liberar_bloque_reservado(i);
+
+    char **bloques_fisicos_arr = config_get_array_value(config_metadata, "BLOCKS");
+    
+    int i = 0;
+    
+    while (bloques_fisicos_arr[i] != NULL) {
+        int nro_bloque_fisico = atoi(bloques_fisicos_arr[i]);
+
+        char* nombre_L_block = crear_nombre_block(i, 6); // ej: 000000.dat
+        char* ruta_L_block = add_seg_ruta(ruta_L_blocks, nombre_L_block);
+
+        char* nombre_F_block = crear_nombre_block(nro_bloque_fisico, 4); // ej: block0058.dat
+        char* pre_ruta_F = add_seg_ruta("/physical_blocks", nombre_F_block);
+        char* ruta_F_block = add_seg_ruta(PUNTO_MONTAJE, pre_ruta_F);
+
+        if (unlink(ruta_L_block) == -1) {
+            log_error(logger, "DELETE: Falló unlink de %s", ruta_L_block);
+            free(nombre_L_block); free(ruta_L_block);
+            free(nombre_F_block); free(pre_ruta_F); free(ruta_F_block);
+            return ERROR_DESCONOCIDO; 
         }
 
+        struct stat st;
+        if (stat(ruta_F_block, &st) == 0) {
+            
+            // Si nlink == 1, significa que SOLO queda el archivo en /physical_blocks/
+            // Nadie más (ningún otro TAG) lo usa. Podemos liberar.
+            if (st.st_nlink == 1) {
+                log_info(logger, "“##%u - Bloque Físico Liberado - Número de Bloque: %u",g_query_id_actual, nro_bloque_fisico);
+                
+                liberar_bloque_reservado(nro_bloque_fisico); 
+                
+            }
+        }
+
+        free(nombre_L_block); free(ruta_L_block);
+        free(nombre_F_block); free(pre_ruta_F); free(ruta_F_block);
+        i++;
     }
+    
+    string_array_destroy(bloques_fisicos_arr);
+    config_destroy(config_metadata);
+
     eliminar_directorio(ruta_tag);
-    free(ruta_files), free(ruta_file), free(ruta_tag), free(ruta_metadata), free(ruta_L_blocks);
+
+    free(ruta_files); free(ruta_file); free(ruta_tag); 
+    free(ruta_metadata); free(ruta_L_blocks);
     return 0;
 }
 

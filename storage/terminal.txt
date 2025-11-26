@@ -1,0 +1,7 @@
+cd && cd tp-2025-2c-SegFaulteadores-Seriales/storage/ && make clean && make all && valgrind ./bin/storage storage.config superblock.config
+
+cd && cd tp-2025-2c-SegFaulteadores-Seriales/master/ &&  make clean && make all  && valgrind ./bin/master master.config
+
+cd && cd tp-2025-2c-SegFaulteadores-Seriales/worker/ &&  make clean && make all &&  ./bin/worker worker.config 1
+
+cd && cd tp-2025-2c-SegFaulteadores-Seriales/query_control/ &&  make clean && make all && ./bin/query_control query.config inicio 1

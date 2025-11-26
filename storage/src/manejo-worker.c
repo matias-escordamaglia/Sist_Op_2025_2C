@@ -164,7 +164,7 @@ void* atender_conexion_worker(void* arg) {
                             estado = atender_lectura(nombre_file,nombre_tag,bloque_logico,&tamanio_leido,&contenido_salida,query_id); 
                             break;
                         case DELETE: 
-                            //estado = atender_delete(nombre_file,nombre_tag);
+                            estado = atender_delete(nombre_file,nombre_tag,query_id);
                             break;
                         default:
                             break;
@@ -472,10 +472,14 @@ int atender_delete(char* file, char* tag, int query_id){
         return ERROR_FILE_TAG_INEXISTENTE; 
     } 
     dictionary_remove(file_tag_dic, key_file_tag);
+
+    pthread_mutex_lock(&mutex_dic_estado);
+    if(dictionary_has_key(dicc_estado_tag, key_file_tag)){
+        dictionary_remove(dicc_estado_tag, key_file_tag);
+    }
+    pthread_mutex_unlock(&mutex_dic_estado);
     pthread_mutex_unlock(&mutex_diccionary);
-
-    actualizar_dicc_estado(key_file_tag, 0);//modificar
-
+    
     pthread_mutex_lock(mutex_file_tag);
  
     int estado_borrado = eliminar_tag(file,tag);
