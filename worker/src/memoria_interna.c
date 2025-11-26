@@ -364,8 +364,8 @@ t_entrada_pagina* indico_entrada_presente(t_tabla_paginas* tabla, uint32_t nro_p
     // Log obligatorio (página 17: "Se asigna el Marco...")
     // Asumiendo id_query se pasa desde caller, pero si no, sacalo o pasalo como param
     // log_info(logger, "Query %u: Se asigna el Marco: %u a la Página: %u perteneciente al - File: %s - Tag: %s.", id_query, (uint32_t)marco, nro_pagina, tabla->file, tabla->tag);
-    log_info(logger, "Query %u: Se asigna el Marco: %u a la Página: %u perteneciente al - File: %s - Tag: %s.", 
-             id_query, (uint32_t)marco, nro_pagina, tabla->file, tabla->tag);
+    // log_info(logger, "Query %u: Se asigna el Marco: %u a la Página: %u perteneciente al - File: %s - Tag: %s.", 
+            //  id_query, (uint32_t)marco, nro_pagina, tabla->file, tabla->tag);
     return e;
 }
 
@@ -459,8 +459,8 @@ t_entrada_pagina* get_entry(t_tabla_paginas* tabla, uint32_t nro_pagina) {
 }
 
 t_entrada_pagina* reemplazar_pagina_clock() {
-    t_entrada_pagina* victima = NULL;
-    int pasadas_completadas = 0;
+    // t_entrada_pagina* victima = NULL;
+    // int pasadas_completadas = 0;
     uint32_t inicio_pasada;
     //log por si acaso a
     log_info(logger, "[CLOCK-M] Iniciando búsqueda de víctima desde el marco %u...", puntero_clock_);
