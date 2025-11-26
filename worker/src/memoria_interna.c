@@ -11,6 +11,7 @@ uint32_t retardo_memoria;
 int puntero_clock_;
 pthread_mutex_t mutex_mem = PTHREAD_MUTEX_INITIALIZER;
 t_list* lista_global_tablas;
+t_entrada_pagina** tabla_global_marcos;
 
 void iniciar_memoria_interna(t_config *config) {
     lista_global_tablas = list_create();
@@ -24,6 +25,7 @@ void iniciar_memoria_interna(t_config *config) {
 
     memoria_interna = malloc(tam_memoria);
     memset(memoria_interna, 0, tam_memoria);
+    tabla_global_marcos = calloc(cant_marcos, sizeof(t_entrada_pagina*));
 
     size_t bitmap_bytes = (cant_marcos + 7) / 8;
     void *bitmap_data = malloc(bitmap_bytes);
@@ -54,6 +56,10 @@ void free_tabla(void *elem) {
     free(tabla->tag);
     list_destroy_and_destroy_elements(tabla->paginas_proceso, free);
     free(tabla);
+}
+
+int memoria_read(t_write* r, void* buffer_destino, uint32_t id_query) {
+    return acceder_memoria(r->file, r->tag, r->dir_base, buffer_destino, r->len, false, id_query);
 }
 
 int memoria_write(t_write* w, uint32_t id_query) {
@@ -89,7 +95,14 @@ int acceder_memoria(char* file, char* tag,uint32_t dir_base, void *buffer, uint3
             marcar_modificada(entrada);
             // log_escritura(id_query, df, (char*)buffer + seg.offset_en_buffer, (int)seg.bytes_en_pagina);
         } else {
-            // reservado para READ en el futuro
+
+            void* origen = (char*)memoria_interna + df;
+            void* destino = (char*)buffer + seg.offset_en_buffer;
+            
+            memcpy(destino, origen, seg.bytes_en_pagina);
+
+            log_info(logger, "Query %u: Acción: LEER - Dirección Física: %u - Tamaño leido: %u", 
+                     id_query, df, seg.bytes_en_pagina);
         }
         //habria que agregar que para cualquier acceso a la pagina se actualice el tiempo de ultimo uso para el LRU
 
@@ -147,41 +160,181 @@ void recorrido_iniciar(segmento_acceso* seg, uint32_t base, uint32_t tam, uint32
     seg->bytes_en_pagina = (seg->bytes_restantes < capacidad) ? seg->bytes_restantes : capacidad;
 }
 
+t_tabla_paginas* encontrar_tabla_de_entrada(t_entrada_pagina* entrada) {
+    if (!entrada) return NULL;
+    for (int i = 0; i < list_size(lista_global_tablas); i++) {
+        t_tabla_paginas* tabla = (t_tabla_paginas*) list_get(lista_global_tablas, i);
+        for (int j = 0; j < list_size(tabla->paginas_proceso); j++) {
+            if (list_get(tabla->paginas_proceso, j) == entrada) {
+                return tabla;
+            }
+        }
+    }
+    return NULL;
+}
+
 t_entrada_pagina* asegurar_pagina_presente(t_tabla_paginas* tabla, uint32_t nro_pagina, uint32_t id_query) {
     t_entrada_pagina* e = get_entry(tabla, nro_pagina);
-    if (e && e->presente) {
-        // Caso 1: La página ya está presente en memoria interna, no necesitamos cargar nada desde Storage
-        return e;
-    }
+    if (e && e->presente) return e;
 
-    // Caso 2: Page miss - La página no está presente
-    // log_miss(id_query, tabla->file, tabla->tag, nro_pagina);
-
+    // log obligatorio)
+    log_info(logger, "Query %u: - Memoria Miss - File: %s - Tag: %s - Pagina: %u", id_query, tabla->file, tabla->tag, nro_pagina);
+    
     t_entrada_pagina* victima = NULL;
     int marco = asignar_marco_o_reemplazar(&victima, id_query);
     if (marco < 0) return NULL;
 
     if (victima) {
-        // Este bloque se ejecuta solo si se realizó un reemplazo (memoria llena)
-        if (victima->modificado) {
-            //if (escribir_pagina_a_storage(victima, id_query) < 0) return NULL;
+    // (A) Si estaba modificada → sobreescribir
+    if (victima->modificado) {
+        if (escribir_pagina_a_storage(victima, id_query) < 0) {
+             devolver_marco(marco);
+             return NULL;
         }
-        // liberar_marco_de_victima(victima, id_query);
-        // log_reemplazo(id_query, victima, tabla, nro_pagina);
-    } else {
-        // Marco libre asignado, no se necesitó reemplazo
+    }
+
+     t_tabla_paginas* v_tabla = encontrar_tabla_de_entrada(victima);
+        char* v_file = v_tabla ? v_tabla->file : "(desconocido)";
+        char* v_tag  = v_tabla ? v_tabla->tag  : "(desconocido)";
+
+
+    
+    // log obligatorio
+    log_info(logger, "## Query %u: Se reemplaza la página %s:%s/%u por la %s:%s/%u",
+                 id_query, v_file, v_tag, (unsigned)victima->nro_pagina, tabla->file, tabla->tag, (unsigned)nro_pagina);
+
+    // log obligatorio
+    log_info(logger, "Query %u: Se libera el Marco: %u perteneciente al - File: %s - Tag: %s",
+                 id_query, (unsigned)victima->marco_num, v_file, v_tag);
+
+    // Si tenés una función extra para liberar la víctima (ej: set presente=false, etc.)
+    liberar_marco_de_victima(victima, id_query);
     }
 
     // Cargar la página desde Storage (común a ambos casos de miss), cargo pq la pegina que quiero no esta en Memoria interna.
-    // if (cargar_pagina_desde_storage(tabla, nro_pagina, marco, id_query) < 0) {
-    //     devolver_marco(marco);
-    //     return NULL;
-    // }
+    if (cargar_pagina_desde_storage(tabla, nro_pagina, marco, id_query) < 0) {
+        devolver_marco(marco);
+        return NULL;
+    }
 
     e = indico_entrada_presente(tabla, nro_pagina, marco);
-    // log_add(id_query, tabla->file, tabla->tag, nro_pagina, (uint32_t)marco);
     return e;
 }
+
+int escribir_pagina_a_storage(t_entrada_pagina* victima, uint32_t id_query) {
+   
+    // 1. Identificar a quién pertenece la víctima
+    t_tabla_paginas* tabla_owner = encontrar_tabla_de_entrada(victima);
+    if (!tabla_owner) {
+        log_info(logger, "Error: Intento de SWAP OUT de pagina huérfana (marco %d)", victima->marco_num);
+        return -1;
+    }
+
+    // 2. Calcular dirección física real en el malloc grande
+    uint32_t offset_memoria = victima->marco_num * tam_pagina;
+    void* contenido_pagina = (char*)memoria_interna + offset_memoria;
+
+    t_paquete* paquete = crear_paquete(); 
+    insertar_uint32_a_paquete(paquete, WRITE);
+    insertar_string_a_paquete(paquete, tabla_owner->file);
+    insertar_string_a_paquete(paquete, tabla_owner->tag);
+    insertar_uint32_a_paquete(paquete, victima->nro_pagina);
+
+    // IMPORTANTE: Usar inserción binaria, NO string
+    insertar_bytes_a_paquete(paquete, contenido_pagina, tam_pagina); 
+
+    insertar_uint32_a_paquete(paquete, id_query); // Para logs del Storage
+
+    // 4. Enviar y liberar
+    enviar_paquete(paquete, conexion_storage);
+    eliminar_paquete(paquete);
+
+    int respuesta = recibir_operacion(conexion_storage, logger);
+    
+    if (respuesta != OK) {
+        log_error(logger, "Query %u: Fallo al persistir pagina %u en Storage. Codigo: %d", id_query, victima->nro_pagina, respuesta);
+        if(respuesta == MENSAJE) {
+             char* err_msg = recibir_y_devolver_mensaje(conexion_storage, logger);
+             free(err_msg);
+        }
+        return -1;
+    }
+    
+    // Si responde con un mensaje de exito, consumirlo para limpiar el buffer del socket
+    if(respuesta == MENSAJE) {
+        char* msg = recibir_y_devolver_mensaje(conexion_storage, logger);
+        free(msg);
+    }
+    return 0;
+}
+
+int cargar_pagina_desde_storage(t_tabla_paginas* tabla, uint32_t nro_pagina, int marco_asignado, uint32_t id_query) {
+    
+    // 1. Armar paquete READ
+    // Protocolo: OP_CODE | FILE | TAG | NRO_PAGINA | ID_QUERY
+    t_paquete* paquete = crear_paquete();
+    insertar_uint32_a_paquete(paquete, READ);
+    insertar_string_a_paquete(paquete, tabla->file);
+    insertar_string_a_paquete(paquete, tabla->tag);
+    insertar_uint32_a_paquete(paquete, nro_pagina);
+    insertar_uint32_a_paquete(paquete, id_query);
+
+    enviar_paquete(paquete, conexion_storage);
+    eliminar_paquete(paquete);
+
+    // 2. Recibir respuesta
+    int op_code = recibir_operacion(conexion_storage, logger);
+    
+    // Manejo de errores del Storage
+    if (op_code != RESPONSE) { // Asumiendo que RESPONSE es el codigo de "acá van los datos"
+        log_error(logger, "Query %u: Storage no entregó bloque %u. OpCode: %d", id_query, nro_pagina, op_code);
+        return -1;
+    }
+
+    // 3. Recibir el buffer binario
+    int size_recibido = 0;
+    void* stream_datos = recibir_buffer(&size_recibido, conexion_storage);
+
+    // Validar consistencia
+    if (size_recibido != tam_pagina) {
+        log_error(logger, "Query %u: Tamaño corrupto desde Storage. Recibido: %d, Esperado: %u", 
+                  id_query, size_recibido, tam_pagina);
+        free(stream_datos);
+        return -1;
+    }
+
+    // 4. Escribir en Memoria Interna
+    uint32_t offset_memoria = marco_asignado * tam_pagina;
+    // Copiamos directo al malloc global
+    memcpy((char*)memoria_interna + offset_memoria, stream_datos, tam_pagina);
+    
+    free(stream_datos);
+
+    // Log obligatorio Memoria Add (segun enunciado pag 18)
+    log_info(logger, "Query %u: Memoria Add - File: %s - Tag: %s - Pagina: %u - Marco: %u",
+             id_query, tabla->file, tabla->tag, nro_pagina, marco_asignado);
+
+    return 0;
+}
+
+
+
+void liberar_marco_de_victima(t_entrada_pagina* victima, uint32_t id_query) {
+    if (!victima) return;
+
+    tabla_global_marcos[victima->marco_num] = NULL;
+    victima->presente = false;
+    victima->modificado = false;
+    victima->marco_num = -1;
+    
+}
+
+void devolver_marco(int marco) {
+    bitarray_clean_bit(bitmap_marcos, marco); 
+    tabla_global_marcos[marco] = NULL;
+    log_info(logger, "Se devolvió el marco %d por error en carga", marco);
+}
+
 t_entrada_pagina* indico_entrada_presente(t_tabla_paginas* tabla, uint32_t nro_pagina, int marco) {
     t_entrada_pagina* e = get_entry(tabla, nro_pagina);
     
@@ -201,7 +354,8 @@ t_entrada_pagina* indico_entrada_presente(t_tabla_paginas* tabla, uint32_t nro_p
     e->marco_num = (uint32_t)marco;
     e->modificado = false;  // Nueva o recargada, no modificada aún
     e->bit_uso = true;      // Recién accedida
-    
+    tabla_global_marcos[marco] = e;
+
     if (strcmp(algoritmo_reemplazo, "LRU") == 0) {
         e->ultimo_acceso = (uint64_t)time(NULL);  // Timestamp para LRU
     }
@@ -210,7 +364,7 @@ t_entrada_pagina* indico_entrada_presente(t_tabla_paginas* tabla, uint32_t nro_p
     // Log obligatorio (página 17: "Se asigna el Marco...")
     // Asumiendo id_query se pasa desde caller, pero si no, sacalo o pasalo como param
     // log_info(logger, "Query %u: Se asigna el Marco: %u a la Página: %u perteneciente al - File: %s - Tag: %s.", id_query, (uint32_t)marco, nro_pagina, tabla->file, tabla->tag);
-    
+    log_info(logger, "Query %u: Se asigna el Marco: %u a la Página: %u perteneciente al - File: %s - Tag: %s.", id_query, (uint32_t)marco, nro_pagina, tabla->file, tabla->tag);
     return e;
 }
 
@@ -231,7 +385,7 @@ int asignar_marco_o_reemplazar(t_entrada_pagina** victima, uint32_t id_query) {
             *victima = reemplazar_pagina_clock();
         } else {
             // Manejo de error
-            log_error(logger, "Algoritmo de reemplazo '%s' no soportado.", algoritmo_reemplazo);
+            log_info(logger, "Algoritmo de reemplazo '%s' no soportado.", algoritmo_reemplazo);
             return -1;
         }
 
@@ -304,53 +458,48 @@ t_entrada_pagina* get_entry(t_tabla_paginas* tabla, uint32_t nro_pagina) {
 }
 
 t_entrada_pagina* reemplazar_pagina_clock() {
-    t_entrada_pagina* victima = NULL;
-    int pasadas_completadas = 0;
+    //t_entrada_pagina* victima = NULL;
+    uint32_t inicio_pasada;
     //log por si acaso a
     log_info(logger, "[CLOCK-M] Iniciando búsqueda de víctima desde el marco %u...", puntero_clock_);
 
-    // El CLOCK-M hace dos pasadas cíclicas (Clases (0,0 y luego (0,X))
-    while (victima == NULL && pasadas_completadas < 2) {
-        
-        for (uint32_t i = 0; i < cant_marcos; i++) {
-            uint32_t marco_actual = (puntero_clock_ + i) % cant_marcos;
+   for (int pasada = 0; pasada < 2; pasada++) {
+        log_info(logger, "[CLOCK-M] Iniciando Pasada %d (busca %s) desde Marco %u...", 
+                 pasada + 1, (pasada == 0 ? "Clase (0,0)" : "Clase (0,X)"), puntero_clock_);
+        inicio_pasada = puntero_clock_;
+        do {
+            t_entrada_pagina* entrada = tabla_global_marcos[puntero_clock_];
+
+            // 1. Si el marco está libre (NULL), simplemente avanzamos el puntero y continuamos.
+            if (entrada == NULL) {
+                puntero_clock_ = (puntero_clock_ + 1) % cant_marcos; // Avanzar el puntero
+                continue; 
+            }
             
-            if (bitarray_test_bit(bitmap_marcos, marco_actual)) {
-                t_entrada_pagina* entrada = buscar_entrada_por_marco(marco_actual);
-                
-                if (entrada != NULL) {
-                    bool u = entrada->bit_uso;
-                    bool m = entrada->modificado;
-                    
-                    if (pasadas_completadas == 0) { // PASADA 1: Busca 0, 0 y limpia bit u
-                        if (!u && !m) {
-                            victima = entrada; // Encontrada la mejor candidata 0, 0
-                        } else if (u) {
-                            entrada->bit_uso = false; // Limpiar bit U
-                        }
-                    } else { // PASADA 2: Buscar (0, X). Reemplaza (0, 1) o (0, 0) si se limpió la U.
-                        if (!u) {
-                            victima = entrada; // Encontrada víctima (0, 0) o (0, 1)
-                        }
-                    }
+            bool u = entrada->bit_uso;
+            bool m = entrada->modificado;
+            
+            if (pasada == 0) { // PASADA 1: Busca (0,0)
+                if (!u && !m) {
+                    // Éxito P1
+                    puntero_clock_ = (puntero_clock_ + 1) % cant_marcos; // Avanzar y Retornar
+                    return entrada;
+                } else if (u) {
+                    entrada->bit_uso = false; // Limpiar U
+                }
+            } else { // PASADA 2: Busca (0,X)
+                if (!u) {
+                    // Éxito P2
+                    puntero_clock_ = (puntero_clock_ + 1) % cant_marcos; // Avanzar y Retornar
+                    return entrada;
                 }
             }
             
-            // Si encontramos la víctima, actualizamos el puntero y salimos
-            if (victima != NULL) {
-                puntero_clock_ = (marco_actual + 1) % cant_marcos;
-                log_info(logger, "[CLOCK-M] Víctima seleccionada: Marco %u (U=%d, M=%d). Nuevo puntero: %u", 
-                         victima->marco_num, 
-                         victima->bit_uso, 
-                         victima->modificado,
-                         puntero_clock_);
-                return victima;
-            }
-        }
-        // Si el bucle terminó sin encontrar víctima, pasamos al siguiente ciclo/pasada
-        pasadas_completadas++;
-    }
-    
+            // Si no se encontró víctima en esta iteración, el puntero AVANZA
+            puntero_clock_ = (puntero_clock_ + 1) % cant_marcos; 
+
+        } while (puntero_clock_ != inicio_pasada); // Repetir hasta dar la vuelta completa
+    }     
     log_error(logger, "[CLOCK-M] ERROR: No se encontró víctima después de dos pasadas. Esto no debería ocurrir.");
     return NULL; 
 }
@@ -362,45 +511,33 @@ t_entrada_pagina* reemplazar_pagina_lru() {
     
     // Iteramos sobre TODOS los posibles marcos (de 0 hasta cant_marcos - 1)
     for (uint32_t i = 0; i < cant_marcos; i++) {
+        // No necesitamos verificar el bitmap; si tabla_global_marcos[i] no es NULL, está ocupado.
+        t_entrada_pagina* entrada = tabla_global_marcos[i]; 
         
-        // 2. Comprobar si el marco 'i' está OCUPADO
-        if (bitarray_test_bit(bitmap_marcos, i)) {
+        // Solo evaluamos entradas presentes (no NULL)
+        if (entrada != NULL) {
             
-            // 3. Obtener la página (la 'persona') que vive en el marco 'i'
-            t_entrada_pagina* entrada = buscar_entrada_por_marco(i);
-            
-            // 4. Si el tiempo de esta página es MÁS PEQUEÑO que el 'tiempo_mas_antiguo' actual
-            if (entrada != NULL && entrada->ultimo_acceso < tiempo_mas_antiguo) {
+            // Si el tiempo de esta página es MÁS PEQUEÑO que el 'tiempo_mas_antiguo' actual
+            if (entrada->ultimo_acceso < tiempo_mas_antiguo) {
                 
-                // 5. Actualiza el récord: esta es la nueva víctima potencial, y su tiempo es el nuevo récord.
                 tiempo_mas_antiguo = entrada->ultimo_acceso;
                 victima = entrada;
             }
         }
     }
-    
+    if (victima == NULL) {
+        log_error(logger, "[LRU] ERROR: No se encontró víctima. La memoria debería estar llena.");
+    }
     return victima;
 }
 
 t_entrada_pagina* buscar_entrada_por_marco(uint32_t marco_num) {
-    // 1. Iterar sobre la lista global de todas las tablas de páginas (File:Tag).
-    for (int i = 0; i < list_size(lista_global_tablas); i++) {
-        t_tabla_paginas* tabla = (t_tabla_paginas*) list_get(lista_global_tablas, i);
-        
+        if (marco_num >= cant_marcos) return NULL;
         // 2. Iterar sobre todas las entradas de página dentro de esta tabla.
-        for (int j = 0; j < list_size(tabla->paginas_proceso); j++) {
-            t_entrada_pagina* entrada = (t_entrada_pagina*) list_get(tabla->paginas_proceso, j);
-            
-            // 3. Condición de búsqueda:
-            //    - La página debe estar presente en memoria (presente == true).
-            //    - Debe ocupar el número de marco exacto que estamos buscando.
-            if (entrada->presente && entrada->marco_num == marco_num) {
-                // Encontrada la metadata de la página que reside en el marco solicitado.
-                return entrada;
-            }
-        }
+            t_entrada_pagina* entrada = tabla_global_marcos[marco_num];
+            if (!entrada && bitarray_test_bit(bitmap_marcos, marco_num)) {
+         log_error(logger, "Error de consistencia CRÍTICO: Marco %u en Bitmap, pero NULL en Tabla Global.", marco_num);
     }
-    // 4. CRÍTICO: Si el bucle termina sin encontrar la entrada, devolvemos NULL
-    log_error(logger, "Error de consistencia: Se buscó marco %u sin entrada asociada.", marco_num);
-    return NULL;
+    
+    return entrada;
 }
