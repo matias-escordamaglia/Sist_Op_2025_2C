@@ -61,7 +61,7 @@ void* atender_conexion_worker(void* arg) {
 
     // Handshake inicial: debe ser 1
     int bytes = recv(cliente_fd, &respuesta, sizeof(uint32_t), MSG_WAITALL);
-    if (bytes <= 0 || respuesta != 1) {
+    if (bytes <= 0 || respuesta != 1){
         log_error(logger_worker, "[WORKER] Error en handshake con WORKER. FD: %d", cliente_fd);
         t_estado_handshake error = HANDSHAKE_FALLO;
         send(cliente_fd, &error, sizeof(t_estado_handshake), 0);

@@ -297,7 +297,7 @@ void* manejar_master(void* arg) {
                 }
                 
                
-                free(pedido->query_path);
+                // free(pedido->query_path);
                 free(pedido);
                 free(buffer); 
 
