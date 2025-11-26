@@ -9,7 +9,6 @@ t_bitarray* bitmap_marcos;
 char* algoritmo_reemplazo;
 uint32_t retardo_memoria;
 int puntero_clock_;
-pthread_mutex_t mutex_mem = PTHREAD_MUTEX_INITIALIZER;
 t_list* lista_global_tablas;
 t_entrada_pagina** tabla_global_marcos;
 
@@ -322,6 +321,7 @@ int cargar_pagina_desde_storage(t_tabla_paginas* tabla, uint32_t nro_pagina, int
 void liberar_marco_de_victima(t_entrada_pagina* victima, uint32_t id_query) {
     if (!victima) return;
 
+
     tabla_global_marcos[victima->marco_num] = NULL;
     victima->presente = false;
     victima->modificado = false;
@@ -331,7 +331,9 @@ void liberar_marco_de_victima(t_entrada_pagina* victima, uint32_t id_query) {
 
 void devolver_marco(int marco) {
     bitarray_clean_bit(bitmap_marcos, marco); 
+
     tabla_global_marcos[marco] = NULL;
+
     log_info(logger, "Se devolvió el marco %d por error en carga", marco);
 }
 
@@ -540,4 +542,8 @@ t_entrada_pagina* buscar_entrada_por_marco(uint32_t marco_num) {
     }
     
     return entrada;
+    // 4. CRÍTICO: Si el bucle termina sin encontrar la entrada, devolvemos NULL
+    log_error(logger, "Error de consistencia: Se buscó marco %u sin entrada asociada.", marco_num);
+    return NULL;
+
 }

@@ -12,7 +12,7 @@ sem_t* cant_workers_libres;
 sem_t* sem_trabajo_planificacion;
 sem_t* sem_eventos_pendientes;
 
-sem_t* sem_envio_query_pendiente;
+sem_t* sem_envio_pedido_worker_pendiente;
 
 void iniciar_master_state(t_log* logger, t_config* config) {
     master_state.logger = logger;
@@ -46,8 +46,8 @@ void iniciar_semaforos() {
     sem_init(sem_trabajo_planificacion, 0, 0);
     sem_init(sem_eventos_pendientes, 0, 0);
 
-    sem_envio_query_pendiente = malloc(sizeof(sem_t));
-    sem_init(sem_envio_query_pendiente, 0, 0);
+    sem_envio_pedido_worker_pendiente = malloc(sizeof(sem_t));
+    sem_init(sem_envio_pedido_worker_pendiente, 0, 0);
 
 }	
 
@@ -62,7 +62,7 @@ void destruir_semaforos() {
     sem_destroy(sem_trabajo_planificacion);
     sem_destroy(sem_eventos_pendientes);
 
-    sem_destroy(sem_envio_query_pendiente);
+    sem_destroy(sem_envio_pedido_worker_pendiente);
 
 }
 

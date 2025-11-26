@@ -20,13 +20,38 @@ typedef struct {
     int qid_actual;
 } t_worker_conectado;
 
+typedef struct {
+    sem_t sem_respuesta;
+    bool respuesta_recibida;
+    uint32_t worker_id;
+    uint32_t query_id;
+    t_motivo_pedido_master_worker tipo_pedido;
+    uint32_t dato_respuesta;
+} t_confirmacion_pedido;
 
 typedef struct {
     uint32_t qid;
     uint32_t pc;
     char* query_path;
     t_worker_conectado* worker_asignado;
+    t_motivo_pedido_master_worker tipo;
+    t_confirmacion_pedido* confirmacion;
 } t_siguiente_pedido;
+
+typedef enum {
+    DESALOJO_EXITOSO,
+    DESALOJO_QUERY_DIFERENTE,
+    DESALOJO_ERROR_FATAL,
+    DESALOJO_TIMEOUT,
+    DESALOJO_WORKER_DESCONECTADO
+} t_resultado_desalojo;
+
+typedef struct {
+    t_resultado_desalojo resultado;
+    uint32_t pc;
+    uint32_t query_id_actual;
+} t_respuesta_desalojo;
+
 
 void iniciar_worker_manager(); 
 
@@ -41,6 +66,6 @@ void marcar_worker_desconectado(uint32_t id_worker);
 void marcar_worker_conectado(uint32_t id_worker);
 void remover_cpu(t_worker_conectado* worker);
 int get_cant_workers_conectados();
-
+void asociar_qid_a_worker(uint32_t qid, t_worker_conectado* worker);
 
 #endif /* WORKER_MANAGER_H_ */
