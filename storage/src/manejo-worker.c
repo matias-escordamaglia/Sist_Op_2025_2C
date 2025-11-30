@@ -101,8 +101,7 @@ void* atender_conexion_worker(void* arg) {
     // Bucle principal
     while (1) {
         printf("----------------------------------------------------------------------------------\n");
-        printf("----------------------------------------------------------------------------------\n");
-
+        
         int cod_op = recibir_operacion(cliente_fd, logger_worker);
         if (cod_op == -1) {
             log_warning(logger_worker, "[WORKER] WORKER %u se desconectó (FD %d)", id_worker, cliente_fd);

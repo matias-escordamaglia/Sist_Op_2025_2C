@@ -49,6 +49,8 @@ __thread int g_query_id_actual = -1;
 int main(int argc, char **argv)
 {   
     signal(SIGPIPE, SIG_IGN);
+    signal(SIGINT, sighandler);
+
     if (argc < 3) { 
             fprintf(stderr, "Uso correcto: %s <archivo_config[path]> <archivo_superBlock[path]> \n", argv[0]);
             return EXIT_FAILURE;
@@ -188,18 +190,6 @@ void iniciar_estructuras(char* super_block_path){
          
     }
     log_info(logger, "TODAS LAS ESTRUCTURAS ESTA LISTAS");
-}
-void finalizar_FS(){
-    config_destroy(config);
-    log_destroy(logger); 
-    finalizar_munmap(); 
-    bitarray_destroy(BA_bitmap);
-
-}
-void finalizar_munmap(){
-    int tam_bitmap = ((FS_SIZE / BLOCK_SIZE + 7)/8) ; 
-    log_info(logger, "tamaño: %u", tam_bitmap);
-    munmap(mmap_BM,tam_bitmap);
 }
 bool existe_archivo(char *path){
     FILE *f = fopen(path, "r");
@@ -1208,4 +1198,71 @@ int obtener_nro_bloque_fisico(char* file, char* tag, int num_L_block) {
     free(ruta_files); free(ruta_file); free(ruta_tag); free(ruta_metadata);
     
     return nro_fisico;
+}
+void destruir_elemento_mutex(void* elemento) {
+    pthread_mutex_t* mutex = (pthread_mutex_t*) elemento;
+    pthread_mutex_destroy(mutex); 
+    free(mutex);
+}
+
+void limpiar_y_terminar() {
+    log_warning(logger, "Iniciando protocolo de cierre...");
+
+    if (server_fd_general > 0) {
+        close(server_fd_general);
+    }
+
+    // 2. Persistencia del BITMAP (¡Lo más importante!)
+    if (mmap_BM != NULL) {
+        // Calculamos tamaño en bytes
+        size_t tam_bitmap = ((FS_SIZE / BLOCK_SIZE + 7) / 8);
+        
+        // Forzamos escritura a disco (Sincronización)
+        if (msync(mmap_BM, tam_bitmap, MS_SYNC) == -1) {
+            log_error(logger, "Error sincronizando Bitmap a disco");
+        } else {
+            log_info(logger, "Bitmap sincronizado a disco correctamente.");
+        }
+        
+        // Liberamos struct de commons y mapeo
+        if (BA_bitmap) 
+            bitarray_destroy(BA_bitmap);
+        munmap(mmap_BM, tam_bitmap);
+    }
+
+    // 3. Limpiar Diccionario de Mutexes (File:Tag)
+    if (file_tag_dic != NULL) {
+        dictionary_destroy_and_destroy_elements(file_tag_dic, destruir_elemento_mutex);
+    }
+
+    // 4. Limpiar Diccionario de Estados
+    if (dicc_estado_tag != NULL) {
+        // Como usamos (void*)(intptr_t) para guardar enteros, NO hay mallocs dentro.
+        // Solo destruimos el diccionario contenedor.
+        dictionary_destroy(dicc_estado_tag);
+    }
+
+    // 5. Destruir Mutexes Globales
+    pthread_mutex_destroy(&mutex_bitmap);
+    pthread_mutex_destroy(&mutex_dir_files);
+    pthread_mutex_destroy(&mutex_file_hash);
+    pthread_mutex_destroy(&mutex_diccionary);
+    pthread_mutex_destroy(&mutex_dic_estado);
+    pthread_mutex_destroy(&mutex_cant_workers);
+
+    // 6. Liberar Configs globales
+    if (config) config_destroy(config);
+    if (sp_block_config) config_destroy(sp_block_config); // (Si quedó abierto)
+    if (config_hash) config_destroy(config_hash);
+
+    log_info(logger, "Storage finalizado correctamente.");
+    
+    // 7. Liberar Logger (Lo último, para poder loguear lo anterior)
+    if (logger) log_destroy(logger);
+}
+
+// Tu Handler de Señales
+void sighandler(int s) {
+    limpiar_y_terminar();
+    exit(EXIT_SUCCESS);
 }
