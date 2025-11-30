@@ -126,7 +126,17 @@ void remover_worker(t_worker_conectado* worker) {
 
 
 int get_cant_workers_conectados() {
-    return list_size(workers_registrados);
+    int cant_workers_conectados = 0;
+    LOCK(&mutex_workers_conectados);
+    for (int i = 0; i < list_size(workers_registrados); i++) {
+        t_worker_conectado* worker = list_get(workers_registrados, i);
+        if (worker->qid_actual == QID_NULO && worker->worker_conectado) {
+            cant_workers_conectados++;
+            break;
+        }
+    }
+    UNLOCK(&mutex_workers_conectados);
+    return cant_workers_conectados;
 }
 
 void asociar_qid_a_worker(uint32_t qid, t_worker_conectado* worker) {

@@ -707,13 +707,13 @@ void manejar_worker_desconectado(uint32_t worker_id, uint32_t query_id_ejecutand
 
     t_worker_conectado* worker_temp = obtener_worker_por_id_uso_externo(worker_id);
 
+    t_elemento_cola* elemento = NULL;
+
     if (worker_temp->worker_conectado) {
 
         if ((int)query_id_ejecutando >= 0) {
 
             log_info(get_logger(), "Worker %d desconectado", worker_id);
-
-            t_elemento_cola* elemento = NULL;
 
             LOCK(&mutex_estado_critico);
 
@@ -727,9 +727,6 @@ void manejar_worker_desconectado(uint32_t worker_id, uint32_t query_id_ejecutand
                 LOCK(&mutex_cola_exit);
                 list_add(cola_exit, elemento);
                 UNLOCK(&mutex_cola_exit);
-                
-                log_info(get_logger(), "Query %d movido a EXIT por desconexión de worker", 
-                        query_id_ejecutando);
                 
                 
                 notificar_error_desconexion_a_query_control(elemento->query->conexion);
@@ -771,6 +768,8 @@ void manejar_worker_desconectado(uint32_t worker_id, uint32_t query_id_ejecutand
         // Marcar worker como desconectado
         marcar_worker_desconectado(worker_id);
         //sem_wait(cant_workers_libres); <-- puede que no vaya aquí ya que se le hizo wait al asignarle un query
+        log_info(get_logger(), "## Se desconecta el Worker %d - Se finaliza la Query %d - Cantidad total de Workers: %d", 
+                        worker_id, query_id_ejecutando, get_cant_workers_conectados());
     }
     
 }
@@ -784,10 +783,9 @@ void manejar_query_control_desconectado(uint32_t query_id_activo) {
     if(!encontrado) {
         LOCK(&mutex_estado_critico);
 
-        log_info(get_logger(), "Query Control %d desconectado", query_id_activo);
+        t_elemento_cola* elemento = NULL;
         
         if ((int)query_id_activo >= 0) {
-            t_elemento_cola* elemento = NULL;
             
             // Buscar en READY primero
             LOCK(&mutex_cola_ready);
@@ -925,6 +923,11 @@ void manejar_query_control_desconectado(uint32_t query_id_activo) {
                 }
             }
         }
+
+        int grado_multiprocesamiento = get_cant_workers_conectados();
+
+        log_info(get_logger(), "## Se desconecta un Query Control. Se finaliza la Query %d con prioridad %d. Nivel multiprocesamiento %d",
+            query_id_activo, elemento->prioridad_efectiva, grado_multiprocesamiento);
 
         UNLOCK(&mutex_estado_critico);
     }
