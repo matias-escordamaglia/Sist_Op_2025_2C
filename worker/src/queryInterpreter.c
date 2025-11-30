@@ -12,7 +12,9 @@ void envioAQueryInterpreter(){
              (query_actual.query_path != NULL ? query_actual.query_path : "NULO"), 
              query_actual.pc_actual);
 
-    char* const* vec = instrucciones_desde(query_actual.query_path, query_actual.pc_actual, &cant);     
+    uint32_t pc_para_buscar = (query_actual.pc_actual == 0) ? 1 : query_actual.pc_actual;
+
+    char* const* vec = instrucciones_desde(query_actual.query_path, pc_para_buscar, &cant);     
     if (vec != NULL) {
         log_info(logger, "[DEBUG] Recuperadas %zu instrucciones (Desde PC: %u):", cant, query_actual.pc_actual);
         
@@ -21,12 +23,15 @@ void envioAQueryInterpreter(){
             log_info(logger, "   -> Instr[%zu]: '%s'", i, vec[i]);
         }
     } else {
-        log_error(logger, "[DEBUG] VEC es NULL. Revisa si el PC (%u) es mayor que la cantidad de lineas del archivo.", query_actual.pc_actual);
+        log_error(logger, "[DEBUG] VEC es NULL. PC (%u) fuera de rango.", pc_para_buscar);
     }
     
-    // char* const* vec = instrucciones_desde("querie1.txt", 4, &cant);
+    
     if (!vec) {
-        log_error(logger, "No hay instrucciones desde la 4 para %s", "querie1.txt");
+        log_error(logger, "No se pudieron obtener instrucciones para %s desde PC %d", 
+                  query_actual.query_path, pc_para_buscar);
+        char* mensaje_error = strdup("Error al obtener instrucciones del archivo");
+        deterner_ejecucion_query_error(mensaje_error);
         return;
     }
 
