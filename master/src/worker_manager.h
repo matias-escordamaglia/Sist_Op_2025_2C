@@ -33,6 +33,7 @@ typedef struct {
     uint32_t qid;
     uint32_t pc;
     char* query_path;
+    uint32_t prioridad;
     t_worker_conectado* worker_asignado;
     t_motivo_pedido_master_worker tipo;
     t_confirmacion_pedido* confirmacion;
