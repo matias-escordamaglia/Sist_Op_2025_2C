@@ -134,7 +134,8 @@ t_tabla_paginas* obtener_o_crear_tabla(char* file, char* tag) {
 t_tabla_paginas* buscar_en_lista_global(char* file, char* tag) {
     for (int i = 0; i < list_size(lista_global_tablas); i++) {
         t_tabla_paginas* tabla_actual = list_get(lista_global_tablas, i);
-        if (strcmp(tabla_actual->file, file) == 0 && strcmp(tabla_actual->tag, tag) == 0) {
+        if (strcmp(tabla_actual->file, file) == 0 && 
+            strcmp(tabla_actual->tag, tag) == 0) {
             return tabla_actual;
         }
     }
@@ -154,8 +155,14 @@ void crear_y_agregar_tabla_a_lista_global(char* file, char* tag)
 
 bool rango_valido( t_tabla_paginas* tabla, uint32_t base, uint32_t tam) {
     if (!tabla) return false;
-    if (base > tabla->tam_file) return false;
-    if (tam > tabla->tam_file - base) return false;
+    if (base > tabla->tam_file) {
+        return false;
+    }
+    log_info(logger, "[DEBUG] Rango: Base=%u + Tam=%u = %u. Limite Archivo=%u", 
+         base, tam, base+tam, tabla->tam_file);
+    if (tam > tabla->tam_file - base) {
+        return false;
+    }
     return true;
 }
 

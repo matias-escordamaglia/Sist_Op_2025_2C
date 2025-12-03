@@ -20,7 +20,7 @@ void envioAQueryInterpreter(){
         
         for (size_t i = 0; i < cant; i++) {
             // vec[i] es el string de la instrucción
-            log_info(logger, "   -> Instr[%zu]: '%s'", i, vec[i]);
+            //log_info(logger, "   -> Instr[%zu]: '%s'", i, vec[i]);
         }
     } else {
         log_error(logger, "[DEBUG] VEC es NULL. PC (%u) fuera de rango.", pc_para_buscar);
@@ -260,11 +260,14 @@ bool ejecutar_linea(char* linea, uint32_t queryid) {
         case COMMIT: {
             //aplicar FLUSH
             t_create c = {0};
-            flush_file_tag_en_memoria(c.nombre_archivo, c.tag, queryid);
+            
             if (!parsear_create_params(params, &c)) {
                 log_error(logger, "Sintaxis COMMIT inválida: %s", linea);
                 return false;
             }
+            
+            flush_file_tag_en_memoria(c.nombre_archivo, c.tag, queryid);
+
             int code = ejecutar_commit(&c,queryid);
             if (code != ERROR_OK) {
                 finalizar_query_con_error(code);
@@ -295,13 +298,16 @@ bool ejecutar_linea(char* linea, uint32_t queryid) {
         }
         case DELETE: {
             t_create c = {0};
-            flush_file_tag_en_memoria(c.nombre_archivo, c.tag, queryid);
+            
             if (!parsear_create_params(params, &c)) {
                 log_error(logger, "Sintaxis DELETE inválida: %s", linea);
                 return false;
             }
+            
+            flush_file_tag_en_memoria(c.nombre_archivo, c.tag, queryid);
+            
             c.op = DELETE;
-
+            
             int code = ejecutar_delete(&c,queryid);     // 1 = OK, ≠1 = enum/código de error
             if (code != ERROR_OK) {
                 finalizar_query_con_error(code);
@@ -374,7 +380,6 @@ void enviar_lectura_a_master(char* file, char* tag, void* contenido, uint32_t ta
     insertar_bytes_a_paquete(paquete, contenido, tamanio);
 
     enviar_paquete(paquete, conexion_master);
-    eliminar_paquete(paquete);
 }
 
 
@@ -588,9 +593,9 @@ int recibir_respuesta_storage(int conexion, t_log* logger) {
 
     // 4. Log del Resultado Final (Lo más importante)
     if (resultado_operacion == 0) { // Asumiendo ERROR_OK = 0
-        log_info(logger, "[DEBUG-NET] ✅ Storage confirmó ÉXITO. Valor recibido: %d", resultado_operacion);
+        log_info(logger, "[DEBUG-NET] Storage confirmó ÉXITO. Valor recibido: %d", resultado_operacion);
     } else {
-        log_warning(logger, "[DEBUG-NET] ⚠️ Storage reportó ERROR. Código recibido: %d", resultado_operacion);
+        log_warning(logger, "[DEBUG-NET] Storage reportó ERROR. Código recibido: %d", resultado_operacion);
     }
 
     return resultado_operacion; 
