@@ -41,7 +41,7 @@ t_entrada_pagina* indico_entrada_presente(t_tabla_paginas* tabla, uint32_t nro_p
 void crear_y_agregar_tabla_a_lista_global(char* file, char* tag);
 bool rango_valido( t_tabla_paginas* tabla, uint32_t base, uint32_t tam);
 void recorrido_iniciar(segmento_acceso* seg, uint32_t base, uint32_t tam, uint32_t tam_p);
-t_entrada_pagina* asegurar_pagina_presente(t_tabla_paginas* tabla, uint32_t nro_pagina, uint32_t id_query);
+int asegurar_pagina_presente(t_tabla_paginas* tabla, uint32_t nro_pagina, uint32_t id_query, t_entrada_pagina** entrada_pagina);
 int asignar_marco_o_reemplazar(t_entrada_pagina** victima, uint32_t id_query);
 void aplicar_retardo_memoria(uint32_t milis);
 void escribir_en_memoria(uint32_t dir_fisica, void* src, uint32_t nbytes);
@@ -51,6 +51,7 @@ void actualizar_reemplazo(t_entrada_pagina* e);
 t_entrada_pagina* reemplazar_pagina_lru();
 t_entrada_pagina* buscar_entrada_por_marco(uint32_t marco_num);
 t_entrada_pagina* reemplazar_pagina_clock();
+void actualizar_tam_memoria(char* file, char* tag, uint32_t nuevo_tamanio);
 
 
 #endif

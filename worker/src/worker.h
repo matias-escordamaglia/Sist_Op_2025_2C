@@ -15,7 +15,7 @@
 #include "utilsWorker.h"
 
 //#include "utilsWorker.h"
-#include "memoria_interna_.h"
+
 
 // int ;
 char* ip_storage;
