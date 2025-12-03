@@ -31,7 +31,7 @@ void envioAQueryInterpreter(){
         log_error(logger, "No se pudieron obtener instrucciones para %s desde PC %d", 
                   query_actual.query_path, pc_para_buscar);
         char* mensaje_error = strdup("Error al obtener instrucciones del archivo");
-        deterner_ejecucion_query_error(mensaje_error);
+        detener_ejecucion_query_error(mensaje_error);
         return;
     }
 
@@ -87,7 +87,7 @@ void ejecutarOperacion(char* const* instrucciones, size_t cantidad)
             char* texto_mockeado = strdup("Error de mockeo");
             
 
-            deterner_ejecucion_query_error(texto_mockeado);
+            detener_ejecucion_query_error(texto_mockeado);
             return;
         }
         
@@ -138,21 +138,23 @@ bool ejecutar_linea(char* linea, uint32_t queryid) {
         // trabajar para que solo ejecute la instruccion siguiente una vez que la actual fue realizada
         // con exito
         case CREATE: {
+            log_info(logger,"QUEEEEEEEEEEEEEEE");
             t_create c = {0};
             if (!parsear_create_params(params, &c)) {
                 log_error(logger, "Sintaxis CREATE inválida: %s", linea);
                 return false;
             }
-
+            log_info(logger,"1111111");
             int ok = ejecutar_create(&c,queryid);
-            // en caso de retornar  1 => son parametros invalidos
-            // en caso de retornar 2 => fallo la recepcion de la respuesta de storage.
+            log_info(logger,"12000299202 : %d",ok);
             if(ok != ERROR_OK){
-              finalizar_query_con_error(ERROR_QUERY, ok);
+              log_info(logger, "444444");
+              finalizar_query_con_error(ok);
               destruir_create(&c);
               return false;
             }
 
+            log_info(logger, "44444");
             // log obligatorio
             log_info(logger, "## Query %u: - Instrucción realizada: CREATE", queryid);
 
@@ -168,8 +170,9 @@ bool ejecutar_linea(char* linea, uint32_t queryid) {
             }
 
             int ok = ejecutar_truncate(&tr, queryid);
-             if(ok != ERROR_OK){
-              finalizar_query_con_error(ERROR_QUERY, ok);
+            log_info(logger,"AA00OO22 : %d",ok);
+            if(ok != ERROR_OK){
+              finalizar_query_con_error(ok);
               destruir_truncate(&tr);
               return false;
             }
@@ -188,8 +191,10 @@ bool ejecutar_linea(char* linea, uint32_t queryid) {
 
             // Llama directo a memoria (asume query_id en pedido, ajusta si no)
             int ok = memoria_write(&w, queryid);
+
+
             if (ok < 0) {
-              finalizar_query_con_error(ERROR_QUERY, ok);
+              finalizar_query_con_error(ok);
               destruir_write(&w);
               return false;
             }
@@ -219,7 +224,7 @@ bool ejecutar_linea(char* linea, uint32_t queryid) {
             int ok = memoria_read(&r, buffer_leido, queryid);
             
             if (ok < 0) {
-                finalizar_query_con_error(ERROR_QUERY, ok);
+                finalizar_query_con_error(ok);
                 free(buffer_leido);
                 destruir_write(&r);
                 return false;
@@ -241,8 +246,9 @@ bool ejecutar_linea(char* linea, uint32_t queryid) {
                 return false;
             }
             int ok = ejecutar_tag(&t,queryid);
+
              if(ok != ERROR_OK){
-              finalizar_query_con_error(ERROR_QUERY, ok);
+              finalizar_query_con_error(ok);
               destruir_tag(&t);
               return false;
             }
@@ -261,7 +267,7 @@ bool ejecutar_linea(char* linea, uint32_t queryid) {
             }
             int code = ejecutar_commit(&c,queryid);
             if (code != ERROR_OK) {
-                finalizar_query_con_error(ERROR_QUERY, code);
+                finalizar_query_con_error(code);
                 destruir_create(&c);
                 return false;
             }
@@ -298,7 +304,7 @@ bool ejecutar_linea(char* linea, uint32_t queryid) {
 
             int code = ejecutar_delete(&c,queryid);     // 1 = OK, ≠1 = enum/código de error
             if (code != ERROR_OK) {
-                finalizar_query_con_error(ERROR_QUERY, code);
+                finalizar_query_con_error(code);
                 destruir_create(&c);
                 return false;
             }
@@ -372,17 +378,31 @@ void enviar_lectura_a_master(char* file, char* tag, void* contenido, uint32_t ta
 }
 
 
-void finalizar_query_con_error(t_tipo_aviso_worker_master tipodeerror, int motivo) {
+// void finalizar_query_con_error(t_tipo_aviso_worker_master tipodeerror, int motivo) {
     
-    char* error_code = storage_error_to_string(motivo);
-    t_paquete* paquete = empaquetar_operacion_fin_error(tipodeerror, error_code);
-    if (!paquete) {
-        return;
-    }
-    // 2) Enviar a Master
-    enviar_paquete(paquete, conexion_master);
-    // 24/11 en caso de una falla en una query, se desconecta de master, pero no corta la consola.
-    // 24/11 
+
+//     char* texto_mockeado = strdup("Error de mockeo");
+            
+
+//     detener_ejecucion_query_error(texto_mockeado);
+//     return;
+
+//     log_info(logger, "444444");
+//     char* error_code = storage_error_to_string(motivo);
+//     t_paquete* paquete = empaquetar_operacion_fin_error(tipodeerror, error_code);
+//     if (!paquete) {
+//         return;
+//     }
+//     // 2) Enviar a Master
+//     enviar_paquete(paquete, conexion_master);
+//     // 24/11 en caso de una falla en una query, se desconecta de master, pero no corta la consola.
+//     // 24/11 
+// }
+
+void finalizar_query_con_error(int motivo) {
+    char* error_code = strdup(storage_error_to_string(motivo));   
+    detener_ejecucion_query_error(error_code);
+    return;
 }
 
 char* storage_error_to_string(int motivo) {
@@ -413,7 +433,7 @@ int ejecutar_create(t_create* c, uint32_t query_id) {
 	enviar_paquete(paquete, conexion_storage);
 
     int resultado = recibir_respuesta_storage(conexion_storage, logger);
-
+    log_info(logger, "222222: %d", resultado);
     if (resultado == ERROR_OK) {
         log_info(logger, "[WORKER] Respuesta OK de Storage para CREATE %s:%s", c->nombre_archivo, c->tag);
     } else {
@@ -524,23 +544,36 @@ int ejecutar_delete(t_create* c , uint32_t queryid) {
 //////////////////////////////// TERMINA LA SECCION DE EJECUCION DE INSTRUCCIONES /////////////////
 
 int recibir_respuesta_storage(int conexion, t_log* logger) {
+    // 1. Recibir OpCode
     int opcode_respuesta = recibir_operacion(conexion, logger);
+    
+    // Log de qué OpCode llegó realmente
+    log_info(logger, "[DEBUG-NET] Recibido OpCode desde Storage: %d (Esperado PAQUETE=%d)", 
+             opcode_respuesta, PAQUETE);
+
     if (opcode_respuesta < 0) {
-        log_error(logger, "[WORKER] Error al recibir opcode de respuesta de Storage (conexión caída?)");
-        return 2; //fallo en la recepcion de la respuesta
+         desconectarseDeStorage();
+         log_error(logger, "[WORKER] Error al recibir opcode de respuesta de Storage (conexión caída?)");
+        return 2; // Error de recepción
     }
 
     if (opcode_respuesta != PAQUETE) {
-        log_error(logger, "[WORKER] Opcode inesperado de Storage: %d (esperaba RESPONSE=%d)", opcode_respuesta, RESPONSE);
+        log_error(logger, "[WORKER] Opcode inesperado de Storage: %d (esperaba PAQUETE)", opcode_respuesta);
+        return 2; // Error de protocolo
+    }
+
+    // 2. Recibir Buffer
+    int size_buffer = 0;
+    void* buffer = recibir_buffer(&size_buffer, conexion);
+    
+    if (buffer == NULL) {
+        log_error(logger, "[WORKER] Error: buffer de respuesta es NULL");
         return 2;
     }
 
-    int size_buffer = 0;
-    void* buffer = recibir_buffer(&size_buffer, conexion);
-    if (buffer == NULL) {
-        log_error(logger, "[WORKER] Error al recibir buffer de respuesta de Storage");
-        return 2;
-    }
+    // Log del tamaño del payload
+    log_info(logger, "[DEBUG-NET] Tamaño de buffer recibido: %d bytes (Esperado int=%lu)", 
+             size_buffer, sizeof(int));
 
     if (size_buffer < sizeof(int)) {
         log_error(logger, "[WORKER] Buffer de respuesta inválido (demasiado chico)");
@@ -548,12 +581,52 @@ int recibir_respuesta_storage(int conexion, t_log* logger) {
         return 2;
     }
 
-   // 4. Deserialización: Sacamos el entero del buffer
+    // 3. Deserialización
     int resultado_operacion;
     memcpy(&resultado_operacion, buffer, sizeof(int));
-    free(buffer);
-    return resultado_operacion; // si salio bien la operacion => resultado_operacion = ERROR_OK(0)
+    free(buffer); // Limpiamos memoria
+
+    // 4. Log del Resultado Final (Lo más importante)
+    if (resultado_operacion == 0) { // Asumiendo ERROR_OK = 0
+        log_info(logger, "[DEBUG-NET] ✅ Storage confirmó ÉXITO. Valor recibido: %d", resultado_operacion);
+    } else {
+        log_warning(logger, "[DEBUG-NET] ⚠️ Storage reportó ERROR. Código recibido: %d", resultado_operacion);
+    }
+
+    return resultado_operacion; 
 }
+
+// int recibir_respuesta_storage(int conexion, t_log* logger) {
+//     int opcode_respuesta = recibir_operacion(conexion, logger);
+//     if (opcode_respuesta < 0) {
+//         log_error(logger, "[WORKER] Error al recibir opcode de respuesta de Storage (conexión caída?)");
+//         return 2; //fallo en la recepcion de la respuesta
+//     }
+
+//     if (opcode_respuesta != PAQUETE) {
+//         log_error(logger, "[WORKER] Opcode inesperado de Storage: %d (esperaba RESPONSE=%d)", opcode_respuesta, RESPONSE);
+//         return 2;
+//     }
+
+//     int size_buffer = 0;
+//     void* buffer = recibir_buffer(&size_buffer, conexion);
+//     if (buffer == NULL) {
+//         log_error(logger, "[WORKER] Error al recibir buffer de respuesta de Storage");
+//         return 2;
+//     }
+
+//     if (size_buffer < sizeof(int)) {
+//         log_error(logger, "[WORKER] Buffer de respuesta inválido (demasiado chico)");
+//         free(buffer);
+//         return 2;
+//     }
+
+//    // 4. Deserialización: Sacamos el entero del buffer
+//     int resultado_operacion;
+//     memcpy(&resultado_operacion, buffer, sizeof(int));
+//     free(buffer);
+//     return resultado_operacion; // si salio bien la operacion => resultado_operacion = ERROR_OK(0)
+// }
 
 // int recibir_respuesta_storage(int conexion, t_log* logger) {
 //     // MOCK ACTIVADO: Simulamos que Storage respondió OK
@@ -848,4 +921,16 @@ void destruir_write(t_write* w) {
     w->tag = NULL;
     w->data = NULL;
     w->len = 0;
+}
+
+// Agrega el prototipo arriba o en tu .h: 
+// void desconectarseDeStorage(void);
+
+void desconectarseDeStorage() {
+    log_error(logger, "[CRITICAL] Se detectó desconexión del STORAGE.");
+    if (conexion_storage > 0) {
+        close(conexion_storage);
+    }
+
+    exit(EXIT_FAILURE); 
 }

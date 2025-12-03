@@ -39,7 +39,7 @@ int ejecutar_commit(t_create* c,uint32_t queryid);
 int ejecutar_delete(t_create* c, uint32_t queryid);
 void enviar_lectura_a_master(char* file, char* tag, void* contenido, uint32_t tamanio, uint32_t query_id);
 void flush_file_tag_en_memoria(char* file, char* tag, uint32_t id_query);
-void finalizar_query_con_error(t_tipo_aviso_worker_master tipodeerror, int motivo);
+void finalizar_query_con_error(int motivo);
 char* storage_error_to_string(int motivo);
 void destruir_write(t_write* w);
 void destruir_create(t_create* c);
