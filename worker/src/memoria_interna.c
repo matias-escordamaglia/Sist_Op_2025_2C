@@ -69,21 +69,30 @@ int memoria_write(t_write* w, uint32_t id_query) {
 int acceder_memoria(char* file, char* tag,uint32_t dir_base, void *buffer, uint32_t tamanio,bool es_write, uint32_t id_query)
 {
     pthread_mutex_lock(&mutex_mem);
-
+    //chequear mutex mem
     t_tabla_paginas* tabla = obtener_o_crear_tabla(file, tag);
     if (!tabla || !rango_valido(tabla, dir_base, tamanio)) {
         pthread_mutex_unlock(&mutex_mem);
-        return -1;
+        return ERROR_DESCONOCIDO;
     }
 
     segmento_acceso seg;
     recorrido_iniciar(&seg, dir_base, tamanio, tam_pagina);
 
     while (seg.bytes_en_pagina > 0) {
-        t_entrada_pagina* entrada = asegurar_pagina_presente(tabla, seg.pagina, id_query);
-        if (!entrada) {
-            pthread_mutex_unlock(&mutex_mem);
-            return -1;
+        t_entrada_pagina* entrada = NULL;
+        int estado = asegurar_pagina_presente(tabla, seg.pagina, id_query, &entrada);
+        if (estado < 0) {
+        log_error(logger, "Fallo al asegurar página %d", seg.pagina);
+        pthread_mutex_unlock(&mutex_mem);
+        return estado;
+        }
+    
+    // Defensa extra:
+        if (entrada == NULL) {
+        log_error(logger, "Error crítico: asegurar_pagina devolvió éxito pero entrada es NULL");
+        pthread_mutex_unlock(&mutex_mem);
+        return ERROR_DESCONOCIDO;
         }
 
         aplicar_retardo_memoria(retardo_memoria);
@@ -136,8 +145,8 @@ void crear_y_agregar_tabla_a_lista_global(char* file, char* tag)
 {
     t_tabla_paginas* tabla_proceso = malloc(sizeof(t_tabla_paginas));
     tabla_proceso->paginas_proceso = list_create();
-    tabla_proceso->file = file;
-    tabla_proceso->tag = tag;
+    tabla_proceso->file = strdup(file);
+    tabla_proceso->tag = strdup(tag);
     tabla_proceso->tam_file = 0;
     list_add(lista_global_tablas, tabla_proceso);
     log_info(logger, "Tabla creada para %s:%s - Tamaño inicial: 0", file, tag); // Opcional, ayuda debug
@@ -173,23 +182,27 @@ t_tabla_paginas* encontrar_tabla_de_entrada(t_entrada_pagina* entrada) {
     return NULL;
 }
 
-t_entrada_pagina* asegurar_pagina_presente(t_tabla_paginas* tabla, uint32_t nro_pagina, uint32_t id_query) {
+int asegurar_pagina_presente(t_tabla_paginas* tabla, uint32_t nro_pagina, uint32_t id_query,t_entrada_pagina** entrada_pagina) {
     t_entrada_pagina* e = get_entry(tabla, nro_pagina);
-    if (e && e->presente) return e;
+    if (e && e->presente){
+        *entrada_pagina = e; 
+        return 0;  
+    } 
 
     // log obligatorio)
     log_info(logger, "Query %u: - Memoria Miss - File: %s - Tag: %s - Pagina: %u", id_query, tabla->file, tabla->tag, nro_pagina);
     
     t_entrada_pagina* victima = NULL;
     int marco = asignar_marco_o_reemplazar(&victima, id_query);
-    if (marco < 0) return NULL;
+    if (marco < 0) return ERROR_ESPACIO_INSUFICIENTE;
 
     if (victima) {
     // (A) Si estaba modificada → sobreescribir
     if (victima->modificado) {
-        if (escribir_pagina_a_storage(victima, id_query) < 0) {
+        int estado = escribir_pagina_a_storage(victima, id_query);
+        if ( estado < 0) {
              devolver_marco(marco);
-             return NULL;
+             return estado;
         }
     }
 
@@ -212,13 +225,16 @@ t_entrada_pagina* asegurar_pagina_presente(t_tabla_paginas* tabla, uint32_t nro_
     }
 
     // Cargar la página desde Storage (común a ambos casos de miss), cargo pq la pegina que quiero no esta en Memoria interna.
-    if (cargar_pagina_desde_storage(tabla, nro_pagina, marco, id_query) < 0) {
+    int estado_carga = cargar_pagina_desde_storage(tabla, nro_pagina, marco, id_query);
+    if ( estado_carga< 0) {
         devolver_marco(marco);
-        return NULL;
+        *entrada_pagina=NULL; 
+        return estado_carga;
     }
 
     e = indico_entrada_presente(tabla, nro_pagina, marco);
-    return e;
+    *entrada_pagina = e; 
+    return 0;
 }
 
 int escribir_pagina_a_storage(t_entrada_pagina* victima, uint32_t id_query) {
@@ -227,7 +243,7 @@ int escribir_pagina_a_storage(t_entrada_pagina* victima, uint32_t id_query) {
     t_tabla_paginas* tabla_owner = encontrar_tabla_de_entrada(victima);
     if (!tabla_owner) {
         log_info(logger, "Error: Intento de SWAP OUT de pagina huérfana (marco %d)", victima->marco_num);
-        return -1;
+        return ERROR_DESCONOCIDO;
     }
 
     // 2. Calcular dirección física real en el malloc grande
@@ -236,36 +252,31 @@ int escribir_pagina_a_storage(t_entrada_pagina* victima, uint32_t id_query) {
 
     t_paquete* paquete = crear_paquete(); 
     insertar_uint32_a_paquete(paquete, WRITE);
+    insertar_uint32_a_paquete(paquete, id_query); // Para logs del Storage
     insertar_string_a_paquete(paquete, tabla_owner->file);
     insertar_string_a_paquete(paquete, tabla_owner->tag);
     insertar_uint32_a_paquete(paquete, victima->nro_pagina);
+    insertar_binario_a_paquete(paquete, contenido_pagina, tam_pagina); 
 
     // IMPORTANTE: Usar inserción binaria, NO string
-    insertar_bytes_a_paquete(paquete, contenido_pagina, tam_pagina); 
 
-    insertar_uint32_a_paquete(paquete, id_query); // Para logs del Storage
 
     // 4. Enviar y liberar
     enviar_paquete(paquete, conexion_storage);
-    eliminar_paquete(paquete);
 
     int respuesta = recibir_operacion(conexion_storage, logger);
     
-    if (respuesta != OK) {
-        log_error(logger, "Query %u: Fallo al persistir pagina %u en Storage. Codigo: %d", id_query, victima->nro_pagina, respuesta);
-        if(respuesta == MENSAJE) {
-             char* err_msg = recibir_y_devolver_mensaje(conexion_storage, logger);
-             free(err_msg);
-        }
-        return -1;
+     if (respuesta != PAQUETE) {
+        log_error(logger, "Query %u: Fallo al recibir paquete de Storage. Codigo: %d", id_query, respuesta);
+        return ERROR_DESCONOCIDO;
     }
+    int size; 
+    int offset=0; 
+    void* t_buffer = recibir_buffer(&size,conexion_storage); 
+    int estado_operacion = extraer_int(t_buffer,&offset);
+    free(t_buffer); 
     
-    // Si responde con un mensaje de exito, consumirlo para limpiar el buffer del socket
-    if(respuesta == MENSAJE) {
-        char* msg = recibir_y_devolver_mensaje(conexion_storage, logger);
-        free(msg);
-    }
-    return 0;
+    return estado_operacion;
 }
 
 int cargar_pagina_desde_storage(t_tabla_paginas* tabla, uint32_t nro_pagina, int marco_asignado, uint32_t id_query) {
@@ -274,50 +285,65 @@ int cargar_pagina_desde_storage(t_tabla_paginas* tabla, uint32_t nro_pagina, int
     // Protocolo: OP_CODE | FILE | TAG | NRO_PAGINA | ID_QUERY
     t_paquete* paquete = crear_paquete();
     insertar_uint32_a_paquete(paquete, READ);
+    insertar_uint32_a_paquete(paquete, id_query);
     insertar_string_a_paquete(paquete, tabla->file);
     insertar_string_a_paquete(paquete, tabla->tag);
     insertar_uint32_a_paquete(paquete, nro_pagina);
-    insertar_uint32_a_paquete(paquete, id_query);
 
     enviar_paquete(paquete, conexion_storage);
-    eliminar_paquete(paquete);
 
     // 2. Recibir respuesta
     int op_code = recibir_operacion(conexion_storage, logger);
     
-    // Manejo de errores del Storage
-    if (op_code != RESPONSE) { // Asumiendo que RESPONSE es el codigo de "acá van los datos"
-        log_error(logger, "Query %u: Storage no entregó bloque %u. OpCode: %d", id_query, nro_pagina, op_code);
-        return -1;
+    if (op_code != PAQUETE) {
+        log_error(logger, "Query %u: Fallo al recibir paquete de Storage. Codigo: %d", id_query, op_code);
+        return ERROR_DESCONOCIDO;
     }
 
-    // 3. Recibir el buffer binario
     int size_recibido = 0;
     void* stream_datos = recibir_buffer(&size_recibido, conexion_storage);
 
-    // Validar consistencia
-    if (size_recibido != tam_pagina) {
-        log_error(logger, "Query %u: Tamaño corrupto desde Storage. Recibido: %d, Esperado: %u", 
-                  id_query, size_recibido, tam_pagina);
-        free(stream_datos);
-        return -1;
+    if (stream_datos == NULL || size_recibido < sizeof(int)) {
+         log_error(logger, "Query %u: Buffer recibido inválido o vacío", id_query);
+         if(stream_datos) free(stream_datos);
+         return ERROR_DESCONOCIDO;
     }
 
-    // 4. Escribir en Memoria Interna
-    uint32_t offset_memoria = marco_asignado * tam_pagina;
-    // Copiamos directo al malloc global
-    memcpy((char*)memoria_interna + offset_memoria, stream_datos, tam_pagina);
+    int offset=0;
+
+    int estado_operacion = extraer_int(stream_datos,&offset);
+    if(estado_operacion==0){
+        int tam_binario = 0; 
+        char* contenido = extraer_binario_y_tamanio(stream_datos,&offset,&tam_binario);
+
+        if (tam_binario > tam_pagina) {
+        log_error(logger, "CRITICAL: Storage envió más bytes (%d) que el tamaño de página (%d)", tam_binario, tam_pagina);
+        // Ajustamos para no romper memoria, aunque esto indica un error grave en Storage
+        tam_binario = tam_pagina; 
+        }
+
+        log_info(logger, "Contenido recibido de storage:%s",contenido);
+        log_info(logger, "Query %u: Recibidos %d bytes desde Storage", id_query, tam_binario); 
+
+        // 4. Escribir en Memoria Interna
+        uint32_t offset_memoria = marco_asignado * tam_pagina;
+        // Copiamos directo al malloc global
+        memcpy((char*)memoria_interna + offset_memoria, contenido, tam_binario);
+        
+
+        // Log obligatorio Memoria Add (segun enunciado pag 18)
+        log_info(logger, "Query %u: Memoria Add - File: %s - Tag: %s - Pagina: %u - Marco: %u",
+                id_query, tabla->file, tabla->tag, nro_pagina, marco_asignado);
+
+        free(stream_datos);
+        free(contenido);
+        return 0;
+    }
     
+    log_error(logger, "Query %u: Storage rechazó la lectura. Código error: %d", id_query, estado_operacion);
     free(stream_datos);
-
-    // Log obligatorio Memoria Add (segun enunciado pag 18)
-    log_info(logger, "Query %u: Memoria Add - File: %s - Tag: %s - Pagina: %u - Marco: %u",
-             id_query, tabla->file, tabla->tag, nro_pagina, marco_asignado);
-
-    return 0;
+    return estado_operacion; 
 }
-
-
 
 void liberar_marco_de_victima(t_entrada_pagina* victima, uint32_t id_query) {
     if (!victima) return;
@@ -326,7 +352,6 @@ void liberar_marco_de_victima(t_entrada_pagina* victima, uint32_t id_query) {
     victima->presente = false;
     victima->modificado = false;
     victima->marco_num = -1;
-    
 }
 
 void devolver_marco(int marco) {
@@ -542,4 +567,29 @@ t_entrada_pagina* buscar_entrada_por_marco(uint32_t marco_num) {
     }
     
     return entrada;
+}
+
+void actualizar_tam_memoria(char* file, char* tag, uint32_t nuevo_tamanio) {
+    // Bloqueamos el mutex para proteger la lista global de tablas
+    pthread_mutex_lock(&mutex_mem);
+
+    t_tabla_paginas* tabla = buscar_en_lista_global(file, tag);
+
+    // Si la tabla no existe, la creamos (Lazy Loading)
+    if (tabla == NULL) {
+        crear_y_agregar_tabla_a_lista_global(file, tag);
+        tabla = buscar_en_lista_global(file, tag);
+    }
+
+    if (tabla != NULL) {
+        uint32_t tam_anterior = tabla->tam_file;
+        tabla->tam_file = nuevo_tamanio;
+        
+        log_info(logger, "Memoria Interna: Actualizado tamaño de %s:%s. (%u -> %u bytes)", 
+                 file, tag, tam_anterior, nuevo_tamanio);
+    } else {
+        log_error(logger, "Memoria Interna: Error crítico al intentar actualizar tamaño de %s:%s", file, tag);
+    }
+
+    pthread_mutex_unlock(&mutex_mem);
 }

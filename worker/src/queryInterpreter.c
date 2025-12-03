@@ -173,6 +173,7 @@ bool ejecutar_linea(char* linea, uint32_t queryid) {
               destruir_truncate(&tr);
               return false;
             }
+            actualizar_tam_memoria(tr.nombre_archivo, tr.tag, (uint32_t)tr.tam);
             // log obligatorio
             log_info(logger, "## Query %u: - Instrucción realizada: TRUNCATE", queryid);
             destruir_truncate(&tr);
