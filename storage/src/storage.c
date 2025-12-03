@@ -43,9 +43,12 @@ pthread_mutex_t mutex_dic_estado;
 t_dictionary* file_tag_dic = NULL; 
 t_dictionary* dicc_estado_tag = NULL; 
 
+__thread int g_query_id_actual = -1;
+
 
 int main(int argc, char **argv)
 {   
+    signal(SIGPIPE, SIG_IGN);
     if (argc < 3) { 
             fprintf(stderr, "Uso correcto: %s <archivo_config[path]> <archivo_superBlock[path]> \n", argv[0]);
             return EXIT_FAILURE;
@@ -766,6 +769,7 @@ int asignar_bloque_logico_especifico(char* ruta_logical_block, int num_bloque_lo
     
     int k = 4; 
     int bloque_fisico = encontrar_y_reservar_bloque(); 
+    log_info(logger,"##%u - Bloque Físico Reservado - Número de Bloque: %u",g_query_id_actual, bloque_fisico);
     if (bloque_fisico == -1) {
         log_error(logger, "Espacio insuficiente en el bitmap");
         return ERROR_ESPACIO_INSUFICIENTE;
@@ -800,6 +804,7 @@ void liberar_bloque_reservado(int nro_bloque) {
     pthread_mutex_lock(&mutex_bitmap);
     
     bitarray_clean_bit(BA_bitmap, nro_bloque);
+    log_info(logger,"##%u- Bloque Físico Liberado - Número de Bloque: %u",g_query_id_actual,nro_bloque);
     
     pthread_mutex_unlock(&mutex_bitmap);
 }
@@ -962,7 +967,7 @@ int anadir_a_dicc_estado(char* key){
     if(dictionary_has_key(dicc_estado_tag, key)){
 
         log_error(logger, "Error: Se intentó operar sobre un File:Tag existente: %s", key);
-        estado_op = -1; 
+        estado_op = ERROR_FILE_TAG_PREEXISTENTE; 
 
     }else{
     
@@ -1081,4 +1086,126 @@ void liberar_bloque_si_no_se_usa(int nro_bloque) {
     free(nombre_block);
     free(pre_ruta);
     free(ruta_F_block);
+}
+int actualizar_metadata_incremento(char* file, char* tag, int* bloques_fisicos_nuevos, int cant_bloques_a_agregar) {
+    
+    char* ruta_files = add_seg_ruta(PUNTO_MONTAJE, "/files");
+    char* ruta_file = add_seg_ruta(ruta_files, file);
+    char* ruta_tag = add_seg_ruta(ruta_file, tag);
+    char* ruta_metadata = add_seg_ruta(ruta_tag, "/metadata.config");
+
+    t_config* config = config_create(ruta_metadata);
+    if (config == NULL) {
+        log_error(logger, "TRUNCATE: Error al abrir metadata: %s", ruta_metadata);
+        free(ruta_files); free(ruta_file); free(ruta_tag); free(ruta_metadata);
+        return ERROR_DESCONOCIDO;
+    }
+
+    char** bloques_actuales_str = config_get_array_value(config, "BLOCKS");
+    int cant_actual = string_array_size(bloques_actuales_str);
+    int cant_total = cant_actual + cant_bloques_a_agregar;
+
+    // Crear array combinado
+    char** bloques_totales_str = malloc((cant_total + 1) * sizeof(char*));
+
+    // Copiar viejos
+    for (int i = 0; i < cant_actual; i++) {
+        bloques_totales_str[i] = string_duplicate(bloques_actuales_str[i]);
+    }
+
+    // Copiar nuevos
+    for (int i = 0; i < cant_bloques_a_agregar; i++) {
+        bloques_totales_str[cant_actual + i] = string_itoa(bloques_fisicos_nuevos[i]);
+    }
+    bloques_totales_str[cant_total] = NULL; 
+
+    // Guardar
+    char* joined_string = join_string_array(bloques_totales_str, ","); 
+    char* final_array_string = string_from_format("[%s]", joined_string);
+
+    config_set_value(config, "BLOCKS", final_array_string);
+    config_save(config);
+
+    free(joined_string);
+    free(final_array_string);
+    string_array_destroy(bloques_actuales_str); 
+    string_array_destroy(bloques_totales_str); 
+    config_destroy(config);
+    free(ruta_files); free(ruta_file); free(ruta_tag); free(ruta_metadata);
+    
+    return 0;
+}
+int actualizar_metadata_decremento(char* file, char* tag, int cant_bloques_final) {
+    char* ruta_files = add_seg_ruta(PUNTO_MONTAJE, "/files");
+    char* ruta_file = add_seg_ruta(ruta_files, file);
+    char* ruta_tag = add_seg_ruta(ruta_file, tag);
+    char* ruta_metadata = add_seg_ruta(ruta_tag, "/metadata.config");
+
+    t_config* config = config_create(ruta_metadata);
+    if (!config) {
+       log_error(logger, "TRUNCATE: Error al abrir metadata: %s", ruta_metadata);
+        free(ruta_files); free(ruta_file); free(ruta_tag); free(ruta_metadata);
+        return ERROR_DESCONOCIDO;
+        
+    }
+
+    char** bloques_array = config_get_array_value(config, "BLOCKS");
+    
+    // Aquí está el truco: Forzamos un NULL en la nueva posición final
+    // para "cortar" el array.
+    if (bloques_array[cant_bloques_final] != NULL) {
+        
+        int j = cant_bloques_final;
+        while(bloques_array[j] != NULL) {
+            free(bloques_array[j]);
+            bloques_array[j] = NULL; // Cortamos aquí
+            j++;
+        }
+    }
+
+    // Reconstruimos el string: [1,2,3]
+    char* joined = join_string_array(bloques_array, ",");
+    char* final_str = string_from_format("[%s]", joined);
+
+    config_set_value(config, "BLOCKS", final_str);
+    config_save(config);
+
+    free(joined); free(final_str);
+    string_array_destroy(bloques_array); 
+    config_destroy(config);
+    free(ruta_files); free(ruta_file); free(ruta_tag); free(ruta_metadata);
+    return 0;
+}
+int obtener_nro_bloque_fisico(char* file, char* tag, int num_L_block) {
+    char* ruta_files = add_seg_ruta(PUNTO_MONTAJE, "/files");
+    char* ruta_file = add_seg_ruta(ruta_files, file);
+    char* ruta_tag = add_seg_ruta(ruta_file, tag);
+    char* ruta_metadata = add_seg_ruta(ruta_tag, "/metadata.config");
+
+    t_config* config = config_create(ruta_metadata);
+    if (config == NULL) {
+         log_error(logger, "No se pudo leer metadata de %s", ruta_metadata);
+        free(ruta_files);free(ruta_file);
+        free(ruta_tag);free(ruta_metadata);        
+        return ERROR_DESCONOCIDO;
+        
+    }
+
+    char** blocks = config_get_array_value(config, "BLOCKS");
+    int nro_fisico = -1;
+
+    // Validamos que el índice exista
+    int count = 0;
+    while(blocks[count] != NULL) count++;
+
+    if (num_L_block < count) {
+        nro_fisico = atoi(blocks[num_L_block]);
+    }
+
+    string_array_destroy(blocks);
+    config_destroy(config);
+    
+    free(ruta_files); free(ruta_file); free(ruta_tag); free(ruta_metadata);
+    
+    return nro_fisico;
 }
