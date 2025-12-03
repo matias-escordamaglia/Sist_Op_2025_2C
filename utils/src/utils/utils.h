@@ -212,9 +212,17 @@ typedef struct {
     char*  file;
     char*  tag;
     size_t dir_base;
-    uint8_t* data;
+    char* data;
     size_t len;
 } t_write;
+
+typedef struct {
+    char*  file;
+    char*  tag;
+    size_t dir_base;
+    int tamaño;
+    size_t len;
+} t_read;
 
 // Struct para entrada de página
 typedef struct {

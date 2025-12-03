@@ -155,14 +155,29 @@ void crear_y_agregar_tabla_a_lista_global(char* file, char* tag)
 
 bool rango_valido( t_tabla_paginas* tabla, uint32_t base, uint32_t tam) {
     if (!tabla) return false;
-    if (base > tabla->tam_file) {
+
+    // --- PARCHE DE SUPERVIVENCIA AL REINICIO ---
+    // Si el tamaño en memoria es 0, puede ser que el archivo esté vacío 
+    // O que acabamos de reiniciar el módulo y perdimos la metadata.
+    // Dejamos pasar la operación para que el Storage (que tiene la verdad) decida.
+    if (tabla->tam_file == 0) {
+        log_warning(logger, "⚠️ Validación Lazy: %s:%s tiene tamaño local 0. Delegando validación al Storage.", 
+                    tabla->file, tabla->tag);
+        return true; 
+    }
+    // -------------------------------------------
+
+    // Validación normal cuando SÍ sabemos el tamaño
+    if (base >= tabla->tam_file) {
+        log_error(logger, "Rango Inválido: Base (%u) >= Tam (%u)", base, tabla->tam_file);
         return false;
     }
-    log_info(logger, "[DEBUG] Rango: Base=%u + Tam=%u = %u. Limite Archivo=%u", 
-         base, tam, base+tam, tabla->tam_file);
-    if (tam > tabla->tam_file - base) {
+
+    if ((uint64_t)base + (uint64_t)tam > (uint64_t)tabla->tam_file) {
+        log_error(logger, "Rango Inválido: Overflow (%u > %u)", base + tam, tabla->tam_file);
         return false;
     }
+
     return true;
 }
 

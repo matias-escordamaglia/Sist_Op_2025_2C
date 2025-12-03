@@ -192,7 +192,6 @@ bool ejecutar_linea(char* linea, uint32_t queryid) {
             // Llama directo a memoria (asume query_id en pedido, ajusta si no)
             int ok = memoria_write(&w, queryid);
 
-
             if (ok < 0) {
               finalizar_query_con_error(ok);
               destruir_write(&w);
@@ -204,39 +203,41 @@ bool ejecutar_linea(char* linea, uint32_t queryid) {
             return true;
         }
         case READ: {
-            t_write r = {0};
-            if (!parsear_write_params(params, &r)) {
+            t_read r = {0};
+            if (!parsear_read_params(params, &r)) {
                 log_error(logger, "Sintaxis READ inválida: %s", linea);
                 return false;
             }
 
             // 1. Preparamos un buffer para recibir los datos leídos desde memoria
             void* buffer_leido = malloc(r.len);
+            
             if (!buffer_leido) {
                 log_error(logger, "Fallo malloc en READ");
-                destruir_write(&r);
+                destruir_read(&r);
                 return false;
             }
             // Inicializo en 0 por seguridad
             memset(buffer_leido, 0, r.len); 
-
             // 2. Llamada a memoria (igual que write, pero pasando el buffer vacio para llenar)
             int ok = memoria_read(&r, buffer_leido, queryid);
             
             if (ok < 0) {
                 finalizar_query_con_error(ok);
                 free(buffer_leido);
-                destruir_write(&r);
+                destruir_read(&r);
                 return false;
             }
 
-            enviar_lectura_a_master(r.file, r.tag, buffer_leido, r.len, queryid);
+            log_info(logger, "AAAAAAAAA : %s",buffer_leido);
+            
+            enviar_lectura_a_master(r.file, r.tag, buffer_leido, r.len);
             // Log obligatorio
             log_info(logger, "## Query %u: - Instrucción realizada: READ", queryid);
 
             // Limpieza
             free(buffer_leido);
-            destruir_write(&r);
+            destruir_read(&r);
             return true;
         }
         case TAG: {
@@ -368,18 +369,56 @@ void flush_file_tag_en_memoria(char* file, char* tag, uint32_t id_query) {
     pthread_mutex_unlock(&mutex_mem);
 }
 
-void enviar_lectura_a_master(char* file, char* tag, void* contenido, uint32_t tamanio, uint32_t query_id) {
+void enviar_lectura_a_master(char* file, char* tag, void* contenido, uint32_t tamanio) {
+    /*
     t_paquete* paquete = crear_paquete();
     
     // Opción recomendada (Protocolo custom):
     insertar_uint32_a_paquete(paquete, NUEVA_LECTURA);
-    insertar_uint32_a_paquete(paquete, query_id);
     insertar_string_a_paquete(paquete, file);
     insertar_string_a_paquete(paquete, tag);
     
-    insertar_bytes_a_paquete(paquete, contenido, tamanio);
+    insertar_binario_a_paquete(paquete, contenido, tamanio);
 
     enviar_paquete(paquete, conexion_master);
+
+
+    char* mensaje  = "PRUEBA:VERSION1.0 Lectura_de_prueba"; 
+    t_tipo_aviso_worker_master tipo_aviso = NUEVA_LECTURA;
+    t_paquete* paquete_resp = crear_paquete();
+
+    insertar_variable_a_paquete(paquete_resp, &(tipo_aviso), sizeof(t_tipo_aviso_worker_master));
+    insertar_string_a_paquete(paquete_resp, mensaje);
+    enviar_paquete(paquete_resp,conexion_master);
+    */
+
+
+    size_t len_encabezado = strlen(file) + 1 + strlen(tag) + 1;
+    
+    size_t len_total = len_encabezado + tamanio + 1;
+
+    char* mensaje_unificado = malloc(len_total);
+    if (mensaje_unificado == NULL) {
+        
+        return; 
+    }
+
+    sprintf(mensaje_unificado, "%s:%s ", file, tag);
+
+    memcpy(mensaje_unificado + len_encabezado, contenido, tamanio);
+
+    mensaje_unificado[len_total - 1] = '\0';
+
+    t_paquete* paquete = crear_paquete();
+    t_tipo_aviso_worker_master tipo_aviso = NUEVA_LECTURA;
+
+    insertar_variable_a_paquete(paquete, &tipo_aviso, sizeof(t_tipo_aviso_worker_master));
+    
+    insertar_string_a_paquete(paquete, mensaje_unificado);
+
+    enviar_paquete(paquete, conexion_master);
+
+    free(mensaje_unificado);
 }
 
 
@@ -856,7 +895,85 @@ bool parsear_tag_params(  char* params, t_tag* out) {
     return ok;
 }
 
-bool parsear_write_params(  char* params, t_write* out) {
+bool parsear_write_params(char* params, t_write* out) {
+    if (!params || !out) return false;
+    params = saltar_blancos(params);
+    if (*params == '\0') return false;
+
+    // Trabajamos sobre una copia para no romper el const char* original si fuera el caso
+    char* tmp = strdup(params);
+    if (!tmp) return false;
+
+    // Trim trailing whitespace (eliminar espacios al final)
+    size_t n = strlen(tmp);
+    while (n && (tmp[n-1]=='\n'||tmp[n-1]=='\r'||tmp[n-1]==' '||tmp[n-1]=='\t')) tmp[--n]='\0';
+    if (!n) { free(tmp); return false; }
+
+    // --- Token 1: <FILE:TAG> ---
+    char* sp1 = strpbrk(tmp, " \t");
+    if (!sp1) { free(tmp); return false; } // WRITE necesita al menos 3 argumentos
+    *sp1 = '\0'; // Cortamos el string
+    char* file_tag_str = tmp;
+
+    // --- Token 2: <DIR_BASE> ---
+    char* p2 = saltar_blancos(sp1 + 1);
+    if (*p2 == '\0') { free(tmp); return false; }
+    
+    char* sp2 = strpbrk(p2, " \t");
+    if (!sp2) { free(tmp); return false; } // Debe haber un tercer argumento (contenido)
+    *sp2 = '\0'; // Cortamos para aislar el numero
+
+    // Parseo de Dir Base
+    errno = 0;
+    char* endp = NULL;
+    unsigned long val_dir = strtoul(p2, &endp, 10);
+    // Verificamos que sea un número válido y que termine donde pusimos el \0
+    if (errno != 0 || endp == p2 || *saltar_blancos(endp) != '\0') { 
+        free(tmp); return false; 
+    }
+
+    // --- Token 3: <CONTENIDO> ---
+    // Todo lo restante, permitimos espacios dentro del contenido
+    char* contenido = saltar_blancos(sp2 + 1);
+    if (*contenido == '\0') { free(tmp); return false; }
+
+    // --- Split FILE:TAG ---
+    char* colon = strchr(file_tag_str, ':');
+    if (!colon) { free(tmp); return false; }
+    *colon = '\0';
+    char* f = file_tag_str;
+    char* t = colon + 1;
+
+    if (*f == '\0' || *t == '\0') { free(tmp); return false; }
+
+    // --- Asignación a Struct ---
+    out->file = strdup(f);
+    out->tag = strdup(t);
+    out->dir_base = (size_t)val_dir;
+    out->len = strlen(contenido);
+    
+    // Asignación para char* data (ya no es uint8_t, no requiere casts raros)
+    out->data = malloc(out->len + 1); // +1 por si querés usarlo como string luego, aunque len manda
+    if (!out->data) {
+        free(out->file); free(out->tag); free(tmp); return false;
+    }
+    
+    // Copiamos el contenido. 
+    // Nota: Como es WRITE de texto/input, copiamos el string.
+    memcpy(out->data, contenido, out->len);
+    out->data[out->len] = '\0'; // Null-terminate por seguridad
+
+    free(tmp);
+    return true;
+}
+
+// Helper necesario si no lo tienes en otro lado
+char* saltar_blancos(char* s) {
+    while (*s == ' ' || *s == '\t') s++;
+    return s;
+}
+
+bool parsear_read_params(char* params, t_read* out) {
     if (!params || !out) return false;
     params = saltar_blancos(params);
     if (*params == '\0') return false;
@@ -869,50 +986,62 @@ bool parsear_write_params(  char* params, t_write* out) {
     while (n && (tmp[n-1]=='\n'||tmp[n-1]=='\r'||tmp[n-1]==' '||tmp[n-1]=='\t')) tmp[--n]='\0';
     if (!n) { free(tmp); return false; }
 
-    // Primer token: <FILE:TAG>
+    // --- Token 1: <FILE:TAG> ---
     char* sp1 = strpbrk(tmp, " \t");
     if (!sp1) { free(tmp); return false; }
     *sp1 = '\0';
     char* file_tag_str = tmp;
 
-    // Segundo token: <DIR_BASE>
+    // --- Token 2: <DIR_BASE> ---
     char* p2 = saltar_blancos(sp1 + 1);
     if (*p2 == '\0') { free(tmp); return false; }
+    
     char* sp2 = strpbrk(p2, " \t");
-    if (!sp2) { free(tmp); return false; } // Debe haber contenido
+    if (!sp2) { free(tmp); return false; }
     *sp2 = '\0';
 
+    // Parseo Dir Base
     errno = 0;
     char* endp = NULL;
-    unsigned long val = strtoul(p2, &endp, 10);
-    if (errno != 0 || endp == p2 || *saltar_blancos(endp) != '\0') { free(tmp); return false; }
+    unsigned long val_dir = strtoul(p2, &endp, 10);
+    if (errno != 0 || endp == p2 || *saltar_blancos(endp) != '\0') { 
+        free(tmp); return false; 
+    }
 
-    // Tercer token: <CONTENIDO> (todo lo restante, permitimos espacios)
-    char* contenido = saltar_blancos(sp2 + 1);
-    if (*contenido == '\0') { free(tmp); return false; }
+    // --- Token 3: <TAMAÑO> ---
+    char* p3 = saltar_blancos(sp2 + 1);
+    if (*p3 == '\0') { free(tmp); return false; }
 
-    // Split FILE:TAG
+    // Parseo Tamaño (int según tu struct)
+    errno = 0;
+    unsigned long val_tam = strtoul(p3, &endp, 10);
+    // Verificamos que sea número y QUE NO HAYA NADA MÁS (READ termina ahí)
+    if (errno != 0 || endp == p3 || *saltar_blancos(endp) != '\0') { 
+        free(tmp); return false; 
+    }
+
+    // --- Split FILE:TAG ---
     char* colon = strchr(file_tag_str, ':');
     if (!colon) { free(tmp); return false; }
     *colon = '\0';
-      char* f = file_tag_str;
-      char* t = colon + 1;
+    char* f = file_tag_str;
+    char* t = colon + 1;
+
     if (*f == '\0' || *t == '\0') { free(tmp); return false; }
 
+    // --- Asignación a Struct ---
     out->file = strdup(f);
     out->tag = strdup(t);
-    out->dir_base = (size_t)val;
-    out->len = strlen(contenido); // Bytes sin null
-    out->data = malloc(out->len); // uint8_t*
-    if (!out->data) { // Error malloc
-        free(out->file);
-        free(out->tag);
-        free(tmp);
-        return false;
-    }
-    memcpy(out->data, contenido, out->len); // Copia bytes
+    out->dir_base = (size_t)val_dir;
+    out->tamaño = (int)val_tam;
+    out->len = (size_t)val_tam; // Seteamos len igual al tamaño por consistencia
 
-    bool ok = out->file && out->tag && out->data;
+    bool ok = out->file && out->tag;
+    if (!ok) {
+        if(out->file) free(out->file);
+        if(out->tag) free(out->tag);
+    }
+
     free(tmp);
     return ok;
 }
@@ -926,6 +1055,18 @@ void destruir_write(t_write* w) {
     w->tag = NULL;
     w->data = NULL;
     w->len = 0;
+}
+
+void destruir_read(t_read* r) {
+    if (!r) return;
+
+    free(r->file);
+    free(r->tag);
+    r->file = NULL;
+    r->tag = NULL;
+    r->dir_base = 0;
+    r->tamaño = 0;
+    r->len = 0;
 }
 
 // Agrega el prototipo arriba o en tu .h: 

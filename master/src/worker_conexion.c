@@ -469,7 +469,7 @@ void alta_aviso_confirmacion(t_motivo_pedido_master_worker motivo_pedido, uint32
             conf->dato_respuesta = dato_extra;
             sem_post(&conf->sem_respuesta);
             log_info(get_logger(), "[DEBUG] Worker %u realizó una confirmacion para QID %u", 
-                    id_worker, query_id);
+                    id_worker, conf->query_id);
         }
     UNLOCK(&mutex_confirmaciones);
 }

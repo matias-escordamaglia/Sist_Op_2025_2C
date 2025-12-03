@@ -213,7 +213,7 @@ void* manejar_master(void* arg) {
                             log_error(logger, "No se pudo empaquetar el aviso de confirmación a Master");
                         }
 
-                        // Parte Testing
+                        /*// Parte Testing
                         char* mensaje  = "PRUEBA:VERSION1.0 Lectura_de_prueba"; 
                         t_tipo_aviso_worker_master tipo_aviso = NUEVA_LECTURA;
                         t_paquete* paquete_resp = crear_paquete();
@@ -221,7 +221,7 @@ void* manejar_master(void* arg) {
                         insertar_variable_a_paquete(paquete_resp, &(tipo_aviso), sizeof(t_tipo_aviso_worker_master));
                         insertar_string_a_paquete(paquete_resp, mensaje);
                         enviar_paquete(paquete_resp,conexion);
-                        // Fin Testing
+                        // Fin Testing */
                         
                         t_motivo_pedido_master_worker motivo = pedido->motivo;
                         query_actual.query_path = pedido->query_path;
