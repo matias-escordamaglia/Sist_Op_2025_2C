@@ -274,7 +274,7 @@ int atender_truncate(char* file, char* tag,int tamanio, int query_id){
 
     if (estado_tag == 0 ) { //commited 
         log_error(logger, "Error: Se intentó TRUNCATE en un File:Tag en estado COMMITED: %s", key_file_tag);
-        estado_truncate = -1; 
+        estado_truncate = ERROR_DESCONOCIDO; 
     } else {
         estado_truncate = truncar_archivo(file, tag, tamanio);
         if(estado_truncate==0)
