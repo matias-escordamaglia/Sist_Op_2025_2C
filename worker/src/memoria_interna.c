@@ -145,8 +145,8 @@ void crear_y_agregar_tabla_a_lista_global(char* file, char* tag)
 {
     t_tabla_paginas* tabla_proceso = malloc(sizeof(t_tabla_paginas));
     tabla_proceso->paginas_proceso = list_create();
-    tabla_proceso->file = file;
-    tabla_proceso->tag = tag;
+    tabla_proceso->file = strdup(file);
+    tabla_proceso->tag = strdup(tag);
     tabla_proceso->tam_file = 0;
     list_add(lista_global_tablas, tabla_proceso);
     log_info(logger, "Tabla creada para %s:%s - Tamaño inicial: 0", file, tag); // Opcional, ayuda debug
