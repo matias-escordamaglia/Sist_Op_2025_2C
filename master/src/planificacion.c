@@ -297,13 +297,25 @@ void intentar_asignaciones_prioridades() {
                 agregar_query_ordenada(cola_ready, query_victima);
                 UNLOCK(&mutex_cola_ready);
 
+                log_info(get_logger(), 
+                        "## Se desaloja la Query %d (%d) del Worker %d - Motivo: PRIORIDAD",
+                        query_victima->query->query_id, 
+                        query_victima->prioridad_efectiva, 
+                        worker_a_desalojar->id_worker);
+
                 procesar_asignacion_query_a_worker(query_candidata, worker_libre);
                 
-                log_info(get_logger(), 
+                /*log_info(get_logger(), 
                             "Desalojo completado: Query %d ejecutándose, Query %d en READY (PC=%d)",
                             query_candidata->query->query_id,
                             query_victima->query->query_id,
                             respuesta.pc);
+                */
+                log_info(get_logger(), 
+                        "Query %d asignado a Worker %d",
+                        query_candidata->query->query_id,
+                        worker_a_desalojar->id_worker);
+
                 continue; 
                 
             case DESALOJO_QUERY_DIFERENTE:
@@ -443,7 +455,7 @@ void agregar_query_ordenada(t_list* lista, t_elemento_cola* elemento) {
 
 //
 void procesar_asignacion_query_a_worker(t_elemento_cola* query_candidata, t_worker_conectado* worker_libre) {
-    if (asignar_query_a_worker(query_candidata->query, worker_libre)) {
+    if (asignar_query_a_worker(query_candidata->query, query_candidata->prioridad_efectiva, worker_libre)) {
 
         //en worker_conexion.c se hace la asignación una vez llega la confirmación allí
 
@@ -552,21 +564,27 @@ bool aplicar_aging_inteligente() {
                 // Verificar si CRUZÓ el umbral de desalojo
                 bool antes_no_podia = (prioridad_anterior >= umbral_desalojo);
                 bool ahora_si_puede = (nueva_prioridad < umbral_desalojo);
+
+                log_info(get_logger(),
+                        "##%d Cambio de prioridad: %d - %d",
+                        elemento->query->query_id,
+                        prioridad_anterior,
+                        nueva_prioridad);
                 
                 if (antes_no_podia && ahora_si_puede) {
-                    log_info(get_logger(), 
-                            "Aging RELEVANTE: Query %d (%d->%d) ahora puede desalojar (umbral=%d)", 
+                    /*log_info(get_logger(), 
+                            "[DEBUG] Aging RELEVANTE: Query %d (%d->%d) ahora puede desalojar (umbral=%d)", 
                             elemento->query->query_id,
                             prioridad_anterior,
                             nueva_prioridad,
-                            umbral_desalojo);
+                            umbral_desalojo);*/
                     puede_desalojar_ahora = true;
                 } else {
-                    log_debug(get_logger(), 
-                            "Aging: Query %d prioridad %d -> %d (sin impacto)", 
+                    /*log_info(get_logger(), 
+                            "[DEBUG] Aging: Query %d prioridad %d -> %d (sin impacto)", 
                             elemento->query->query_id,
                             prioridad_anterior,
-                            nueva_prioridad);
+                            nueva_prioridad);*/
                 }
             }
         }
@@ -603,11 +621,17 @@ void verificar_y_aplicar_aging_si_corresponde() {
             }
             
             if (nueva_prioridad != elemento->prioridad_efectiva) {
-                log_debug(get_logger(), 
+                /*log_debug(get_logger(), 
                          "Aging durante desalojo: Query %d %d -> %d", 
                          elemento->query->query_id,
                          elemento->prioridad_efectiva,
+                         nueva_prioridad);*/
+                log_info(get_logger(), 
+                         "##%d Cambio de prioridad: %d - %d", 
+                         elemento->query->query_id,
+                         elemento->prioridad_efectiva,
                          nueva_prioridad);
+                         
                 elemento->prioridad_efectiva = nueva_prioridad;
                 elemento->ultimo_aging = ahora;
             }
@@ -707,13 +731,13 @@ void manejar_worker_desconectado(uint32_t worker_id, uint32_t query_id_ejecutand
 
     t_worker_conectado* worker_temp = obtener_worker_por_id_uso_externo(worker_id);
 
+    t_elemento_cola* elemento = NULL;
+
     if (worker_temp->worker_conectado) {
 
         if ((int)query_id_ejecutando >= 0) {
 
             log_info(get_logger(), "Worker %d desconectado", worker_id);
-
-            t_elemento_cola* elemento = NULL;
 
             LOCK(&mutex_estado_critico);
 
@@ -727,9 +751,6 @@ void manejar_worker_desconectado(uint32_t worker_id, uint32_t query_id_ejecutand
                 LOCK(&mutex_cola_exit);
                 list_add(cola_exit, elemento);
                 UNLOCK(&mutex_cola_exit);
-                
-                log_info(get_logger(), "Query %d movido a EXIT por desconexión de worker", 
-                        query_id_ejecutando);
                 
                 
                 notificar_error_desconexion_a_query_control(elemento->query->conexion);
@@ -771,6 +792,8 @@ void manejar_worker_desconectado(uint32_t worker_id, uint32_t query_id_ejecutand
         // Marcar worker como desconectado
         marcar_worker_desconectado(worker_id);
         //sem_wait(cant_workers_libres); <-- puede que no vaya aquí ya que se le hizo wait al asignarle un query
+        log_info(get_logger(), "## Se desconecta el Worker %d - Se finaliza la Query %d - Cantidad total de Workers: %d", 
+                        worker_id, query_id_ejecutando, get_cant_workers_conectados());
     }
     
 }
@@ -784,10 +807,9 @@ void manejar_query_control_desconectado(uint32_t query_id_activo) {
     if(!encontrado) {
         LOCK(&mutex_estado_critico);
 
-        log_info(get_logger(), "Query Control %d desconectado", query_id_activo);
+        t_elemento_cola* elemento = NULL;
         
         if ((int)query_id_activo >= 0) {
-            t_elemento_cola* elemento = NULL;
             
             // Buscar en READY primero
             LOCK(&mutex_cola_ready);
@@ -831,8 +853,9 @@ void manejar_query_control_desconectado(uint32_t query_id_activo) {
                             // Liberar worker
                             sem_post(cant_workers_libres);
                             
-                            log_info(get_logger(), "Query %d cancelado y worker %d desalojado", 
-                                    query_id_activo, worker_id);
+                            log_info(get_logger(), "## Se desaloja la Query %d (%d) del Worker %d - Motivo: DESCONEXION", 
+                                    query_id_activo, elemento->prioridad_efectiva, worker_id);
+        
                             break; 
                             
                         case DESALOJO_QUERY_DIFERENTE:
@@ -925,6 +948,11 @@ void manejar_query_control_desconectado(uint32_t query_id_activo) {
                 }
             }
         }
+
+        int grado_multiprocesamiento = get_cant_workers_conectados();
+
+        log_info(get_logger(), "## Se desconecta un Query Control. Se finaliza la Query %d con prioridad %d. Nivel multiprocesamiento %d",
+            query_id_activo, elemento->prioridad_efectiva, grado_multiprocesamiento);
 
         UNLOCK(&mutex_estado_critico);
     }

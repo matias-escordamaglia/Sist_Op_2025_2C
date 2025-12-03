@@ -126,7 +126,7 @@ void* manejar_worker(void* arg) {
                     if (query_id_actual == -1) {
                         log_error(get_logger(), "ERROR: Se recibió lectura del Worker %d pero sigue sin QID asignado tras reintentos.", id_worker);
                     } else {
-                        mandar_lectura_a_query_con_id(lectura, query_id_actual);
+                        mandar_lectura_a_query_con_id(lectura, query_id_actual, id_worker);
                     }
 
                     break;
@@ -148,6 +148,10 @@ void* manejar_worker(void* arg) {
                 case FINALIZACION_QUERY:
                     program_counter = atoi(aviso->argumento);
                     query_id = get_worker_qid(id_worker);
+
+                    log_info(get_logger(),
+                            "## Se terminó la Query %d en el Worker %d",
+                            query_id, id_worker);
 
                     worker_libera_query_finalizado(id_worker, query_id, program_counter);
                     notificar_finalizacion_a_query_control(query_id);
@@ -230,7 +234,7 @@ void liberar_aviso_completo(t_aviso_worker_master* aviso) {
 
 t_queue* cola_envio_pedidos;
 
-void agregar_siguiente_query_a_enviar(t_query* query, t_worker_conectado* worker_libre, t_confirmacion_pedido* conf) {
+void agregar_siguiente_query_a_enviar(t_query* query, uint32_t prioridad, t_worker_conectado* worker_libre, t_confirmacion_pedido* conf) {
 
     t_siguiente_pedido* nuevo_pedido = malloc(sizeof(t_siguiente_pedido));
 
@@ -246,6 +250,7 @@ void agregar_siguiente_query_a_enviar(t_query* query, t_worker_conectado* worker
     nuevo_pedido -> worker_asignado = worker_a_usar;
     nuevo_pedido -> tipo = PEDIDO_QUERY;
     nuevo_pedido -> confirmacion = conf;
+    nuevo_pedido -> prioridad = prioridad;
     
 
     queue_push(cola_envio_pedidos, nuevo_pedido);
@@ -264,7 +269,7 @@ void agregar_pedido_interrupcion(t_worker_conectado* worker, uint32_t query_id, 
     nuevo_pedido -> query_path = mensaje_interrupt;
     nuevo_pedido -> worker_asignado = worker;
     nuevo_pedido -> tipo = INTERRUPCION;
-    nuevo_pedido->confirmacion = conf;
+    nuevo_pedido -> confirmacion = conf;
 
     queue_push(cola_envio_pedidos, nuevo_pedido);
     sem_post(sem_envio_pedido_worker_pendiente);
@@ -308,13 +313,16 @@ void* tratar_siguientes_pedidos_a_enviar_worker(void* _) {
         t_worker_conectado* worker = sig_pedido->worker_asignado;
         t_motivo_pedido_master_worker motivo = sig_pedido -> tipo;
         t_confirmacion_pedido* conf = sig_pedido -> confirmacion;
+        uint32_t prioridad_pedido;
+        if (motivo == PEDIDO_QUERY) {
+            prioridad_pedido = sig_pedido -> prioridad;
+        }        
 
         free(sig_pedido);
 
         t_pedido_master_worker* pedido = malloc(sizeof(t_pedido_master_worker));
         pedido->query_id= qid_pedido;
-        // pedido->program_counter = pc_pedido;
-        pedido->program_counter = 4;
+        pedido->program_counter = pc_pedido;
         pedido->query_path = path;
         pedido->motivo = motivo;
 
@@ -327,8 +335,13 @@ void* tratar_siguientes_pedidos_a_enviar_worker(void* _) {
 
 
         if (enviar_siguiente_pedido(worker, pedido)) {
-            log_info(get_logger(), "[ENVIO] Pedido enviado a Worker %u", 
-                     worker->id_worker);
+            if(motivo==PEDIDO_QUERY) {
+                log_info(get_logger(), "## Se envía la Query %u (%u) al Worker %u", 
+                    qid_pedido, prioridad_pedido, worker->id_worker);
+            }else {
+                log_info(get_logger(), "Se envía pedido de interrupcion a Worker %u",
+                    worker->id_worker);
+            }
         } else {
             log_error(get_logger(), "[ERROR] Falló el envío a Worker %u", worker->id_worker);
             
@@ -352,7 +365,7 @@ void inicializar_sistema_confirmaciones() {
     pthread_mutex_init(&mutex_confirmaciones, NULL);
 }
 
-bool asignar_query_a_worker(t_query* query, t_worker_conectado* worker) {
+bool asignar_query_a_worker(t_query* query, uint32_t prioridad, t_worker_conectado* worker) {
 
     bool exito_asignacion = false;
     
@@ -366,7 +379,7 @@ bool asignar_query_a_worker(t_query* query, t_worker_conectado* worker) {
     log_info(get_logger(), "[DEBUG] Esperando confirmación de Worker %u para QID %u...", 
              worker->id_worker, query->query_id);
 
-    agregar_siguiente_query_a_enviar(query, worker, conf);
+    agregar_siguiente_query_a_enviar(query, prioridad, worker, conf);
 
 
     struct timespec timeout;

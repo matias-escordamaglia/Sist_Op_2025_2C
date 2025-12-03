@@ -72,11 +72,11 @@ void* manejar_query(void* arg) {
 
 
 
-bool mandar_lectura_a_query_con_id(char* string_crudo, uint32_t id_query) {
+bool mandar_lectura_a_query_con_id(char* string_crudo, uint32_t id_query, uint32_t worker_id) {
 
     
-    char* file_tag;
-    char* lectura;
+    char* file_tag = NULL;
+    char* lectura = NULL;
 
     if (separar_string(string_crudo, &file_tag, &lectura)) {
         printf("FILE:TAG: %s\n", file_tag);
@@ -84,8 +84,8 @@ bool mandar_lectura_a_query_con_id(char* string_crudo, uint32_t id_query) {
        
     } else {        
         printf("Error al separar el string\n");
-        free(file_tag);
-        free(lectura);
+        if(file_tag) free(file_tag); 
+        if(lectura) free(lectura);
         return false;
     }
 
@@ -117,7 +117,9 @@ bool mandar_lectura_a_query_con_id(char* string_crudo, uint32_t id_query) {
 
     enviar_paquete(paquete, query->conexion);
 
-    log_info(get_logger(), "[MANEJO_QUERY] Aviso de lectura enviado a Query");
+    log_info(get_logger(), 
+            "## Se envía un mensaje de lectura de la Query %d en el Worker %d al Query Control",
+            id_query, worker_id);
 
     free(file_tag);
     free(lectura);

@@ -12,7 +12,9 @@ void envioAQueryInterpreter(){
              (query_actual.query_path != NULL ? query_actual.query_path : "NULO"), 
              query_actual.pc_actual);
 
-    char* const* vec = instrucciones_desde(query_actual.query_path, query_actual.pc_actual, &cant);     
+    uint32_t pc_para_buscar = (query_actual.pc_actual == 0) ? 1 : query_actual.pc_actual;
+
+    char* const* vec = instrucciones_desde(query_actual.query_path, pc_para_buscar, &cant);     
     if (vec != NULL) {
         log_info(logger, "[DEBUG] Recuperadas %zu instrucciones (Desde PC: %u):", cant, query_actual.pc_actual);
         
@@ -21,12 +23,15 @@ void envioAQueryInterpreter(){
             log_info(logger, "   -> Instr[%zu]: '%s'", i, vec[i]);
         }
     } else {
-        log_error(logger, "[DEBUG] VEC es NULL. Revisa si el PC (%u) es mayor que la cantidad de lineas del archivo.", query_actual.pc_actual);
+        log_error(logger, "[DEBUG] VEC es NULL. PC (%u) fuera de rango.", pc_para_buscar);
     }
     
-    // char* const* vec = instrucciones_desde("querie1.txt", 4, &cant);
+    
     if (!vec) {
-        log_error(logger, "No hay instrucciones desde la 4 para %s", "querie1.txt");
+        log_error(logger, "No se pudieron obtener instrucciones para %s desde PC %d", 
+                  query_actual.query_path, pc_para_buscar);
+        char* mensaje_error = strdup("Error al obtener instrucciones del archivo");
+        deterner_ejecucion_query_error(mensaje_error);
         return;
     }
 
@@ -518,51 +523,51 @@ int ejecutar_delete(t_create* c , uint32_t queryid) {
 
 //////////////////////////////// TERMINA LA SECCION DE EJECUCION DE INSTRUCCIONES /////////////////
 
-// int recibir_respuesta_storage(int conexion, t_log* logger) {
-//     int opcode_respuesta = recibir_operacion(conexion, logger);
-//     if (opcode_respuesta < 0) {
-//         log_error(logger, "[WORKER] Error al recibir opcode de respuesta de Storage (conexión caída?)");
-//         return 2; //fallo en la recepcion de la respuesta
-//     }
-
-//     if (opcode_respuesta != PAQUETE) {
-//         log_error(logger, "[WORKER] Opcode inesperado de Storage: %d (esperaba RESPONSE=%d)", opcode_respuesta, RESPONSE);
-//         return 2;
-//     }
-
-//     int size_buffer = 0;
-//     void* buffer = recibir_buffer(&size_buffer, conexion);
-//     if (buffer == NULL) {
-//         log_error(logger, "[WORKER] Error al recibir buffer de respuesta de Storage");
-//         return 2;
-//     }
-
-//     if (size_buffer < sizeof(int)) {
-//         log_error(logger, "[WORKER] Buffer de respuesta inválido (demasiado chico)");
-//         free(buffer);
-//         return 2;
-//     }
-
-//    // 4. Deserialización: Sacamos el entero del buffer
-//     int resultado_operacion;
-//     memcpy(&resultado_operacion, buffer, sizeof(int));
-//     free(buffer);
-//     return resultado_operacion; // si salio bien la operacion => resultado_operacion = ERROR_OK(0)
-// }
-
 int recibir_respuesta_storage(int conexion, t_log* logger) {
-    // MOCK ACTIVADO: Simulamos que Storage respondió OK
-    
-    // Simulamos que recibimos el OpCode RESPONSE (100)
-    log_trace(logger, "[MOCK] Storage envió OpCode: %d (RESPONSE)", RESPONSE);
+    int opcode_respuesta = recibir_operacion(conexion, logger);
+    if (opcode_respuesta < 0) {
+        log_error(logger, "[WORKER] Error al recibir opcode de respuesta de Storage (conexión caída?)");
+        return 2; //fallo en la recepcion de la respuesta
+    }
 
-    // Simulamos que leímos el buffer y adentro venía un 0 (ERROR_OK)
-    int valor_simulado_del_buffer = 0; // 0 = ÉXITO, cambialo a otro número para probar errores
-    
-    log_info(logger, "[MOCK] Simulando respuesta exitosa del Storage -> Retorno: %d", valor_simulado_del_buffer);
+    if (opcode_respuesta != PAQUETE) {
+        log_error(logger, "[WORKER] Opcode inesperado de Storage: %d (esperaba RESPONSE=%d)", opcode_respuesta, RESPONSE);
+        return 2;
+    }
 
-    return valor_simulado_del_buffer;
+    int size_buffer = 0;
+    void* buffer = recibir_buffer(&size_buffer, conexion);
+    if (buffer == NULL) {
+        log_error(logger, "[WORKER] Error al recibir buffer de respuesta de Storage");
+        return 2;
+    }
+
+    if (size_buffer < sizeof(int)) {
+        log_error(logger, "[WORKER] Buffer de respuesta inválido (demasiado chico)");
+        free(buffer);
+        return 2;
+    }
+
+   // 4. Deserialización: Sacamos el entero del buffer
+    int resultado_operacion;
+    memcpy(&resultado_operacion, buffer, sizeof(int));
+    free(buffer);
+    return resultado_operacion; // si salio bien la operacion => resultado_operacion = ERROR_OK(0)
 }
+
+// int recibir_respuesta_storage(int conexion, t_log* logger) {
+//     // MOCK ACTIVADO: Simulamos que Storage respondió OK
+    
+//     // Simulamos que recibimos el OpCode RESPONSE (100)
+//     log_trace(logger, "[MOCK] Storage envió OpCode: %d (RESPONSE)", RESPONSE);
+
+//     // Simulamos que leímos el buffer y adentro venía un 0 (ERROR_OK)
+//     int valor_simulado_del_buffer = 0; // 0 = ÉXITO, cambialo a otro número para probar errores
+    
+//     log_info(logger, "[MOCK] Simulando respuesta exitosa del Storage -> Retorno: %d", valor_simulado_del_buffer);
+
+//     return valor_simulado_del_buffer;
+// }
 
 
 

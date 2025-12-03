@@ -21,11 +21,22 @@ int extraer_int(void* stream, int* desplazamiento) {
 
 char* extraer_string(void* stream, int* offset) {
     uint32_t longitud = extraer_uint32(stream, offset);
-    char* string = malloc(longitud);
-    memcpy(string, (char*)stream + *offset, longitud);
-    *offset += longitud;
+    char* string = malloc(longitud + 1); 
+
+    if (string == NULL) {
+        return NULL; 
+    }
+
+    if (longitud > 0) {
+        memcpy(string, (char*)stream + *offset, longitud);
+    }
+    
+    string[longitud] = '\0'; 
+    *offset += longitud; 
+     
     return string;
 }
+
 char* extraer_binario_y_tamanio(void* stream, int* offset,int* tam) {
     uint32_t longitud = extraer_uint32(stream, offset);
     *tam = (int)longitud; 
