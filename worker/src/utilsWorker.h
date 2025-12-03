@@ -51,7 +51,7 @@ void destruir_semaforos();
 void settear_valores_nulos_query_actual();
 void deterner_ejecucion_query_segun_motivo_y_mensaje(t_tipo_aviso_worker_master tipo, char* mensaje);
 void deterner_ejecucion_query_finalizado();
-void deterner_ejecucion_query_error(char* mensaje);
+void detener_ejecucion_query_error(char* mensaje);
 
 
 

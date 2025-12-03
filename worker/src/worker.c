@@ -5,7 +5,7 @@ char* archivo_config;
 uint32_t id_worker;
 
 pthread_t hilo_master;
-pthread_t hilo_storage;
+// pthread_t hilo_storage;
 
 pthread_t hilo_lanzamiento_ejecucion;
 
@@ -72,7 +72,7 @@ int main(int argc, char** argv)
 
     int* server_fd_copia_storage = malloc(sizeof(int));
     *server_fd_copia_storage = conexion_storage;
-	pthread_create(&hilo_storage, NULL, manejar_storage, server_fd_copia_storage);
+	// pthread_create(&hilo_storage, NULL, manejar_storage, server_fd_copia_storage);
 	
     int* server_fd_copia_master = malloc(sizeof(int));
     *server_fd_copia_master = conexion_master;
@@ -81,7 +81,7 @@ int main(int argc, char** argv)
 	/*
 	Lo siguiente debe ajustarse para cada modulo
 	*/
-	pthread_join(hilo_storage, NULL);
+	// pthread_join(hilo_storage, NULL);
 	pthread_join(hilo_master, NULL);
 
     destruir_semaforos();
