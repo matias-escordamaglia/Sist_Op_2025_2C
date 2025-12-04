@@ -1,8 +1,8 @@
 #!/bin/bash
 
 BIN_WORKER="./bin/worker"
-$CONF_WORKER1="worker_estabilidad_general1.config"
-$CONF_WORKER2="worker_estabilidad_general2.config"
+CONF_WORKER1="worker_estabilidad_general1.config"
+CONF_WORKER2="worker_estabilidad_general2.config"
 
 echo "~~~   INICIANDO LAS PRUEBAS DE ESTABILIDAD PARTE 1  ~~~"
 
