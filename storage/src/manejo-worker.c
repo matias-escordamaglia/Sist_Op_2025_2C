@@ -218,7 +218,6 @@ void enviar_estado_op(int estado, int socket){
 void enviar_paquete_read(int estado,char* contenido_salida, int tamanio_leido,int socket){
     t_paquete* paquete = crear_paquete();
     insertar_int_a_paquete(paquete,estado);
-    insertar_int_a_paquete(paquete,tamanio_leido);
     insertar_binario_a_paquete(paquete,contenido_salida,tamanio_leido);
     enviar_paquete(paquete,socket);
 }
