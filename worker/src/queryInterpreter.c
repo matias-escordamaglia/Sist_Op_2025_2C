@@ -314,12 +314,12 @@ bool ejecutar_linea(char* linea, uint32_t queryid) {
                 return false;
             }
             
-            int ok = flush_file_tag_en_memoria(c.nombre_archivo, c.tag, queryid);
-            if (ok != ERROR_OK) {
-                finalizar_query_con_error(ok);
-                destruir_create(&c);
-                return false;
-            }
+            // int ok = flush_file_tag_en_memoria(c.nombre_archivo, c.tag, queryid);
+            // if (ok != ERROR_OK) {
+            //     finalizar_query_con_error(ok);
+            //     destruir_create(&c);
+            //     return false;
+            // }
 
             c.op = DELETE;
             
