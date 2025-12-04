@@ -84,10 +84,6 @@ void ejecutarOperacion(char* const* instrucciones, size_t cantidad)
             query_actual.pc_actual = i + 1; // PC queda apuntando a la fallida (1-based)
 
         
-            char* texto_mockeado = strdup("Error de mockeo");
-            
-
-            detener_ejecucion_query_error(texto_mockeado);
             return;
         }
         
