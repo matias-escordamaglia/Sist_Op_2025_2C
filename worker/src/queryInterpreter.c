@@ -189,7 +189,7 @@ bool ejecutar_linea(char* linea, uint32_t queryid) {
                 return false;
             }
 
-            // Llama directo a memoria (asume query_id en pedido, ajusta si no)
+            // Llama directo a memoria (asume query_id en pedido, ajusta sejecutar_flushi no)
             int ok = memoria_write(&w, queryid);
 
             if (ok != 0) {
@@ -271,8 +271,12 @@ bool ejecutar_linea(char* linea, uint32_t queryid) {
                 return false;
             }
             
-            flush_file_tag_en_memoria(c.nombre_archivo, c.tag, queryid);
-
+            int ok = flush_file_tag_en_memoria(c.nombre_archivo, c.tag, queryid);
+            if (ok != ERROR_OK) {
+                finalizar_query_con_error(ok);
+                destruir_create(&c);
+                return false;
+            }
             int code = ejecutar_commit(&c,queryid);
             if (code != ERROR_OK) {
                 finalizar_query_con_error(code);
@@ -293,7 +297,12 @@ bool ejecutar_linea(char* linea, uint32_t queryid) {
                 return false;
             }
 
-            flush_file_tag_en_memoria(c.nombre_archivo, c.tag, queryid);
+            int ok = flush_file_tag_en_memoria(c.nombre_archivo, c.tag, queryid);
+            if (ok != ERROR_OK) {
+                finalizar_query_con_error(ok);
+                return false;
+            }
+
             
             log_info(logger, "## Query %u: - Instrucción realizada: FLUSH", queryid);
 
@@ -309,8 +318,13 @@ bool ejecutar_linea(char* linea, uint32_t queryid) {
                 return false;
             }
             
-            flush_file_tag_en_memoria(c.nombre_archivo, c.tag, queryid);
-            
+            int ok = flush_file_tag_en_memoria(c.nombre_archivo, c.tag, queryid);
+            if (ok != ERROR_OK) {
+                finalizar_query_con_error(ok);
+                destruir_create(&c);
+                return false;
+            }
+
             c.op = DELETE;
             
             int code = ejecutar_delete(&c,queryid);     // 1 = OK, ≠1 = enum/código de error
@@ -346,31 +360,35 @@ bool ejecutar_linea(char* linea, uint32_t queryid) {
             return false;
     }
 }
-void flush_file_tag_en_memoria(char* file, char* tag, uint32_t id_query) {
+int flush_file_tag_en_memoria(char* file, char* tag, uint32_t id_query) {
     pthread_mutex_lock(&mutex_mem);
 
     t_tabla_paginas* tabla = buscar_en_lista_global(file, tag);
 
     if (tabla == NULL) {
         pthread_mutex_unlock(&mutex_mem);
-        return;
+        return -7;
     }
 
     int cantidad_paginas = list_size(tabla->paginas_proceso);
 
+    int estado_escritura = -7; 
     for (int i = 0; i < cantidad_paginas; i++) {
         t_entrada_pagina* entrada = (t_entrada_pagina*)list_get(tabla->paginas_proceso, i);
 
         if (entrada->presente && entrada->modificado) {
-            if (escribir_pagina_a_storage(entrada, id_query) == 0) {
+            estado_escritura = escribir_pagina_a_storage(entrada, id_query);
+            if (estado_escritura == 0) {
                 entrada->modificado = false;
             } else {
+                
                 log_error(logger, "Query %u: Error al hacer FLUSH de página %u", id_query, entrada->nro_pagina);
             }
         }
     }
 
     pthread_mutex_unlock(&mutex_mem);
+    return estado_escritura;
 }
 
 void enviar_lectura_a_master(char* file, char* tag, void* contenido, uint32_t tamanio) {
