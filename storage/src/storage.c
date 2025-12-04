@@ -421,6 +421,9 @@ void inicializar_dir_logic_block( char* ruta){
     else {
         log_info(logger, "Tag %s creado correctamente", ruta_tag_BASE); 
     }
+    char* key_initial = crear_key_file_tag("initial_file","BASE"); 
+    anadir_a_dicc_estado(key_initial);
+    iniciar_mutex_file_tag(key_initial);
 
 
 //metadata
