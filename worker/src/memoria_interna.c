@@ -58,7 +58,7 @@ void free_tabla(void *elem) {
     free(tabla);
 }
 
-int memoria_read(t_write* r, void* buffer_destino, uint32_t id_query) {
+int memoria_read(t_read* r, void* buffer_destino, uint32_t id_query) {
     return acceder_memoria(r->file, r->tag, r->dir_base, buffer_destino, r->len, false, id_query);
 }
 

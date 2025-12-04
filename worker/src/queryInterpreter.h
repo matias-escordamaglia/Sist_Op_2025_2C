@@ -43,7 +43,9 @@ void flush_file_tag_en_memoria(char* file, char* tag, uint32_t id_query);
 void finalizar_query_con_error(int motivo);
 char* storage_error_to_string(int motivo);
 void destruir_write(t_write* w);
+void destruir_read(t_read* r);
 void destruir_create(t_create* c);
 void destruir_tag(t_tag* t);
+void desconectarseDeStorage();
 
 #endif // QUERYINTERPRETER_H

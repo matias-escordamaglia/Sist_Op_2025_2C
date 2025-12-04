@@ -209,17 +209,16 @@ bool ejecutar_linea(char* linea, uint32_t queryid) {
                 return false;
             }
 
-            // 1. Preparamos un buffer para recibir los datos leídos desde memoria
-            void* buffer_leido = malloc(r.len);
+            void* buffer_leido = malloc(r.len + 1);
             
             if (!buffer_leido) {
                 log_error(logger, "Fallo malloc en READ");
                 destruir_read(&r);
                 return false;
             }
-            // Inicializo en 0 por seguridad
-            memset(buffer_leido, 0, r.len); 
-            // 2. Llamada a memoria (igual que write, pero pasando el buffer vacio para llenar)
+            
+            memset(buffer_leido, 0, r.len + 1); 
+
             int ok = memoria_read(&r, buffer_leido, queryid);
             
             if (ok  !=0) {
@@ -229,13 +228,18 @@ bool ejecutar_linea(char* linea, uint32_t queryid) {
                 return false;
             }
 
-            log_info(logger, "AAAAAAAAA : %s",buffer_leido);
+            char* contenido_como_string = (char*)buffer_leido;
+            
+            if (strlen(contenido_como_string) > 0) {
+                log_info(logger, "Contenido Leído: %s", contenido_como_string);
+            } else {
+                log_warning(logger, "Contenido Leído es vacío o son bytes nulos (binario 0).");
+            }
             
             enviar_lectura_a_master(r.file, r.tag, buffer_leido, r.len);
-            // Log obligatorio
+            
             log_info(logger, "## Query %u: - Instrucción realizada: READ", queryid);
 
-            // Limpieza
             free(buffer_leido);
             destruir_read(&r);
             return true;
@@ -394,16 +398,13 @@ void enviar_lectura_a_master(char* file, char* tag, void* contenido, uint32_t ta
 
 
     size_t len_encabezado = strlen(file) + 1 + strlen(tag) + 1;
-    
     size_t len_total = len_encabezado + tamanio + 1;
 
     char* mensaje_unificado = malloc(len_total);
-    if (mensaje_unificado == NULL) {
-        
-        return; 
-    }
+    if (mensaje_unificado == NULL) return;
 
     sprintf(mensaje_unificado, "%s:%s ", file, tag);
+
 
     memcpy(mensaje_unificado + len_encabezado, contenido, tamanio);
 
@@ -412,8 +413,8 @@ void enviar_lectura_a_master(char* file, char* tag, void* contenido, uint32_t ta
     t_paquete* paquete = crear_paquete();
     t_tipo_aviso_worker_master tipo_aviso = NUEVA_LECTURA;
 
+
     insertar_variable_a_paquete(paquete, &tipo_aviso, sizeof(t_tipo_aviso_worker_master));
-    
     insertar_string_a_paquete(paquete, mensaje_unificado);
 
     enviar_paquete(paquete, conexion_master);
@@ -836,7 +837,7 @@ void destruir_truncate(t_truncate* c) {
     c->tam = 0;
 }
 
-bool parsear_tag_params(  char* params, t_tag* out) {
+bool parsear_tag_params(char* params, t_tag* out) {
     if (!params || !out) return false;
     params = saltar_blancos(params);
     if (*params == '\0') return false;
@@ -857,7 +858,7 @@ bool parsear_tag_params(  char* params, t_tag* out) {
     char* origen = p;
 
     // tomar segundo token (destino)
-    const char* p2 = saltar_blancos(sp1 + 1);
+    char* p2 = saltar_blancos(sp1 + 1);
     if (*p2 == '\0') { free(tmp); return false; }
     // p2 debería ser el último token (FD:TD). Si hubiera más, lo ignoramos/validamos:
     char* sp2 = strpbrk(p2, " \t");
@@ -866,7 +867,7 @@ bool parsear_tag_params(  char* params, t_tag* out) {
         // *sp2 = '\0'; // o return false;
         *sp2 = '\0';
     }
-    const char* destino = p2;
+    char* destino = p2;
 
     // split origen "FO:TO"
     char* colon1 = strchr(origen, ':');
