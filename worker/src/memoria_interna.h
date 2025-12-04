@@ -28,7 +28,7 @@ void iniciar_memoria_interna(t_config* config);
 void destroy_memoria_interna(void);
 int memoria_write(t_write* w, uint32_t id_query);
 int acceder_memoria(char* file, char* tag,uint32_t dir_base, void *buffer, uint32_t tamanio,bool es_write, uint32_t id_query);
-int memoria_read(t_write* r, void* buffer_destino, uint32_t id_query);
+int memoria_read(t_read* r, void* buffer_destino, uint32_t id_query);
 void memoria_flush(char *file_tag, uint32_t query_id);
 void memoria_flush_all(uint32_t query_id);
 void memoria_update_tam_file(char *file_tag, uint32_t nuevo_tam);
