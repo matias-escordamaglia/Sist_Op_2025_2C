@@ -362,6 +362,7 @@ int flush_file_tag_en_memoria(char* file, char* tag, uint32_t id_query) {
     t_tabla_paginas* tabla = buscar_en_lista_global(file, tag);
 
     if (tabla == NULL) {
+        log_info(logger,"AAAAAAAAAAAAA");
         pthread_mutex_unlock(&mutex_mem);
         return -7;
     }
@@ -371,8 +372,9 @@ int flush_file_tag_en_memoria(char* file, char* tag, uint32_t id_query) {
     int estado_escritura = -7; 
     for (int i = 0; i < cantidad_paginas; i++) {
         t_entrada_pagina* entrada = (t_entrada_pagina*)list_get(tabla->paginas_proceso, i);
-
+        log_info(logger,"bbbbb");
         if (entrada->presente && entrada->modificado) {
+            
             estado_escritura = escribir_pagina_a_storage(entrada, id_query);
             if (estado_escritura == 0) {
                 entrada->modificado = false;
@@ -384,6 +386,9 @@ int flush_file_tag_en_memoria(char* file, char* tag, uint32_t id_query) {
     }
 
     pthread_mutex_unlock(&mutex_mem);
+    if(estado_escritura = -7){
+      log_info(logger,"CCCCCCC");
+    }
     return estado_escritura;
 }
 
