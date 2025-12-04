@@ -362,9 +362,9 @@ int flush_file_tag_en_memoria(char* file, char* tag, uint32_t id_query) {
     t_tabla_paginas* tabla = buscar_en_lista_global(file, tag);
 
     if (tabla == NULL) {
-        log_info(logger,"AAAAAAAAAAAAA");
+        log_info(logger,"No hay algo para hacer flush");
         pthread_mutex_unlock(&mutex_mem);
-        return -7;
+        return 0;
     }
 
     int cantidad_paginas = list_size(tabla->paginas_proceso);
