@@ -10,11 +10,20 @@ echo "~~~   INICIANDO LAS PRUEBAS DE ERROR   ~~~"
 $BIN_QUERY $CONF_QUERY "ESTRUCTURA_ARCHIVO_COMMITED" 1 &
 echo "-> Lanzado ESTRUCTURA_ARCHIVO_COMMITED"
 
+wait
+echo -p "Presionar ener para ejecutar el siguiente" input
+
 $BIN_QUERY $CONF_QUERY "FILE_EXISTENTE" 1 &
 echo "-> Lanzado FILE_EXISTENTE"
 
+wait
+echo -p "Presionar ener para ejecutar el siguiente" input
+
 $BIN_QUERY $CONF_QUERY "LECTURA_FUERA_DE_LIMITE" 1 &
 echo "-> Lanzado LECTURA_FUERA_DE_LIMITE"
+
+wait
+echo -p "Presionar ener para ejecutar el siguiente" input
 
 $BIN_QUERY $CONF_QUERY "TAG_EXISTENTE" 1 &
 echo "-> Lanzado TAG_EXISTENTE"
