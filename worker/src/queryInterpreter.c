@@ -386,7 +386,7 @@ int flush_file_tag_en_memoria(char* file, char* tag, uint32_t id_query) {
     }
 
     pthread_mutex_unlock(&mutex_mem);
-    if(estado_escritura = -7){
+    if(estado_escritura == -7){
       log_info(logger,"CCCCCCC");
     }
     return estado_escritura;
