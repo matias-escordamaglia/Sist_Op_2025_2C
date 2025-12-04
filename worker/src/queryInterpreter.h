@@ -12,6 +12,7 @@
 
 
 void* main_lanzamiento_ejecucion();
+bool parsear_read_params(char* params, t_read* out);
 void envioAQueryInterpreter();
 char* instruccion_n(char* nombre, size_t idx);
 t_programa* obtener_programa(char* nombre);

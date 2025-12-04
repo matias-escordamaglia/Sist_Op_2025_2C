@@ -752,10 +752,10 @@ bool empieza_con(char* s, char* kw) {
     return strncmp(s, kw, n)==0 && (s[n]=='\0' || isspace((unsigned char)s[n]));
 }
 
-char* saltar_blancos(char* p) {
-    while (*p==' ' || *p=='\t') ++p;
-    return p;
-}
+// char* saltar_blancos(char* p) {
+//     while (*p==' ' || *p=='\t') ++p;
+//     return p;
+// }
 
 char* instruccion_n(char* nombre, size_t idx){
     t_programa* p = obtener_programa(nombre);
