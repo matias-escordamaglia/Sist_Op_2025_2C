@@ -128,7 +128,7 @@ void* atender_conexion_worker(void* arg) {
                     char* nombre_tag  = extraer_string(buffer_st,&offset);
 
                     //log_info(logger_worker, "Aplicando RETARDO_OPERACION para OP: %d", operation);
-                    usleep(RETARDO_OPERACION * 100);
+                    usleep(RETARDO_OPERACION * 1000);
 
                     int estado = -1; 
                     char* contenido_salida;
