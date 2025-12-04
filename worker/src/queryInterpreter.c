@@ -192,7 +192,7 @@ bool ejecutar_linea(char* linea, uint32_t queryid) {
             // Llama directo a memoria (asume query_id en pedido, ajusta si no)
             int ok = memoria_write(&w, queryid);
 
-            if (ok < 0) {
+            if (ok != 0) {
               finalizar_query_con_error(ok);
               destruir_write(&w);
               return false;
@@ -221,7 +221,7 @@ bool ejecutar_linea(char* linea, uint32_t queryid) {
 
             int ok = memoria_read(&r, buffer_leido, queryid);
             
-            if (ok < 0) {
+            if (ok  !=0) {
                 finalizar_query_con_error(ok);
                 free(buffer_leido);
                 destruir_read(&r);
