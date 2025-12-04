@@ -12,6 +12,7 @@
 
 
 void* main_lanzamiento_ejecucion();
+bool parsear_read_params(char* params, t_read* out);
 void envioAQueryInterpreter();
 char* instruccion_n(char* nombre, size_t idx);
 t_programa* obtener_programa(char* nombre);
@@ -37,12 +38,14 @@ void destruir_tag(t_tag* t);
 int recibir_respuesta_storage(int conexion, t_log* logger);
 int ejecutar_commit(t_create* c,uint32_t queryid);
 int ejecutar_delete(t_create* c, uint32_t queryid);
-void enviar_lectura_a_master(char* file, char* tag, void* contenido, uint32_t tamanio, uint32_t query_id);
+void enviar_lectura_a_master(char* file, char* tag, void* contenido, uint32_t tamanio);
 void flush_file_tag_en_memoria(char* file, char* tag, uint32_t id_query);
-void finalizar_query_con_error(t_tipo_aviso_worker_master tipodeerror, int motivo);
+void finalizar_query_con_error(int motivo);
 char* storage_error_to_string(int motivo);
 void destruir_write(t_write* w);
+void destruir_read(t_read* r);
 void destruir_create(t_create* c);
 void destruir_tag(t_tag* t);
+void desconectarseDeStorage();
 
 #endif // QUERYINTERPRETER_H

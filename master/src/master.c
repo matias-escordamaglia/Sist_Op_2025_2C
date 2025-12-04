@@ -18,9 +18,12 @@ int main(int argc, char** argv) {
         return EXIT_FAILURE;
     }
 
-    config = iniciar_config(logger, path_config);
+    t_log* log_temp = log_create("temp.log","master",true,LOG_LEVEL_INFO);
+    config = iniciar_config(log_temp, path_config);
 
 	log_level = obtener_log_level_config(config);
+
+    log_destroy(log_temp);
 
 	logger = log_create("master.log", "master", true, log_level);
 

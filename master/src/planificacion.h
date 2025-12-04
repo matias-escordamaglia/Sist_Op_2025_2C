@@ -45,7 +45,8 @@ typedef struct
     t_query* query;
     uint64_t tiempo_llegada;
     uint32_t prioridad_efectiva;
-    uint64_t ultimo_aging;  
+    uint64_t ultimo_aging;
+    t_worker_conectado* worker_asignado;
 }t_elemento_cola;
 
 
@@ -55,6 +56,7 @@ t_query* crear_nuevo_query(char* query_path, uint32_t prioridad, int conexion);
 t_elemento_cola* crear_nuevo_elemento(t_query* query);
 bool buscar_por_qid(t_list* lista, uint32_t qid);
 t_elemento_cola* buscar_y_remover_por_qid(t_list* lista, uint32_t qid);
+t_elemento_cola* obtener_elemento_sin_remover(t_list* lista, uint32_t qid);
 
 void *main_planificacion();
 void planificar_por_fifo();

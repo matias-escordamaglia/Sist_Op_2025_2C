@@ -101,8 +101,7 @@ void* atender_conexion_worker(void* arg) {
     // Bucle principal
     while (1) {
         printf("----------------------------------------------------------------------------------\n");
-        printf("----------------------------------------------------------------------------------\n");
-
+        
         int cod_op = recibir_operacion(cliente_fd, logger_worker);
         if (cod_op == -1) {
             log_warning(logger_worker, "[WORKER] WORKER %u se desconectó (FD %d)", id_worker, cliente_fd);
@@ -219,7 +218,6 @@ void enviar_estado_op(int estado, int socket){
 void enviar_paquete_read(int estado,char* contenido_salida, int tamanio_leido,int socket){
     t_paquete* paquete = crear_paquete();
     insertar_int_a_paquete(paquete,estado);
-    insertar_int_a_paquete(paquete,tamanio_leido);
     insertar_binario_a_paquete(paquete,contenido_salida,tamanio_leido);
     enviar_paquete(paquete,socket);
 }
@@ -275,7 +273,7 @@ int atender_truncate(char* file, char* tag,int tamanio, int query_id){
 
     if (estado_tag == 0 ) { //commited 
         log_error(logger, "Error: Se intentó TRUNCATE en un File:Tag en estado COMMITED: %s", key_file_tag);
-        estado_truncate = -1; 
+        estado_truncate = ERROR_DESCONOCIDO; 
     } else {
         estado_truncate = truncar_archivo(file, tag, tamanio);
         if(estado_truncate==0)

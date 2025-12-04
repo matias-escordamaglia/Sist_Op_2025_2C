@@ -57,6 +57,7 @@ t_elemento_cola* crear_nuevo_elemento(t_query* query) {
     nuevo_elemento->tiempo_llegada = timestamp_actual_en_milisegundos();
     nuevo_elemento->prioridad_efectiva = query->prioridad;
     nuevo_elemento->ultimo_aging = nuevo_elemento->tiempo_llegada;
+    nuevo_elemento->worker_asignado = NULL;
 
     return nuevo_elemento;
     
@@ -89,6 +90,18 @@ bool buscar_por_qid(t_list* lista, uint32_t qid) {
         }
     }
     return false;
+}
+
+t_elemento_cola* obtener_elemento_sin_remover(t_list* lista, uint32_t qid) {
+    if (lista == NULL || list_is_empty(lista)) return NULL;
+    
+    for (int i = 0; i < list_size(lista); i++) {
+        t_elemento_cola* e = list_get(lista, i);
+        if (e->query->query_id == qid) {
+            return e;
+        }
+    }
+    return NULL;
 }
 
 t_elemento_cola* obtener_mas_antiguo(t_list* cola) {
@@ -277,11 +290,34 @@ void intentar_asignaciones_prioridades() {
         UNLOCK(&mutex_cola_exec);
         
 
-        t_worker_conectado* worker_a_desalojar = 
-            obtener_worker_por_query_id(query_victima->query->query_id);
+        t_worker_conectado* worker_a_desalojar = query_victima->worker_asignado;
+        
+        //Salvo en caso que haya habido un free
+        if (worker_a_desalojar == NULL) {
+            log_error(get_logger(), "[ERROR] Query %d en EXEC no tiene worker asignado.", query_victima->query->query_id);
+            
+            LOCK(&mutex_cola_exec);
+            list_remove_element(cola_exec, query_victima);
+            UNLOCK(&mutex_cola_exec);
+            UNLOCK(&mutex_estado_critico);
+            continue;
+        }
 
         UNLOCK(&mutex_estado_critico);
         
+        if (worker_a_desalojar == NULL) {
+            log_error(get_logger(), "[CRITICAL] Se intentó desalojar la Query %d pero NO se encontró su Worker asociado.", 
+                      query_victima->query->query_id);
+            
+            // Recuperamos el estado crítico para mantener la coherencia del flujo o abortamos
+            LOCK(&mutex_estado_critico);
+            
+            // Opcional: Abortar o intentar recuperar (aquí abortamos para que lo veas)
+             while(true) {
+                printf("ERROR FATAL: WORKER A DESALOJAR ES NULL\n");
+                sleep(5);
+            }
+        }
     
         t_respuesta_desalojo respuesta = solicitar_desalojo_bloqueante(worker_a_desalojar, query_victima->query->query_id);
 
@@ -297,13 +333,25 @@ void intentar_asignaciones_prioridades() {
                 agregar_query_ordenada(cola_ready, query_victima);
                 UNLOCK(&mutex_cola_ready);
 
-                procesar_asignacion_query_a_worker(query_candidata, worker_libre);
-                
                 log_info(get_logger(), 
+                        "## Se desaloja la Query %d (%d) del Worker %d - Motivo: PRIORIDAD",
+                        query_victima->query->query_id, 
+                        query_victima->prioridad_efectiva, 
+                        worker_a_desalojar->id_worker);
+
+                procesar_asignacion_query_a_worker(query_candidata, worker_a_desalojar);
+                
+                /*log_info(get_logger(), 
                             "Desalojo completado: Query %d ejecutándose, Query %d en READY (PC=%d)",
                             query_candidata->query->query_id,
                             query_victima->query->query_id,
                             respuesta.pc);
+                */
+                log_info(get_logger(), 
+                        "Query %d asignado a Worker %d",
+                        query_candidata->query->query_id,
+                        worker_a_desalojar->id_worker);
+
                 continue; 
                 
             case DESALOJO_QUERY_DIFERENTE:
@@ -443,22 +491,37 @@ void agregar_query_ordenada(t_list* lista, t_elemento_cola* elemento) {
 
 //
 void procesar_asignacion_query_a_worker(t_elemento_cola* query_candidata, t_worker_conectado* worker_libre) {
-    if (asignar_query_a_worker(query_candidata->query, worker_libre)) {
+    
+
+    if (query_candidata == NULL) {
+        log_error(get_logger(), "[CRITICAL] PLANIFICACION: Se intentó procesar asignación con 'query_candidata' NULL");
+    }
+
+    if (query_candidata->query == NULL) {
+        log_error(get_logger(), "[CRITICAL] PLANIFICACION: La estructura interna 'query' de la candidata es NULL");
+    }
+
+    if (worker_libre == NULL) {
+        log_error(get_logger(), "[CRITICAL] PLANIFICACION: Se intentó procesar asignación con 'worker_libre' NULL (ID Query candidata: %d)", 
+                  query_candidata->query->query_id);
+    }
+
+
+    if (asignar_query_a_worker(query_candidata->query, query_candidata->prioridad_efectiva, worker_libre)) {
 
         //en worker_conexion.c se hace la asignación una vez llega la confirmación allí
+
+        query_candidata->worker_asignado = worker_libre;
 
         LOCK(&mutex_cola_exec);
             list_add(cola_exec, query_candidata);
         UNLOCK(&mutex_cola_exec);
     } else {
-        log_error(get_logger(), "Asignación falló: bloqueando sistema ya que no es un error cubierto por las indicaciones del enunciado. Query id: %d - Worker que se quería asignar: %d", 
+        log_error(get_logger(), "Asignación falló: Bloqueando sistema. Query id: %d - Worker ID: %d", 
                 query_candidata->query->query_id , worker_libre->id_worker);
-                
-        while(true) {
-            printf("ERROR FATAL AL ASIGNAR");
-            sleep(5);
-        }
     }
+
+    return;
 }
 
 
@@ -552,21 +615,27 @@ bool aplicar_aging_inteligente() {
                 // Verificar si CRUZÓ el umbral de desalojo
                 bool antes_no_podia = (prioridad_anterior >= umbral_desalojo);
                 bool ahora_si_puede = (nueva_prioridad < umbral_desalojo);
+
+                log_info(get_logger(),
+                        "##%d Cambio de prioridad: %d - %d",
+                        elemento->query->query_id,
+                        prioridad_anterior,
+                        nueva_prioridad);
                 
                 if (antes_no_podia && ahora_si_puede) {
-                    log_info(get_logger(), 
-                            "Aging RELEVANTE: Query %d (%d->%d) ahora puede desalojar (umbral=%d)", 
+                    /*log_info(get_logger(), 
+                            "[DEBUG] Aging RELEVANTE: Query %d (%d->%d) ahora puede desalojar (umbral=%d)", 
                             elemento->query->query_id,
                             prioridad_anterior,
                             nueva_prioridad,
-                            umbral_desalojo);
+                            umbral_desalojo);*/
                     puede_desalojar_ahora = true;
                 } else {
-                    log_debug(get_logger(), 
-                            "Aging: Query %d prioridad %d -> %d (sin impacto)", 
+                    /*log_info(get_logger(), 
+                            "[DEBUG] Aging: Query %d prioridad %d -> %d (sin impacto)", 
                             elemento->query->query_id,
                             prioridad_anterior,
-                            nueva_prioridad);
+                            nueva_prioridad);*/
                 }
             }
         }
@@ -603,11 +672,17 @@ void verificar_y_aplicar_aging_si_corresponde() {
             }
             
             if (nueva_prioridad != elemento->prioridad_efectiva) {
-                log_debug(get_logger(), 
+                /*log_debug(get_logger(), 
                          "Aging durante desalojo: Query %d %d -> %d", 
                          elemento->query->query_id,
                          elemento->prioridad_efectiva,
+                         nueva_prioridad);*/
+                log_info(get_logger(), 
+                         "##%d Cambio de prioridad: %d - %d", 
+                         elemento->query->query_id,
+                         elemento->prioridad_efectiva,
                          nueva_prioridad);
+                         
                 elemento->prioridad_efectiva = nueva_prioridad;
                 elemento->ultimo_aging = ahora;
             }
@@ -707,13 +782,13 @@ void manejar_worker_desconectado(uint32_t worker_id, uint32_t query_id_ejecutand
 
     t_worker_conectado* worker_temp = obtener_worker_por_id_uso_externo(worker_id);
 
+    t_elemento_cola* elemento = NULL;
+
     if (worker_temp->worker_conectado) {
 
         if ((int)query_id_ejecutando >= 0) {
 
             log_info(get_logger(), "Worker %d desconectado", worker_id);
-
-            t_elemento_cola* elemento = NULL;
 
             LOCK(&mutex_estado_critico);
 
@@ -727,9 +802,6 @@ void manejar_worker_desconectado(uint32_t worker_id, uint32_t query_id_ejecutand
                 LOCK(&mutex_cola_exit);
                 list_add(cola_exit, elemento);
                 UNLOCK(&mutex_cola_exit);
-                
-                log_info(get_logger(), "Query %d movido a EXIT por desconexión de worker", 
-                        query_id_ejecutando);
                 
                 
                 notificar_error_desconexion_a_query_control(elemento->query->conexion);
@@ -771,23 +843,28 @@ void manejar_worker_desconectado(uint32_t worker_id, uint32_t query_id_ejecutand
         // Marcar worker como desconectado
         marcar_worker_desconectado(worker_id);
         //sem_wait(cant_workers_libres); <-- puede que no vaya aquí ya que se le hizo wait al asignarle un query
+        log_info(get_logger(), "## Se desconecta el Worker %d - Se finaliza la Query %d - Cantidad total de Workers: %d", 
+                        worker_id, query_id_ejecutando, get_cant_workers_conectados());
     }
     
 }
 
 void manejar_query_control_desconectado(uint32_t query_id_activo) {
 
+    t_elemento_cola* elemento = NULL;
+
+    
     LOCK(&mutex_cola_exit);
-    bool encontrado = buscar_por_qid(cola_exit, query_id_activo);
+    elemento = obtener_elemento_sin_remover(cola_exit, query_id_activo);
     UNLOCK(&mutex_cola_exit);
 
-    if(!encontrado) {
-        LOCK(&mutex_estado_critico);
+    LOCK(&mutex_estado_critico);
 
-        log_info(get_logger(), "Query Control %d desconectado", query_id_activo);
+    if(elemento == NULL) {
+        
+
         
         if ((int)query_id_activo >= 0) {
-            t_elemento_cola* elemento = NULL;
             
             // Buscar en READY primero
             LOCK(&mutex_cola_ready);
@@ -831,8 +908,9 @@ void manejar_query_control_desconectado(uint32_t query_id_activo) {
                             // Liberar worker
                             sem_post(cant_workers_libres);
                             
-                            log_info(get_logger(), "Query %d cancelado y worker %d desalojado", 
-                                    query_id_activo, worker_id);
+                            log_info(get_logger(), "## Se desaloja la Query %d (%d) del Worker %d - Motivo: DESCONEXION", 
+                                    query_id_activo, elemento->prioridad_efectiva, worker_id);
+        
                             break; 
                             
                         case DESALOJO_QUERY_DIFERENTE:
@@ -926,8 +1004,19 @@ void manejar_query_control_desconectado(uint32_t query_id_activo) {
             }
         }
 
-        UNLOCK(&mutex_estado_critico);
+        int grado_multiprocesamiento = get_cant_workers_conectados();
+
+        if (elemento != NULL) {
+            log_info(get_logger(), "## Se desconecta un Query Control. Se finaliza la Query %d con prioridad %d. Nivel multiprocesamiento %d",
+                query_id_activo, elemento->prioridad_efectiva, grado_multiprocesamiento);
+        } else {
+            log_error(get_logger(), "## Se desconecta Query %d (No encontrada en listas). Nivel MP %d", 
+                query_id_activo, grado_multiprocesamiento);
+        }
+
+        
     }
+    UNLOCK(&mutex_estado_critico);
 }
 
 void worker_libera_query_finalizado(uint32_t worker_id, uint32_t query_id, uint32_t pc) {
@@ -940,6 +1029,8 @@ void worker_libera_query_finalizado(uint32_t worker_id, uint32_t query_id, uint3
     UNLOCK(&mutex_cola_exec);
     
     if (elemento != NULL) {
+
+        elemento->worker_asignado = NULL;
         
         LOCK(&mutex_cola_exit);
         list_add(cola_exit, elemento);

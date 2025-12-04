@@ -65,10 +65,10 @@ void deterner_ejecucion_query_segun_motivo_y_mensaje(t_tipo_aviso_worker_master 
 
 void deterner_ejecucion_query_finalizado()
 {
-	deterner_ejecucion_query_segun_motivo_y_mensaje(QUERY_FINALIZADO, NULL);
+	deterner_ejecucion_query_segun_motivo_y_mensaje(FINALIZACION_QUERY, NULL);
 }
 
-void deterner_ejecucion_query_error(char* mensaje)
+void detener_ejecucion_query_error(char* mensaje)
 {
 	deterner_ejecucion_query_segun_motivo_y_mensaje(ERROR_QUERY, mensaje);
 }

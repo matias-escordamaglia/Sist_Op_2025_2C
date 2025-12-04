@@ -12,21 +12,26 @@ void envioAQueryInterpreter(){
              (query_actual.query_path != NULL ? query_actual.query_path : "NULO"), 
              query_actual.pc_actual);
 
-    char* const* vec = instrucciones_desde(query_actual.query_path, query_actual.pc_actual, &cant);     
+    uint32_t pc_para_buscar = (query_actual.pc_actual == 0) ? 1 : query_actual.pc_actual;
+
+    char* const* vec = instrucciones_desde(query_actual.query_path, pc_para_buscar, &cant);     
     if (vec != NULL) {
         log_info(logger, "[DEBUG] Recuperadas %zu instrucciones (Desde PC: %u):", cant, query_actual.pc_actual);
         
         for (size_t i = 0; i < cant; i++) {
             // vec[i] es el string de la instrucción
-            log_info(logger, "   -> Instr[%zu]: '%s'", i, vec[i]);
+            //log_info(logger, "   -> Instr[%zu]: '%s'", i, vec[i]);
         }
     } else {
-        log_error(logger, "[DEBUG] VEC es NULL. Revisa si el PC (%u) es mayor que la cantidad de lineas del archivo.", query_actual.pc_actual);
+        log_error(logger, "[DEBUG] VEC es NULL. PC (%u) fuera de rango.", pc_para_buscar);
     }
     
-    // char* const* vec = instrucciones_desde("querie1.txt", 4, &cant);
+    
     if (!vec) {
-        log_error(logger, "No hay instrucciones desde la 4 para %s", "querie1.txt");
+        log_error(logger, "No se pudieron obtener instrucciones para %s desde PC %d", 
+                  query_actual.query_path, pc_para_buscar);
+        char* mensaje_error = strdup("Error al obtener instrucciones del archivo");
+        detener_ejecucion_query_error(mensaje_error);
         return;
     }
 
@@ -82,7 +87,7 @@ void ejecutarOperacion(char* const* instrucciones, size_t cantidad)
             char* texto_mockeado = strdup("Error de mockeo");
             
 
-            deterner_ejecucion_query_error(texto_mockeado);
+            detener_ejecucion_query_error(texto_mockeado);
             return;
         }
         
@@ -133,21 +138,23 @@ bool ejecutar_linea(char* linea, uint32_t queryid) {
         // trabajar para que solo ejecute la instruccion siguiente una vez que la actual fue realizada
         // con exito
         case CREATE: {
+            log_info(logger,"QUEEEEEEEEEEEEEEE");
             t_create c = {0};
             if (!parsear_create_params(params, &c)) {
                 log_error(logger, "Sintaxis CREATE inválida: %s", linea);
                 return false;
             }
-
+            log_info(logger,"1111111");
             int ok = ejecutar_create(&c,queryid);
-            // en caso de retornar  1 => son parametros invalidos
-            // en caso de retornar 2 => fallo la recepcion de la respuesta de storage.
+            log_info(logger,"12000299202 : %d",ok);
             if(ok != ERROR_OK){
-              finalizar_query_con_error(ERROR_QUERY, ok);
+              log_info(logger, "444444");
+              finalizar_query_con_error(ok);
               destruir_create(&c);
               return false;
             }
 
+            log_info(logger, "44444");
             // log obligatorio
             log_info(logger, "## Query %u: - Instrucción realizada: CREATE", queryid);
 
@@ -163,11 +170,13 @@ bool ejecutar_linea(char* linea, uint32_t queryid) {
             }
 
             int ok = ejecutar_truncate(&tr, queryid);
-             if(ok != ERROR_OK){
-              finalizar_query_con_error(ERROR_QUERY, ok);
+            log_info(logger,"AA00OO22 : %d",ok);
+            if(ok != ERROR_OK){
+              finalizar_query_con_error(ok);
               destruir_truncate(&tr);
               return false;
             }
+            actualizar_tam_memoria(tr.nombre_archivo, tr.tag, (uint32_t)tr.tam);
             // log obligatorio
             log_info(logger, "## Query %u: - Instrucción realizada: TRUNCATE", queryid);
             destruir_truncate(&tr);
@@ -182,8 +191,9 @@ bool ejecutar_linea(char* linea, uint32_t queryid) {
 
             // Llama directo a memoria (asume query_id en pedido, ajusta si no)
             int ok = memoria_write(&w, queryid);
+
             if (ok < 0) {
-              finalizar_query_con_error(ERROR_QUERY, ok);
+              finalizar_query_con_error(ok);
               destruir_write(&w);
               return false;
             }
@@ -193,39 +203,45 @@ bool ejecutar_linea(char* linea, uint32_t queryid) {
             return true;
         }
         case READ: {
-            t_write r = {0};
-            if (!parsear_write_params(params, &r)) {
+            t_read r = {0};
+            if (!parsear_read_params(params, &r)) {
                 log_error(logger, "Sintaxis READ inválida: %s", linea);
                 return false;
             }
 
-            // 1. Preparamos un buffer para recibir los datos leídos desde memoria
-            void* buffer_leido = malloc(r.len);
+            void* buffer_leido = malloc(r.len + 1);
+            
             if (!buffer_leido) {
                 log_error(logger, "Fallo malloc en READ");
-                destruir_write(&r);
+                destruir_read(&r);
                 return false;
             }
-            // Inicializo en 0 por seguridad
-            memset(buffer_leido, 0, r.len); 
+            
+            memset(buffer_leido, 0, r.len + 1); 
 
-            // 2. Llamada a memoria (igual que write, pero pasando el buffer vacio para llenar)
             int ok = memoria_read(&r, buffer_leido, queryid);
             
             if (ok < 0) {
-                finalizar_query_con_error(ERROR_QUERY, ok);
+                finalizar_query_con_error(ok);
                 free(buffer_leido);
-                destruir_write(&r);
+                destruir_read(&r);
                 return false;
             }
 
-            enviar_lectura_a_master(r.file, r.tag, buffer_leido, r.len, queryid);
-            // Log obligatorio
+            char* contenido_como_string = (char*)buffer_leido;
+            
+            if (strlen(contenido_como_string) > 0) {
+                log_info(logger, "Contenido Leído: %s", contenido_como_string);
+            } else {
+                log_warning(logger, "Contenido Leído es vacío o son bytes nulos (binario 0).");
+            }
+            
+            enviar_lectura_a_master(r.file, r.tag, buffer_leido, r.len);
+            
             log_info(logger, "## Query %u: - Instrucción realizada: READ", queryid);
 
-            // Limpieza
             free(buffer_leido);
-            destruir_write(&r);
+            destruir_read(&r);
             return true;
         }
         case TAG: {
@@ -235,8 +251,9 @@ bool ejecutar_linea(char* linea, uint32_t queryid) {
                 return false;
             }
             int ok = ejecutar_tag(&t,queryid);
+
              if(ok != ERROR_OK){
-              finalizar_query_con_error(ERROR_QUERY, ok);
+              finalizar_query_con_error(ok);
               destruir_tag(&t);
               return false;
             }
@@ -248,14 +265,17 @@ bool ejecutar_linea(char* linea, uint32_t queryid) {
         case COMMIT: {
             //aplicar FLUSH
             t_create c = {0};
-            flush_file_tag_en_memoria(c.nombre_archivo, c.tag, queryid);
+            
             if (!parsear_create_params(params, &c)) {
                 log_error(logger, "Sintaxis COMMIT inválida: %s", linea);
                 return false;
             }
+            
+            flush_file_tag_en_memoria(c.nombre_archivo, c.tag, queryid);
+
             int code = ejecutar_commit(&c,queryid);
             if (code != ERROR_OK) {
-                finalizar_query_con_error(ERROR_QUERY, code);
+                finalizar_query_con_error(code);
                 destruir_create(&c);
                 return false;
             }
@@ -283,16 +303,19 @@ bool ejecutar_linea(char* linea, uint32_t queryid) {
         }
         case DELETE: {
             t_create c = {0};
-            flush_file_tag_en_memoria(c.nombre_archivo, c.tag, queryid);
+            
             if (!parsear_create_params(params, &c)) {
                 log_error(logger, "Sintaxis DELETE inválida: %s", linea);
                 return false;
             }
+            
+            flush_file_tag_en_memoria(c.nombre_archivo, c.tag, queryid);
+            
             c.op = DELETE;
-
+            
             int code = ejecutar_delete(&c,queryid);     // 1 = OK, ≠1 = enum/código de error
             if (code != ERROR_OK) {
-                finalizar_query_con_error(ERROR_QUERY, code);
+                finalizar_query_con_error(code);
                 destruir_create(&c);
                 return false;
             }
@@ -350,33 +373,81 @@ void flush_file_tag_en_memoria(char* file, char* tag, uint32_t id_query) {
     pthread_mutex_unlock(&mutex_mem);
 }
 
-void enviar_lectura_a_master(char* file, char* tag, void* contenido, uint32_t tamanio, uint32_t query_id) {
+void enviar_lectura_a_master(char* file, char* tag, void* contenido, uint32_t tamanio) {
+    /*
     t_paquete* paquete = crear_paquete();
     
     // Opción recomendada (Protocolo custom):
     insertar_uint32_a_paquete(paquete, NUEVA_LECTURA);
-    insertar_uint32_a_paquete(paquete, query_id);
     insertar_string_a_paquete(paquete, file);
     insertar_string_a_paquete(paquete, tag);
     
-    insertar_bytes_a_paquete(paquete, contenido, tamanio);
+    insertar_binario_a_paquete(paquete, contenido, tamanio);
 
     enviar_paquete(paquete, conexion_master);
-    eliminar_paquete(paquete);
+
+
+    char* mensaje  = "PRUEBA:VERSION1.0 Lectura_de_prueba"; 
+    t_tipo_aviso_worker_master tipo_aviso = NUEVA_LECTURA;
+    t_paquete* paquete_resp = crear_paquete();
+
+    insertar_variable_a_paquete(paquete_resp, &(tipo_aviso), sizeof(t_tipo_aviso_worker_master));
+    insertar_string_a_paquete(paquete_resp, mensaje);
+    enviar_paquete(paquete_resp,conexion_master);
+    */
+
+
+    size_t len_encabezado = strlen(file) + 1 + strlen(tag) + 1;
+    size_t len_total = len_encabezado + tamanio + 1;
+
+    char* mensaje_unificado = malloc(len_total);
+    if (mensaje_unificado == NULL) return;
+
+    sprintf(mensaje_unificado, "%s:%s ", file, tag);
+
+
+    memcpy(mensaje_unificado + len_encabezado, contenido, tamanio);
+
+    mensaje_unificado[len_total - 1] = '\0';
+
+    t_paquete* paquete = crear_paquete();
+    t_tipo_aviso_worker_master tipo_aviso = NUEVA_LECTURA;
+
+
+    insertar_variable_a_paquete(paquete, &tipo_aviso, sizeof(t_tipo_aviso_worker_master));
+    insertar_string_a_paquete(paquete, mensaje_unificado);
+
+    enviar_paquete(paquete, conexion_master);
+
+    free(mensaje_unificado);
 }
 
 
-void finalizar_query_con_error(t_tipo_aviso_worker_master tipodeerror, int motivo) {
+// void finalizar_query_con_error(t_tipo_aviso_worker_master tipodeerror, int motivo) {
     
-    char* error_code = storage_error_to_string(motivo);
-    t_paquete* paquete = empaquetar_operacion_fin_error(tipodeerror, error_code);
-    if (!paquete) {
-        return;
-    }
-    // 2) Enviar a Master
-    enviar_paquete(paquete, conexion_master);
-    // 24/11 en caso de una falla en una query, se desconecta de master, pero no corta la consola.
-    // 24/11 
+
+//     char* texto_mockeado = strdup("Error de mockeo");
+            
+
+//     detener_ejecucion_query_error(texto_mockeado);
+//     return;
+
+//     log_info(logger, "444444");
+//     char* error_code = storage_error_to_string(motivo);
+//     t_paquete* paquete = empaquetar_operacion_fin_error(tipodeerror, error_code);
+//     if (!paquete) {
+//         return;
+//     }
+//     // 2) Enviar a Master
+//     enviar_paquete(paquete, conexion_master);
+//     // 24/11 en caso de una falla en una query, se desconecta de master, pero no corta la consola.
+//     // 24/11 
+// }
+
+void finalizar_query_con_error(int motivo) {
+    char* error_code = strdup(storage_error_to_string(motivo));   
+    detener_ejecucion_query_error(error_code);
+    return;
 }
 
 char* storage_error_to_string(int motivo) {
@@ -407,7 +478,7 @@ int ejecutar_create(t_create* c, uint32_t query_id) {
 	enviar_paquete(paquete, conexion_storage);
 
     int resultado = recibir_respuesta_storage(conexion_storage, logger);
-
+    log_info(logger, "222222: %d", resultado);
     if (resultado == ERROR_OK) {
         log_info(logger, "[WORKER] Respuesta OK de Storage para CREATE %s:%s", c->nombre_archivo, c->tag);
     } else {
@@ -517,6 +588,59 @@ int ejecutar_delete(t_create* c , uint32_t queryid) {
 
 //////////////////////////////// TERMINA LA SECCION DE EJECUCION DE INSTRUCCIONES /////////////////
 
+int recibir_respuesta_storage(int conexion, t_log* logger) {
+    // 1. Recibir OpCode
+    int opcode_respuesta = recibir_operacion(conexion, logger);
+    
+    // Log de qué OpCode llegó realmente
+    log_info(logger, "[DEBUG-NET] Recibido OpCode desde Storage: %d (Esperado PAQUETE=%d)", 
+             opcode_respuesta, PAQUETE);
+
+    if (opcode_respuesta < 0) {
+         desconectarseDeStorage();
+         log_error(logger, "[WORKER] Error al recibir opcode de respuesta de Storage (conexión caída?)");
+        return 2; // Error de recepción
+    }
+
+    if (opcode_respuesta != PAQUETE) {
+        log_error(logger, "[WORKER] Opcode inesperado de Storage: %d (esperaba PAQUETE)", opcode_respuesta);
+        return 2; // Error de protocolo
+    }
+
+    // 2. Recibir Buffer
+    int size_buffer = 0;
+    void* buffer = recibir_buffer(&size_buffer, conexion);
+    
+    if (buffer == NULL) {
+        log_error(logger, "[WORKER] Error: buffer de respuesta es NULL");
+        return 2;
+    }
+
+    // Log del tamaño del payload
+    log_info(logger, "[DEBUG-NET] Tamaño de buffer recibido: %d bytes (Esperado int=%lu)", 
+             size_buffer, sizeof(int));
+
+    if (size_buffer < sizeof(int)) {
+        log_error(logger, "[WORKER] Buffer de respuesta inválido (demasiado chico)");
+        free(buffer);
+        return 2;
+    }
+
+    // 3. Deserialización
+    int resultado_operacion;
+    memcpy(&resultado_operacion, buffer, sizeof(int));
+    free(buffer); // Limpiamos memoria
+
+    // 4. Log del Resultado Final (Lo más importante)
+    if (resultado_operacion == 0) { // Asumiendo ERROR_OK = 0
+        log_info(logger, "[DEBUG-NET] Storage confirmó ÉXITO. Valor recibido: %d", resultado_operacion);
+    } else {
+        log_warning(logger, "[DEBUG-NET] Storage reportó ERROR. Código recibido: %d", resultado_operacion);
+    }
+
+    return resultado_operacion; 
+}
+
 // int recibir_respuesta_storage(int conexion, t_log* logger) {
 //     int opcode_respuesta = recibir_operacion(conexion, logger);
 //     if (opcode_respuesta < 0) {
@@ -549,19 +673,19 @@ int ejecutar_delete(t_create* c , uint32_t queryid) {
 //     return resultado_operacion; // si salio bien la operacion => resultado_operacion = ERROR_OK(0)
 // }
 
-int recibir_respuesta_storage(int conexion, t_log* logger) {
-    // MOCK ACTIVADO: Simulamos que Storage respondió OK
+// int recibir_respuesta_storage(int conexion, t_log* logger) {
+//     // MOCK ACTIVADO: Simulamos que Storage respondió OK
     
-    // Simulamos que recibimos el OpCode RESPONSE (100)
-    log_trace(logger, "[MOCK] Storage envió OpCode: %d (RESPONSE)", RESPONSE);
+//     // Simulamos que recibimos el OpCode RESPONSE (100)
+//     log_trace(logger, "[MOCK] Storage envió OpCode: %d (RESPONSE)", RESPONSE);
 
-    // Simulamos que leímos el buffer y adentro venía un 0 (ERROR_OK)
-    int valor_simulado_del_buffer = 0; // 0 = ÉXITO, cambialo a otro número para probar errores
+//     // Simulamos que leímos el buffer y adentro venía un 0 (ERROR_OK)
+//     int valor_simulado_del_buffer = 0; // 0 = ÉXITO, cambialo a otro número para probar errores
     
-    log_info(logger, "[MOCK] Simulando respuesta exitosa del Storage -> Retorno: %d", valor_simulado_del_buffer);
+//     log_info(logger, "[MOCK] Simulando respuesta exitosa del Storage -> Retorno: %d", valor_simulado_del_buffer);
 
-    return valor_simulado_del_buffer;
-}
+//     return valor_simulado_del_buffer;
+// }
 
 
 
@@ -629,10 +753,10 @@ bool empieza_con(char* s, char* kw) {
     return strncmp(s, kw, n)==0 && (s[n]=='\0' || isspace((unsigned char)s[n]));
 }
 
-char* saltar_blancos(char* p) {
-    while (*p==' ' || *p=='\t') ++p;
-    return p;
-}
+// char* saltar_blancos(char* p) {
+//     while (*p==' ' || *p=='\t') ++p;
+//     return p;
+// }
 
 char* instruccion_n(char* nombre, size_t idx){
     t_programa* p = obtener_programa(nombre);
@@ -713,7 +837,7 @@ void destruir_truncate(t_truncate* c) {
     c->tam = 0;
 }
 
-bool parsear_tag_params(  char* params, t_tag* out) {
+bool parsear_tag_params(char* params, t_tag* out) {
     if (!params || !out) return false;
     params = saltar_blancos(params);
     if (*params == '\0') return false;
@@ -734,7 +858,7 @@ bool parsear_tag_params(  char* params, t_tag* out) {
     char* origen = p;
 
     // tomar segundo token (destino)
-    const char* p2 = saltar_blancos(sp1 + 1);
+    char* p2 = saltar_blancos(sp1 + 1);
     if (*p2 == '\0') { free(tmp); return false; }
     // p2 debería ser el último token (FD:TD). Si hubiera más, lo ignoramos/validamos:
     char* sp2 = strpbrk(p2, " \t");
@@ -743,7 +867,7 @@ bool parsear_tag_params(  char* params, t_tag* out) {
         // *sp2 = '\0'; // o return false;
         *sp2 = '\0';
     }
-    const char* destino = p2;
+    char* destino = p2;
 
     // split origen "FO:TO"
     char* colon1 = strchr(origen, ':');
@@ -772,7 +896,85 @@ bool parsear_tag_params(  char* params, t_tag* out) {
     return ok;
 }
 
-bool parsear_write_params(  char* params, t_write* out) {
+bool parsear_write_params(char* params, t_write* out) {
+    if (!params || !out) return false;
+    params = saltar_blancos(params);
+    if (*params == '\0') return false;
+
+    // Trabajamos sobre una copia para no romper el const char* original si fuera el caso
+    char* tmp = strdup(params);
+    if (!tmp) return false;
+
+    // Trim trailing whitespace (eliminar espacios al final)
+    size_t n = strlen(tmp);
+    while (n && (tmp[n-1]=='\n'||tmp[n-1]=='\r'||tmp[n-1]==' '||tmp[n-1]=='\t')) tmp[--n]='\0';
+    if (!n) { free(tmp); return false; }
+
+    // --- Token 1: <FILE:TAG> ---
+    char* sp1 = strpbrk(tmp, " \t");
+    if (!sp1) { free(tmp); return false; } // WRITE necesita al menos 3 argumentos
+    *sp1 = '\0'; // Cortamos el string
+    char* file_tag_str = tmp;
+
+    // --- Token 2: <DIR_BASE> ---
+    char* p2 = saltar_blancos(sp1 + 1);
+    if (*p2 == '\0') { free(tmp); return false; }
+    
+    char* sp2 = strpbrk(p2, " \t");
+    if (!sp2) { free(tmp); return false; } // Debe haber un tercer argumento (contenido)
+    *sp2 = '\0'; // Cortamos para aislar el numero
+
+    // Parseo de Dir Base
+    errno = 0;
+    char* endp = NULL;
+    unsigned long val_dir = strtoul(p2, &endp, 10);
+    // Verificamos que sea un número válido y que termine donde pusimos el \0
+    if (errno != 0 || endp == p2 || *saltar_blancos(endp) != '\0') { 
+        free(tmp); return false; 
+    }
+
+    // --- Token 3: <CONTENIDO> ---
+    // Todo lo restante, permitimos espacios dentro del contenido
+    char* contenido = saltar_blancos(sp2 + 1);
+    if (*contenido == '\0') { free(tmp); return false; }
+
+    // --- Split FILE:TAG ---
+    char* colon = strchr(file_tag_str, ':');
+    if (!colon) { free(tmp); return false; }
+    *colon = '\0';
+    char* f = file_tag_str;
+    char* t = colon + 1;
+
+    if (*f == '\0' || *t == '\0') { free(tmp); return false; }
+
+    // --- Asignación a Struct ---
+    out->file = strdup(f);
+    out->tag = strdup(t);
+    out->dir_base = (size_t)val_dir;
+    out->len = strlen(contenido);
+    
+    // Asignación para char* data (ya no es uint8_t, no requiere casts raros)
+    out->data = malloc(out->len + 1); // +1 por si querés usarlo como string luego, aunque len manda
+    if (!out->data) {
+        free(out->file); free(out->tag); free(tmp); return false;
+    }
+    
+    // Copiamos el contenido. 
+    // Nota: Como es WRITE de texto/input, copiamos el string.
+    memcpy(out->data, contenido, out->len);
+    out->data[out->len] = '\0'; // Null-terminate por seguridad
+
+    free(tmp);
+    return true;
+}
+
+// Helper necesario si no lo tienes en otro lado
+char* saltar_blancos(char* s) {
+    while (*s == ' ' || *s == '\t') s++;
+    return s;
+}
+
+bool parsear_read_params(char* params, t_read* out) {
     if (!params || !out) return false;
     params = saltar_blancos(params);
     if (*params == '\0') return false;
@@ -785,50 +987,62 @@ bool parsear_write_params(  char* params, t_write* out) {
     while (n && (tmp[n-1]=='\n'||tmp[n-1]=='\r'||tmp[n-1]==' '||tmp[n-1]=='\t')) tmp[--n]='\0';
     if (!n) { free(tmp); return false; }
 
-    // Primer token: <FILE:TAG>
+    // --- Token 1: <FILE:TAG> ---
     char* sp1 = strpbrk(tmp, " \t");
     if (!sp1) { free(tmp); return false; }
     *sp1 = '\0';
     char* file_tag_str = tmp;
 
-    // Segundo token: <DIR_BASE>
+    // --- Token 2: <DIR_BASE> ---
     char* p2 = saltar_blancos(sp1 + 1);
     if (*p2 == '\0') { free(tmp); return false; }
+    
     char* sp2 = strpbrk(p2, " \t");
-    if (!sp2) { free(tmp); return false; } // Debe haber contenido
+    if (!sp2) { free(tmp); return false; }
     *sp2 = '\0';
 
+    // Parseo Dir Base
     errno = 0;
     char* endp = NULL;
-    unsigned long val = strtoul(p2, &endp, 10);
-    if (errno != 0 || endp == p2 || *saltar_blancos(endp) != '\0') { free(tmp); return false; }
+    unsigned long val_dir = strtoul(p2, &endp, 10);
+    if (errno != 0 || endp == p2 || *saltar_blancos(endp) != '\0') { 
+        free(tmp); return false; 
+    }
 
-    // Tercer token: <CONTENIDO> (todo lo restante, permitimos espacios)
-    char* contenido = saltar_blancos(sp2 + 1);
-    if (*contenido == '\0') { free(tmp); return false; }
+    // --- Token 3: <TAMAÑO> ---
+    char* p3 = saltar_blancos(sp2 + 1);
+    if (*p3 == '\0') { free(tmp); return false; }
 
-    // Split FILE:TAG
+    // Parseo Tamaño (int según tu struct)
+    errno = 0;
+    unsigned long val_tam = strtoul(p3, &endp, 10);
+    // Verificamos que sea número y QUE NO HAYA NADA MÁS (READ termina ahí)
+    if (errno != 0 || endp == p3 || *saltar_blancos(endp) != '\0') { 
+        free(tmp); return false; 
+    }
+
+    // --- Split FILE:TAG ---
     char* colon = strchr(file_tag_str, ':');
     if (!colon) { free(tmp); return false; }
     *colon = '\0';
-      char* f = file_tag_str;
-      char* t = colon + 1;
+    char* f = file_tag_str;
+    char* t = colon + 1;
+
     if (*f == '\0' || *t == '\0') { free(tmp); return false; }
 
+    // --- Asignación a Struct ---
     out->file = strdup(f);
     out->tag = strdup(t);
-    out->dir_base = (size_t)val;
-    out->len = strlen(contenido); // Bytes sin null
-    out->data = malloc(out->len); // uint8_t*
-    if (!out->data) { // Error malloc
-        free(out->file);
-        free(out->tag);
-        free(tmp);
-        return false;
-    }
-    memcpy(out->data, contenido, out->len); // Copia bytes
+    out->dir_base = (size_t)val_dir;
+    out->tamaño = (int)val_tam;
+    out->len = (size_t)val_tam; // Seteamos len igual al tamaño por consistencia
 
-    bool ok = out->file && out->tag && out->data;
+    bool ok = out->file && out->tag;
+    if (!ok) {
+        if(out->file) free(out->file);
+        if(out->tag) free(out->tag);
+    }
+
     free(tmp);
     return ok;
 }
@@ -842,4 +1056,28 @@ void destruir_write(t_write* w) {
     w->tag = NULL;
     w->data = NULL;
     w->len = 0;
+}
+
+void destruir_read(t_read* r) {
+    if (!r) return;
+
+    free(r->file);
+    free(r->tag);
+    r->file = NULL;
+    r->tag = NULL;
+    r->dir_base = 0;
+    r->tamaño = 0;
+    r->len = 0;
+}
+
+// Agrega el prototipo arriba o en tu .h: 
+// void desconectarseDeStorage(void);
+
+void desconectarseDeStorage() {
+    log_error(logger, "[CRITICAL] Se detectó desconexión del STORAGE.");
+    if (conexion_storage > 0) {
+        close(conexion_storage);
+    }
+
+    exit(EXIT_FAILURE); 
 }

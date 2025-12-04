@@ -5,7 +5,7 @@ char* archivo_config;
 uint32_t id_worker;
 
 pthread_t hilo_master;
-pthread_t hilo_storage;
+// pthread_t hilo_storage;
 
 pthread_t hilo_lanzamiento_ejecucion;
 
@@ -72,7 +72,7 @@ int main(int argc, char** argv)
 
     int* server_fd_copia_storage = malloc(sizeof(int));
     *server_fd_copia_storage = conexion_storage;
-	pthread_create(&hilo_storage, NULL, manejar_storage, server_fd_copia_storage);
+	// pthread_create(&hilo_storage, NULL, manejar_storage, server_fd_copia_storage);
 	
     int* server_fd_copia_master = malloc(sizeof(int));
     *server_fd_copia_master = conexion_master;
@@ -81,7 +81,7 @@ int main(int argc, char** argv)
 	/*
 	Lo siguiente debe ajustarse para cada modulo
 	*/
-	pthread_join(hilo_storage, NULL);
+	// pthread_join(hilo_storage, NULL);
 	pthread_join(hilo_master, NULL);
 
     destruir_semaforos();
@@ -213,7 +213,7 @@ void* manejar_master(void* arg) {
                             log_error(logger, "No se pudo empaquetar el aviso de confirmación a Master");
                         }
 
-                        // Parte Testing
+                        /*// Parte Testing
                         char* mensaje  = "PRUEBA:VERSION1.0 Lectura_de_prueba"; 
                         t_tipo_aviso_worker_master tipo_aviso = NUEVA_LECTURA;
                         t_paquete* paquete_resp = crear_paquete();
@@ -221,7 +221,7 @@ void* manejar_master(void* arg) {
                         insertar_variable_a_paquete(paquete_resp, &(tipo_aviso), sizeof(t_tipo_aviso_worker_master));
                         insertar_string_a_paquete(paquete_resp, mensaje);
                         enviar_paquete(paquete_resp,conexion);
-                        // Fin Testing
+                        // Fin Testing */
                         
                         t_motivo_pedido_master_worker motivo = pedido->motivo;
                         query_actual.query_path = pedido->query_path;
