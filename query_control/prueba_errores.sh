@@ -7,8 +7,8 @@ CONF_QUERY="query.config"
 echo "~~~   INICIANDO LAS PRUEBAS DE ERROR   ~~~"
 
 
-$BIN_QUERY $CONF_QUERY "ESTRUCTURA_ARCHIVO_COMMITED" 1 &
-echo "-> Lanzado ESTRUCTURA_ARCHIVO_COMMITED"
+$BIN_QUERY $CONF_QUERY "ESCRITURA_ARCHIVO_COMMITED" 1 &
+echo "-> Lanzado ESCRITURA_ARCHIVO_COMMITED"
 
 wait
 read -p "Presionar ener para ejecutar el siguiente" input
@@ -19,8 +19,8 @@ echo "-> Lanzado FILE_EXISTENTE"
 wait
 read -p "Presionar ener para ejecutar el siguiente" input
 
-$BIN_QUERY $CONF_QUERY "LECTURA_FUERA_DE_LIMITE" 1 &
-echo "-> Lanzado LECTURA_FUERA_DE_LIMITE"
+$BIN_QUERY $CONF_QUERY "LECTURA_FUERA_DEL_LIMITE" 1 &
+echo "-> Lanzado LECTURA_FUERA_DEL_LIMITE"
 
 wait
 read -p "Presionar ener para ejecutar el siguiente" input
