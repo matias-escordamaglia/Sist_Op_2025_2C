@@ -71,9 +71,13 @@ int acceder_memoria(char* file, char* tag,uint32_t dir_base, void *buffer, uint3
     pthread_mutex_lock(&mutex_mem);
     //chequear mutex mem
     t_tabla_paginas* tabla = obtener_o_crear_tabla(file, tag);
-    if (!tabla || !rango_valido(tabla, dir_base, tamanio)) {
+    if (!tabla ) {
         pthread_mutex_unlock(&mutex_mem);
         return ERROR_DESCONOCIDO;
+    }
+    if (!rango_valido(tabla, dir_base, tamanio)){
+         pthread_mutex_unlock(&mutex_mem);
+        return ERROR_FUERA_DE_LIMITE;
     }
 
     segmento_acceso seg;
