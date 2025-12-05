@@ -146,6 +146,21 @@ t_tabla_paginas* buscar_en_lista_global(char* file, char* tag) {
     return NULL;
 }
 
+void flush_total(int queryid){
+    for (int i = 0; i < list_size(lista_global_tablas); i++) {
+        // Obtener la tabla actual
+  t_tabla_paginas* tabla_actual = list_get(lista_global_tablas, i);
+ 
+        // Llamar a la función usando los campos de la tabla actual
+ int ok = flush_file_tag_en_memoria(tabla_actual->file, tabla_actual->tag, queryid);
+ 
+        // Opcional: Manejar el resultado de 'ok' si es necesario
+      if (ok == 0) {
+        log_info(logger,"TODO  OK");     
+    }
+   } 
+}
+
 void crear_y_agregar_tabla_a_lista_global(char* file, char* tag)
 {
     t_tabla_paginas* tabla_proceso = malloc(sizeof(t_tabla_paginas));

@@ -111,7 +111,7 @@ void ejecutarOperacion(char* const* instrucciones, size_t cantidad)
 
         if(hay_pedido_desalojo) {
             log_info(logger, "Deteniendo ejecución por pedido de desalojo...");
-            
+            flush_total(query_actual.qid_actual); 
             sem_post(sem_desalojo_pendiente);
             return;
         }
@@ -352,7 +352,7 @@ bool ejecutar_linea(char* linea, uint32_t queryid) {
                 log_error(logger, "[WORKER] No pude empaquetar END (q=%u)", queryid);
                 return -1;
             }
-
+            flush_total(queryid); 
             enviar_paquete(p, conexion_master);
             // log obligatorio (SIN parámetros)
             log_info(logger, "## Query %u: - Instrucción realizada: END", queryid);
