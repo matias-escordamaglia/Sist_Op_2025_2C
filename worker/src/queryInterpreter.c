@@ -268,12 +268,19 @@ bool ejecutar_linea(char* linea, uint32_t queryid) {
             }
             
             int ok = flush_file_tag_en_memoria(c.nombre_archivo, c.tag, queryid);
-            if (ok != ERROR_OK) {
+            
+            if (ok != ERROR_OK || ok != ERROR_OK_NO_FLUSH) {
                 finalizar_query_con_error(ok);
                 destruir_create(&c);
                 return false;
             }
+            if(ok==ERROR_OK_NO_FLUSH){
+                log_info(logger,"No habia nada que flushear"); 
+            }
+           
+    
             int code = ejecutar_commit(&c,queryid);
+            
             if (code != ERROR_OK) {
                 finalizar_query_con_error(code);
                 destruir_create(&c);
@@ -294,11 +301,13 @@ bool ejecutar_linea(char* linea, uint32_t queryid) {
             }
 
             int ok = flush_file_tag_en_memoria(c.nombre_archivo, c.tag, queryid);
-            if (ok != ERROR_OK) {
+            if (ok != ERROR_OK || ok != ERROR_OK_NO_FLUSH) {
                 finalizar_query_con_error(ok);
                 return false;
             }
-
+            if(ok==ERROR_OK_NO_FLUSH){
+                log_info(logger,"No habia nada que flushear"); 
+            }
             
             log_info(logger, "## Query %u: - Instrucción realizada: FLUSH", queryid);
 
@@ -369,10 +378,10 @@ int flush_file_tag_en_memoria(char* file, char* tag, uint32_t id_query) {
 
     int cantidad_paginas = list_size(tabla->paginas_proceso);
 
-    int estado_escritura = -7; 
+    int estado_escritura = ERROR_OK_NO_FLUSH; 
     for (int i = 0; i < cantidad_paginas; i++) {
         t_entrada_pagina* entrada = (t_entrada_pagina*)list_get(tabla->paginas_proceso, i);
-        log_info(logger,"bbbbb");
+        //log_info(logger,"bbbbb");
         if (entrada->presente && entrada->modificado) {
             
             estado_escritura = escribir_pagina_a_storage(entrada, id_query);

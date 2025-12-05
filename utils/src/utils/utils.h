@@ -137,7 +137,8 @@ typedef enum {
     ERROR_ESCRITURA_NO_PERMITIDA = -4, 
     ERROR_FUERA_DE_LIMITE = -5,  
     ERROR_NO_CRITICO= -6,
-    ERROR_DESCONOCIDO = -7
+    ERROR_DESCONOCIDO = -7,
+    ERROR_OK_NO_FLUSH = -8
 } t_storage_error_code;
 
 

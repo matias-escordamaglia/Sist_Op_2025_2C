@@ -1070,7 +1070,8 @@ void liberar_bloque_si_no_se_usa(int nro_bloque) {
         // nlink == 1 significa que solo el propio archivo en /physical_blocks lo apunta.
         // Nadie más lo está usando.
         if (st_fisico.st_nlink == 1) {
-            log_info(logger, "COMMIT: Bloque %d (nlink=1) ya no se usa. Liberando en bitmap.", nro_bloque);
+           // log_info(logger, "BITMAP: Bloques disponibles: %u. Bloques ocupados: %u", );
+            log_info(logger, "BITMAP: Bloque %d (nlink=1) ya no se usa. Liberando en bitmap.", nro_bloque);
             liberar_bloque_reservado(nro_bloque); // Libera en tu bitmap
             // Opcional: unlink(ruta_F_block) para borrar el archivo físico
         }
