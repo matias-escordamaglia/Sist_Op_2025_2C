@@ -4,9 +4,6 @@
 BIN_WORKER="./bin/worker"
 
 
-TIEMPO_ESPERA=45
-
-
 echo "~~~  PRUEBA DE ESTABILIDAD EN WORKER  ~~~"
 
 
@@ -20,12 +17,12 @@ $BIN_WORKER "worker_estabilidad_general2.config" 2 &
 PID_W2=$! 
 echo "Worker 2 iniciado"
 
-echo "Esperando $TIEMPO_ESPERA segundos para la siguiente parte..."
-sleep $TIEMPO_ESPERA
 
 
+read -p "Presiona enter para lanzar Worker 3 y 4 " input
+echo "---------------------------------------------------"
 
-echo "Se llegó a los $TIEMPO_ESPERA segundos. Iniciando Workers 3 y 4..."
+
 
 $BIN_WORKER "worker_estabilidad_general3.config" 3 &
 echo "Worker 3 iniciado"
@@ -33,12 +30,12 @@ echo "Worker 3 iniciado"
 $BIN_WORKER "worker_estabilidad_general4.config" 4 &
 echo "Worker 4 iniciado"
 
-echo "Esperando $TIEMPO_ESPERA segundos para cortar la ejecución de los dos primeros..."
-sleep $TIEMPO_ESPERA
 
 
+read -p "Presiona enter para finalizar Worker 1 y 2 " input
+echo "---------------------------------------------------"
 
-echo "Se llegó a los $((TIEMPO_ESPERA * 2)) segundos. Finalizando Workers 1 y 2..."
+
 
 kill -9 $PID_W1
 echo "Worker 1 terminado."
@@ -46,12 +43,11 @@ echo "Worker 1 terminado."
 kill -9 $PID_W2
 echo "Worker 2 terminado."
 
-echo "Esperando $TIEMPO_ESPERA segundos para la fase final..."
-sleep $TIEMPO_ESPERA
+
+read -p "Presiona enter para lanzar Worker 5 y 6 " input
+echo "---------------------------------------------------"
 
 
-
-echo "Se llegó a los $((TIEMPO_ESPERA * 3)) segundos. Iniciando Workers 5 y 6..."
 
 $BIN_WORKER "worker_estabilidad_general5.config" 5 &
 echo "Worker 5 iniciado"

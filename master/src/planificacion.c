@@ -554,7 +554,7 @@ void* main_aging(void* args) {
                                        VALOR_NULO_EVENTO);
         }
         cant_veces_aging_loop++;
-        log_info(get_logger(), "Veces loop: %d", cant_veces_aging_loop);
+        //log_info(get_logger(), "Veces loop: %d", cant_veces_aging_loop);
     }
     return NULL;
 }
@@ -779,7 +779,6 @@ void enviar_evento_planificacion(t_tipo_evento tipo, uint32_t worker_id, uint32_
 }
 
 void manejar_worker_desconectado(uint32_t worker_id, uint32_t query_id_ejecutando) {
-
     t_worker_conectado* worker_temp = obtener_worker_por_id_uso_externo(worker_id);
 
     t_elemento_cola* elemento = NULL;
