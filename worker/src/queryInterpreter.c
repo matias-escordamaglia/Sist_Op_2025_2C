@@ -269,7 +269,7 @@ bool ejecutar_linea(char* linea, uint32_t queryid) {
             
             int ok = flush_file_tag_en_memoria(c.nombre_archivo, c.tag, queryid);
             
-            if (ok != ERROR_OK || ok != ERROR_OK_NO_FLUSH) {
+            if (ok != ERROR_OK && ok != ERROR_OK_NO_FLUSH) {
                 finalizar_query_con_error(ok);
                 destruir_create(&c);
                 return false;
@@ -301,7 +301,7 @@ bool ejecutar_linea(char* linea, uint32_t queryid) {
             }
 
             int ok = flush_file_tag_en_memoria(c.nombre_archivo, c.tag, queryid);
-            if (ok != ERROR_OK || ok != ERROR_OK_NO_FLUSH) {
+            if (ok != ERROR_OK && ok != ERROR_OK_NO_FLUSH) {
                 finalizar_query_con_error(ok);
                 return false;
             }
