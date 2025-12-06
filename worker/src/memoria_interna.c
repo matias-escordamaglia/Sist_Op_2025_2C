@@ -106,7 +106,7 @@ int acceder_memoria(char* file, char* tag,uint32_t dir_base, void *buffer, uint3
         if (es_write) {
             escribir_en_memoria(df, (char*)buffer + seg.offset_en_buffer, seg.bytes_en_pagina);
             marcar_modificada(entrada);
-            // log_escritura(id_query, df, (char*)buffer + seg.offset_en_buffer, (int)seg.bytes_en_pagina);
+            //log_escritura(id_query, df, (char*)buffer + seg.offset_en_buffer, (int)seg.bytes_en_pagina);
             log_info(logger, "Query %u: Acción: ESCRIBIR - Dirección Física: %u - Tamaño escrito: %u", 
                      id_query, df, seg.bytes_en_pagina);
         } else {
