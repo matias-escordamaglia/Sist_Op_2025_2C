@@ -215,7 +215,7 @@ bool rango_valido( t_tabla_paginas* tabla, uint32_t base, uint32_t tam) {
 
     if (tabla->tam_file == 0) {
         //log_warning(logger, "Validación Lazy: %s:%s tiene tamaño local 0. Delegando validación al Storage.", 
-                    tabla->file, tabla->tag;
+                //    tabla->file, tabla->tag;
         return true; 
     }
     // -------------------------------------------
@@ -560,50 +560,110 @@ t_entrada_pagina* get_entry(t_tabla_paginas* tabla, uint32_t nro_pagina) {
     return NULL;
 }
 
-t_entrada_pagina* reemplazar_pagina_clock() {
-    // t_entrada_pagina* victima = NULL;
-    // int pasadas_completadas = 0;
-    uint32_t inicio_pasada;
-    //log por si acaso a
-    log_info(logger, "[CLOCK-M] Iniciando búsqueda de víctima desde el marco %u...", puntero_clock_);
+// t_entrada_pagina* reemplazar_pagina_clock() {
+//     // t_entrada_pagina* victima = NULL;
+//     // int pasadas_completadas = 0;
+//     uint32_t inicio_pasada;
+//     //log por si acaso a
+//     log_info(logger, "[CLOCK-M] Iniciando búsqueda de víctima desde el marco %u...", puntero_clock_);
 
-   for (int pasada = 0; pasada < 2; pasada++) {
-        log_info(logger, "[CLOCK-M] Iniciando Pasada %d (busca %s) desde Marco %u...", 
-                 pasada + 1, (pasada == 0 ? "Clase (0,0)" : "Clase (0,X)"), puntero_clock_);
-        inicio_pasada = puntero_clock_;
+//    for (int pasada = 0; pasada < 4; pasada++) {
+//         log_info(logger, "[CLOCK-M] Iniciando Pasada %d (busca %s) desde Marco %u...", 
+//                  pasada + 1, (pasada == 0 ? "Clase (0,0)" : "Clase (0,X)"), puntero_clock_);
+//         inicio_pasada = puntero_clock_;
+//         do {
+//             t_entrada_pagina* entrada = tabla_global_marcos[puntero_clock_];
+
+//             // 1. Si el marco está libre (NULL), simplemente avanzamos el puntero y continuamos.
+//             if (entrada == NULL) {
+//                 puntero_clock_ = (puntero_clock_ + 1) % cant_marcos; // Avanzar el puntero
+//                 continue; 
+//             }
+            
+//             bool u = entrada->bit_uso;
+//             bool m = entrada->modificado;
+            
+//             if (pasada == 0) { // PASADA 1: Busca (0,0)
+//                 if (!u && !m) {
+//                     // Éxito P1
+//                     puntero_clock_ = (puntero_clock_ + 1) % cant_marcos; // Avanzar y Retornar
+//                     return entrada;
+//                 } else if (u && pasada == 1){
+//                     if(m==1){
+//                         puntero_clock_ = (puntero_clock_ + 1) % cant_marcos; // Avanzar y Retornar
+//                     return entrada;
+//                     }
+//                     else{
+//                         entrada->bit_uso = false; // Limpiar U buscar modificado
+//                     }
+                    
+//                 }
+//             } else { // PASADA 2: Busca (0,X)
+//                 if ((!u && m==1 && pasada==2) || (!u && m==1 && pasada==3)) {
+//                     // Éxito P2
+//                     puntero_clock_ = (puntero_clock_ + 1) % cant_marcos; // Avanzar y Retornar
+//                     return entrada;
+//                 }
+//             }
+            
+//             // Si no se encontró víctima en esta iteración, el puntero AVANZA
+//             puntero_clock_ = (puntero_clock_ + 1) % cant_marcos; 
+
+//         } while (puntero_clock_ != inicio_pasada); // Repetir hasta dar la vuelta completa
+//     }     
+//     log_error(logger, "[CLOCK-M] ERROR: No se encontró víctima después de dos pasadas. Esto no debería ocurrir.");
+//     return NULL; 
+// }
+t_entrada_pagina* reemplazar_pagina_clock() {
+    log_info(logger, "[CLOCK-M] Iniciando selección de víctima. Puntero en marco: %d", puntero_clock_);
+    int pasada = 0; 
+
+    while (1) { 
+        
+        int inicio_vuelta = puntero_clock_;
+        
         do {
             t_entrada_pagina* entrada = tabla_global_marcos[puntero_clock_];
-
-            // 1. Si el marco está libre (NULL), simplemente avanzamos el puntero y continuamos.
-            if (entrada == NULL) {
-                puntero_clock_ = (puntero_clock_ + 1) % cant_marcos; // Avanzar el puntero
-                continue; 
-            }
             
+            if (entrada == NULL) {
+                puntero_clock_ = (puntero_clock_ + 1) % cant_marcos;
+                continue;
+            }
+
             bool u = entrada->bit_uso;
             bool m = entrada->modificado;
-            
-            if (pasada == 0) { // PASADA 1: Busca (0,0)
+
+            // --- LÓGICA Clock  
+            if (pasada == 0 || pasada == 2) { 
                 if (!u && !m) {
-                    // Éxito P1
-                    puntero_clock_ = (puntero_clock_ + 1) % cant_marcos; // Avanzar y Retornar
-                    return entrada;
-                } else if (u) {
-                    entrada->bit_uso = false; // Limpiar U
+                    t_entrada_pagina* victima = entrada;
+                    
+                    puntero_clock_ = (puntero_clock_ + 1) % cant_marcos;
+                    
+                    log_info(logger, "[CLOCK-M] Víctima encontrada en pasada %d. Marco: %u", pasada, victima->marco_num);
+                    return victima;
                 }
-            } else { // PASADA 2: Busca (0,X)
-                if (!u) {
-                    // Éxito P2
-                    puntero_clock_ = (puntero_clock_ + 1) % cant_marcos; // Avanzar y Retornar
-                    return entrada;
+            } 
+        
+            else if (pasada == 1 || pasada == 3) {
+                if (!u && m) {                    t_entrada_pagina* victima = entrada;
+                    puntero_clock_ = (puntero_clock_ + 1) % cant_marcos;
+                    
+                    log_info(logger, "[CLOCK-M] Víctima encontrada en pasada %d (Sucia). Marco: %u", pasada, victima->marco_num);
+                    return victima;
+                }
+                
+                if (u) {
+                    entrada->bit_uso = false;
                 }
             }
-            
-            // Si no se encontró víctima en esta iteración, el puntero AVANZA
-            puntero_clock_ = (puntero_clock_ + 1) % cant_marcos; 
+            puntero_clock_ = (puntero_clock_ + 1) % cant_marcos;
 
-        } while (puntero_clock_ != inicio_pasada); // Repetir hasta dar la vuelta completa
-    }     
+        } while (puntero_clock_ != inicio_vuelta); // Repetir hasta dar la vuelta completa
+        pasada++;
+        
+        if (pasada > 4) pasada = 0; 
+    }
     log_error(logger, "[CLOCK-M] ERROR: No se encontró víctima después de dos pasadas. Esto no debería ocurrir.");
     return NULL; 
 }
