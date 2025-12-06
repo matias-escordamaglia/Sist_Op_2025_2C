@@ -107,6 +107,8 @@ int acceder_memoria(char* file, char* tag,uint32_t dir_base, void *buffer, uint3
             escribir_en_memoria(df, (char*)buffer + seg.offset_en_buffer, seg.bytes_en_pagina);
             marcar_modificada(entrada);
             // log_escritura(id_query, df, (char*)buffer + seg.offset_en_buffer, (int)seg.bytes_en_pagina);
+            log_info(logger, "Query %u: Acción: ESCRIBIR - Dirección Física: %u - Tamaño escrito: %u", 
+                     id_query, df, seg.bytes_en_pagina);
         } else {
 
             void* origen = (char*)memoria_interna + df;
@@ -426,7 +428,8 @@ t_entrada_pagina* indico_entrada_presente(t_tabla_paginas* tabla, uint32_t nro_p
         e->ultimo_acceso = (uint64_t)time(NULL);  // Timestamp para LRU
     }
     // Para CLOCK-M, no hace falta más inicialización acá (el puntero clock maneja el ciclo)
-    
+    log_info(logger, "Query %u: Se asigna el Marco: %u a la Página: %u perteneciente al - File: %s - Tag: %s", 
+             id_query, (uint32_t)marco, nro_pagina, tabla->file, tabla->tag);
     // Log obligatorio (página 17: "Se asigna el Marco...")
     // Asumiendo id_query se pasa desde caller, pero si no, sacalo o pasalo como param
     // log_info(logger, "Query %u: Se asigna el Marco: %u a la Página: %u perteneciente al - File: %s - Tag: %s.", id_query, (uint32_t)marco, nro_pagina, tabla->file, tabla->tag);
