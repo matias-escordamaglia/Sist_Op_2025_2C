@@ -509,6 +509,9 @@ int procesar_bloque_logico(char* ruta_bloque, int nro_bloque_fisico_actual, char
                 // Manejo de error...
             } else {
                 liberar_bloque_si_no_se_usa(nro_bloque_fisico_actual);
+                log_info(logger, "##%u - %s:%s Bloque Lógico %d se reasigna de %d a %d", 
+                         g_query_id_actual, file, tag, bloque_logico, 
+                         nro_bloque_fisico_actual, nro_bloque_existente);
                 //log_info(logger,"##%u - %s Se agregó el hard link del bloque lógico %u al bloque físico %u",g_query_id_actual,)
                 bloque_fisico_final = nro_bloque_existente;
             }
@@ -732,7 +735,7 @@ int eliminar_tag(char* file, char* tag){
             // Si nlink == 1, significa que SOLO queda el archivo en /physical_blocks/
             // Nadie más (ningún otro TAG) lo usa. Podemos liberar.
             if (st.st_nlink == 1) {
-                log_info(logger, "“##%u - Bloque Físico Liberado - Número de Bloque: %u",g_query_id_actual, nro_bloque_fisico);
+                log_info(logger, "##%u - Bloque Físico Liberado - Número de Bloque: %u",g_query_id_actual, nro_bloque_fisico);
                 
                 liberar_bloque_reservado(nro_bloque_fisico); 
                 
