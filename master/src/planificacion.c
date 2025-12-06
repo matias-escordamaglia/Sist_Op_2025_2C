@@ -1009,7 +1009,7 @@ void manejar_query_control_desconectado(uint32_t query_id_activo) {
             log_info(get_logger(), "## Se desconecta un Query Control. Se finaliza la Query %d con prioridad %d. Nivel multiprocesamiento %d",
                 query_id_activo, elemento->prioridad_efectiva, grado_multiprocesamiento);
         } else {
-            log_error(get_logger(), "## Se desconecta Query %d (No encontrada en listas). Nivel MP %d", 
+            log_error(get_logger(), "## Se desconecta Query %d (No encontrada en listas). Nivel multiprocesamiento %d", 
                 query_id_activo, grado_multiprocesamiento);
         }
 

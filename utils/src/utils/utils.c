@@ -157,7 +157,7 @@ int recibir_operacion(int socket_cliente, t_log* logger)
 {
 	int cod_op;
 	if(recv(socket_cliente, &cod_op, sizeof(int), MSG_WAITALL) > 0){
-		log_info(logger, "Código de operación recibido: %d", cod_op);
+		//log_info(logger, "Código de operación recibido: %d", cod_op);
 		return cod_op;
 	}
 	else
