@@ -194,9 +194,12 @@ void* manejar_master(void* arg) {
                     free(buffer);
                     break;
                 }
+                
+                // log obligatorio
+                log_info(logger, "## Query %d: Se recibe la Query. El path de operaciones es: %s", pedido->query_id, pedido->query_path);
 
                 t_aviso_worker_master* aviso_confirmacion = malloc(sizeof(t_aviso_worker_master));
-
+                
                 switch (pedido->motivo)
                 {
                 case PEDIDO_QUERY:
@@ -212,16 +215,6 @@ void* manejar_master(void* arg) {
                         if(!armar_y_enviar_confirmacion_a_master(aviso_confirmacion, conexion)){
                             log_error(logger, "No se pudo empaquetar el aviso de confirmación a Master");
                         }
-
-                        /*// Parte Testing
-                        char* mensaje  = "PRUEBA:VERSION1.0 Lectura_de_prueba"; 
-                        t_tipo_aviso_worker_master tipo_aviso = NUEVA_LECTURA;
-                        t_paquete* paquete_resp = crear_paquete();
-            
-                        insertar_variable_a_paquete(paquete_resp, &(tipo_aviso), sizeof(t_tipo_aviso_worker_master));
-                        insertar_string_a_paquete(paquete_resp, mensaje);
-                        enviar_paquete(paquete_resp,conexion);
-                        // Fin Testing */
                         
                         t_motivo_pedido_master_worker motivo = pedido->motivo;
                         query_actual.query_path = pedido->query_path;
