@@ -149,6 +149,41 @@ t_tabla_paginas* buscar_en_lista_global(char* file, char* tag) {
     return NULL;
 }
 
+int flush_file_tag_en_memoria(char* file, char* tag, uint32_t id_query) {
+    pthread_mutex_lock(&mutex_mem);
+
+    t_tabla_paginas* tabla = buscar_en_lista_global(file, tag);
+
+    if (tabla == NULL) {
+        log_info(logger,"No hay algo para hacer flush");
+        pthread_mutex_unlock(&mutex_mem);
+        return 0;
+    }
+
+    int cantidad_paginas = list_size(tabla->paginas_proceso);
+
+    int estado_escritura = ERROR_OK_NO_FLUSH; 
+    for (int i = 0; i < cantidad_paginas; i++) {
+        t_entrada_pagina* entrada = (t_entrada_pagina*)list_get(tabla->paginas_proceso, i);
+        if (entrada->presente && entrada->modificado) {
+            
+            estado_escritura = escribir_pagina_a_storage(entrada, id_query);
+            if (estado_escritura == 0) {
+                entrada->modificado = false;
+            } else {
+                
+                log_error(logger, "Query %u: Error al hacer FLUSH de página %u", id_query, entrada->nro_pagina);
+            }
+        }
+    }
+
+    pthread_mutex_unlock(&mutex_mem);
+    if(estado_escritura == -7){
+      log_info(logger,"CCCCCCC");
+    }
+    return estado_escritura;
+}
+
 void flush_total(int queryid) {
     for (int i = 0; i < list_size(lista_global_tablas); i++) {
         // Obtener la tabla actual

@@ -59,7 +59,7 @@ void ejecutarOperacion(char* const* instrucciones, size_t cantidad)
         char* nombre_instruccion = strtok(linea_copia, " ");
 
         // log obligatorio 
-        log_info(logger, "## Query %d: FETCH - Program Counter: %d - %s", query_actual.qid_actual, i + 1, nombre_instruccion);
+        log_info(logger, "## Query %d: FETCH - Program Counter: %ld - %s", query_actual.qid_actual, i + 1, nombre_instruccion);
         bool ok = ejecutar_linea(linea, query_actual.qid_actual);
 
 
@@ -341,40 +341,7 @@ bool ejecutar_linea(char* linea, uint32_t queryid) {
             return false;
     }
 }
-int flush_file_tag_en_memoria(char* file, char* tag, uint32_t id_query) {
-    pthread_mutex_lock(&mutex_mem);
 
-    t_tabla_paginas* tabla = buscar_en_lista_global(file, tag);
-
-    if (tabla == NULL) {
-        log_info(logger,"No hay algo para hacer flush");
-        pthread_mutex_unlock(&mutex_mem);
-        return 0;
-    }
-
-    int cantidad_paginas = list_size(tabla->paginas_proceso);
-
-    int estado_escritura = ERROR_OK_NO_FLUSH; 
-    for (int i = 0; i < cantidad_paginas; i++) {
-        t_entrada_pagina* entrada = (t_entrada_pagina*)list_get(tabla->paginas_proceso, i);
-        if (entrada->presente && entrada->modificado) {
-            
-            estado_escritura = escribir_pagina_a_storage(entrada, id_query);
-            if (estado_escritura == 0) {
-                entrada->modificado = false;
-            } else {
-                
-                log_error(logger, "Query %u: Error al hacer FLUSH de página %u", id_query, entrada->nro_pagina);
-            }
-        }
-    }
-
-    pthread_mutex_unlock(&mutex_mem);
-    if(estado_escritura == -7){
-      log_info(logger,"CCCCCCC");
-    }
-    return estado_escritura;
-}
 
 void enviar_lectura_a_master(char* file, char* tag, void* contenido, uint32_t tamanio) {
     /*
