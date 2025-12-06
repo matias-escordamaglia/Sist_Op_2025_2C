@@ -14,18 +14,18 @@ echo "~~~ LANZANDO 25 INSTANCIAS DE CADA QUERY  (⊙ _ ⊙ ) ~~~"
 
 for i in {1..25}
 do
-    # se puede quitar "> /dev/null" para ver el caos de logs
-    $BIN_QUERY $CONF_QUERY $PATH_QUERY_AGING_1 $PRIORIDAD > /dev/null &
+    # se puede agregar "> /dev/null" para ver el caos de logs
+    $BIN_QUERY $CONF_QUERY $PATH_QUERY_AGING_1 $PRIORIDAD &
     # se puede quitar el "echo -n "." " dado que solo indica salto
     echo -n "." 
 
-    $BIN_QUERY $CONF_QUERY $PATH_QUERY_AGING_2 $PRIORIDAD > /dev/null &
+    $BIN_QUERY $CONF_QUERY $PATH_QUERY_AGING_2 $PRIORIDAD &
     echo -n "." 
 
-    $BIN_QUERY $CONF_QUERY $PATH_QUERY_AGING_3 $PRIORIDAD > /dev/null &
+    $BIN_QUERY $CONF_QUERY $PATH_QUERY_AGING_3 $PRIORIDAD &
     echo -n "." 
 
-    $BIN_QUERY $CONF_QUERY $PATH_QUERY_AGING_4 $PRIORIDAD > /dev/null &
+    $BIN_QUERY $CONF_QUERY $PATH_QUERY_AGING_4 $PRIORIDAD &
     echo -n "." 
 
 done
