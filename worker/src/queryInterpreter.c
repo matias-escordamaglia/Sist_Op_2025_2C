@@ -59,7 +59,7 @@ void ejecutarOperacion(char* const* instrucciones, size_t cantidad)
         char* nombre_instruccion = strtok(linea_copia, " ");
 
         // log obligatorio 
-        log_info(logger, "## Query %d: FETCH - Program Counter: %d - %s", query_actual.qid_actual, pc, nombre_instruccion);
+        log_info(logger, "## Query %d: FETCH - Program Counter: %d - %s", query_actual.qid_actual, i + 1, nombre_instruccion);
         bool ok = ejecutar_linea(linea, query_actual.qid_actual);
 
 
@@ -96,7 +96,7 @@ void ejecutarOperacion(char* const* instrucciones, size_t cantidad)
         if(hay_pedido_desalojo) {
             log_info(logger, "Deteniendo ejecución por pedido de desalojo...");
             // log obligatorio
-            log_info(logger, "## Query %d: Desalojada por pedido del Master", query_actual.qid_actual);
+            log_info(logger, "## Query %u: Desalojada por pedido del Master", query_actual.qid_actual);
             flush_total(query_actual.qid_actual); 
             sem_post(sem_desalojo_pendiente);
             return;

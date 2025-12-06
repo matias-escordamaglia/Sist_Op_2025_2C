@@ -104,20 +104,21 @@ int acceder_memoria(char* file, char* tag,uint32_t dir_base, void *buffer, uint3
         uint32_t df = direccion_fisica(entrada->marco_num, seg.offset_en_pagina, tam_pagina);
 
         if (es_write) {
-            escribir_en_memoria(df, (char*)buffer + seg.offset_en_buffer, seg.bytes_en_pagina);
+            void* puntero_datos = (char*)buffer + seg.offset_en_buffer;
+            escribir_en_memoria(df, puntero_datos, seg.bytes_en_pagina);
             marcar_modificada(entrada);
-            // log_escritura(id_query, df, (char*)buffer + seg.offset_en_buffer, (int)seg.bytes_en_pagina);
-            log_info(logger, "Query %u: Acción: ESCRIBIR - Dirección Física: %u - Tamaño escrito: %u", 
-                     id_query, df, seg.bytes_en_pagina);
+            // log obligatorio
+            log_info(logger, "Query %u: Acción: ESCRIBIR - Dirección Física: %u - Valor: %.*s", 
+                     id_query, df, (int)seg.bytes_en_pagina, (char*)puntero_datos);
         } else {
 
             void* origen = (char*)memoria_interna + df;
             void* destino = (char*)buffer + seg.offset_en_buffer;
             
             memcpy(destino, origen, seg.bytes_en_pagina);
-
-            log_info(logger, "Query %u: Acción: LEER - Dirección Física: %u - Tamaño leido: %u", 
-                     id_query, df, seg.bytes_en_pagina);
+            // log obligatorio
+            log_info(logger, "Query %u: Acción: LEER - Dirección Física: %u - VALOR: %.*s", 
+                     id_query, df, (int)seg.bytes_en_pagina, (char*)destino);
         }
         //habria que agregar que para cualquier acceso a la pagina se actualice el tiempo de ultimo uso para el LRU
 
@@ -177,10 +178,6 @@ void crear_y_agregar_tabla_a_lista_global(char* file, char* tag)
 bool rango_valido( t_tabla_paginas* tabla, uint32_t base, uint32_t tam) {
     if (!tabla) return false;
 
-    // --- PARCHE DE SUPERVIVENCIA AL REINICIO ---
-    // Si el tamaño en memoria es 0, puede ser que el archivo esté vacío 
-    // O que acabamos de reiniciar el módulo y perdimos la metadata.
-    // Dejamos pasar la operación para que el Storage (que tiene la verdad) decida.
     if (tabla->tam_file == 0) {
         log_warning(logger, "⚠️ Validación Lazy: %s:%s tiene tamaño local 0. Delegando validación al Storage.", 
                     tabla->file, tabla->tag);
@@ -275,7 +272,7 @@ int asegurar_pagina_presente(t_tabla_paginas* tabla, uint32_t nro_pagina, uint32
         return estado_carga;
     }
 
-    e = indico_entrada_presente(tabla, nro_pagina, marco);
+    e = indico_entrada_presente(tabla, nro_pagina, marco, id_query);
     *entrada_pagina = e; 
     return 0;
 }
@@ -403,7 +400,7 @@ void devolver_marco(int marco) {
     log_info(logger, "Se devolvió el marco %d por error en carga", marco);
 }
 
-t_entrada_pagina* indico_entrada_presente(t_tabla_paginas* tabla, uint32_t nro_pagina, int marco) {
+t_entrada_pagina* indico_entrada_presente(t_tabla_paginas* tabla, uint32_t nro_pagina, int marco, uint32_t id_query) {
     t_entrada_pagina* e = get_entry(tabla, nro_pagina);
     
     if (!e) {
