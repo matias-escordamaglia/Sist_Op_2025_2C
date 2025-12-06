@@ -53,6 +53,8 @@ t_entrada_pagina* buscar_entrada_por_marco(uint32_t marco_num);
 t_entrada_pagina* reemplazar_pagina_clock();
 void actualizar_tam_memoria(char* file, char* tag, uint32_t nuevo_tamanio);
 void flush_total(int query_id); 
+void eliminar_tabla_memoria(char* file, char* tag, uint32_t id_query);
+
 
 
 

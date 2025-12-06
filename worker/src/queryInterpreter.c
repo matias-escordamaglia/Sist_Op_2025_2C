@@ -312,6 +312,8 @@ bool ejecutar_linea(char* linea, uint32_t queryid) {
                 destruir_create(&c);
                 return false;
             }
+            // Actualizar la llamada
+            eliminar_tabla_memoria(c.nombre_archivo, c.tag, queryid);
 
             // log obligatorio
             log_info(logger, "## Query %u: - Instrucción realizada: DELETE", queryid);
