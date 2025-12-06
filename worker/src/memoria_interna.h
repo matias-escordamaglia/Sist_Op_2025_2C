@@ -37,7 +37,7 @@ t_tabla_paginas* obtener_o_crear_tabla(char* file, char* tag);
 t_tabla_paginas* buscar_en_lista_global(char* file, char* tag);
 t_entrada_pagina* get_entry(t_tabla_paginas* tabla, uint32_t nro_pagina);
 uint32_t direccion_fisica(uint32_t marco, uint32_t offset, uint32_t tam_p);
-t_entrada_pagina* indico_entrada_presente(t_tabla_paginas* tabla, uint32_t nro_pagina, int marco);
+t_entrada_pagina* indico_entrada_presente(t_tabla_paginas* tabla, uint32_t nro_pagina, int marco, int query);
 void crear_y_agregar_tabla_a_lista_global(char* file, char* tag);
 bool rango_valido( t_tabla_paginas* tabla, uint32_t base, uint32_t tam);
 void recorrido_iniciar(segmento_acceso* seg, uint32_t base, uint32_t tam, uint32_t tam_p);
@@ -53,6 +53,8 @@ t_entrada_pagina* buscar_entrada_por_marco(uint32_t marco_num);
 t_entrada_pagina* reemplazar_pagina_clock();
 void actualizar_tam_memoria(char* file, char* tag, uint32_t nuevo_tamanio);
 void flush_total(int query_id); 
+void eliminar_tabla_memoria(char* file, char* tag, uint32_t id_query);
+
 
 
 

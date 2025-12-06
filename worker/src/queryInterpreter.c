@@ -59,7 +59,7 @@ void ejecutarOperacion(char* const* instrucciones, size_t cantidad)
         char* nombre_instruccion = strtok(linea_copia, " ");
 
         // log obligatorio 
-        log_info(logger, "## Query %d: FETCH - Program Counter: %d - %s", query_actual.qid_actual, pc, nombre_instruccion);
+        log_info(logger, "## Query %d: FETCH - Program Counter: %zu - %s", query_actual.qid_actual, pc, nombre_instruccion);
         bool ok = ejecutar_linea(linea, query_actual.qid_actual);
 
 
@@ -312,6 +312,8 @@ bool ejecutar_linea(char* linea, uint32_t queryid) {
                 destruir_create(&c);
                 return false;
             }
+            // Actualizar la llamada
+            eliminar_tabla_memoria(c.nombre_archivo, c.tag, queryid);
 
             // log obligatorio
             log_info(logger, "## Query %u: - Instrucción realizada: DELETE", queryid);

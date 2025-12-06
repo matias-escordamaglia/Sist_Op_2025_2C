@@ -275,7 +275,7 @@ int asegurar_pagina_presente(t_tabla_paginas* tabla, uint32_t nro_pagina, uint32
         return estado_carga;
     }
 
-    e = indico_entrada_presente(tabla, nro_pagina, marco);
+    e = indico_entrada_presente(tabla, nro_pagina, marco,id_query);
     *entrada_pagina = e; 
     return 0;
 }
@@ -403,7 +403,7 @@ void devolver_marco(int marco) {
     log_info(logger, "Se devolvió el marco %d por error en carga", marco);
 }
 
-t_entrada_pagina* indico_entrada_presente(t_tabla_paginas* tabla, uint32_t nro_pagina, int marco) {
+t_entrada_pagina* indico_entrada_presente(t_tabla_paginas* tabla, uint32_t nro_pagina, int marco,int id_query) {
     t_entrada_pagina* e = get_entry(tabla, nro_pagina);
     
     if (!e) {
@@ -636,5 +636,48 @@ void actualizar_tam_memoria(char* file, char* tag, uint32_t nuevo_tamanio) {
         log_error(logger, "Memoria Interna: Error crítico al intentar actualizar tamaño de %s:%s", file, tag);
     }
 
+    pthread_mutex_unlock(&mutex_mem);
+}
+void eliminar_tabla_memoria(char* file, char* tag, uint32_t id_query) {
+    pthread_mutex_lock(&mutex_mem);
+    
+    t_tabla_paginas* tabla = buscar_en_lista_global(file, tag);
+    
+    if (tabla != NULL) {
+      
+        int cant_paginas = list_size(tabla->paginas_proceso);
+
+        for (int i = 0; i < cant_paginas; i++) {
+            t_entrada_pagina* entrada = (t_entrada_pagina*)list_get(tabla->paginas_proceso, i);
+            
+            if (entrada->presente) {
+                log_info(logger, "Query %u: Se libera el Marco: %u perteneciente al - File: %s - Tag: %s",
+                         id_query, entrada->marco_num, tabla->file, tabla->tag);
+
+                tabla_global_marcos[entrada->marco_num] = NULL;
+                
+                bitarray_clean_bit(bitmap_marcos, entrada->marco_num);
+            }
+        }
+                
+        bool encontrado = false;
+        for (int i = 0; i < list_size(lista_global_tablas); i++) {
+            t_tabla_paginas* actual = (t_tabla_paginas*)list_get(lista_global_tablas, i);
+            
+            if (actual == tabla) {
+        
+                list_remove_and_destroy_element(lista_global_tablas, i, free_tabla);
+                encontrado = true;
+                break; // Importante salir del for al modificar la lista
+            }
+        }
+
+        if (encontrado) {
+            log_info(logger, "Memoria Interna: Tabla eliminada administrativamente para %s:%s", file, tag);
+        }
+
+    } else {
+        log_warning(logger, "Query %u: Intento de eliminar tabla inexistente en memoria (%s:%s)", id_query, file, tag);
+    }
     pthread_mutex_unlock(&mutex_mem);
 }
