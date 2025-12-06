@@ -215,7 +215,7 @@ bool rango_valido( t_tabla_paginas* tabla, uint32_t base, uint32_t tam) {
 
     if (tabla->tam_file == 0) {
         //log_warning(logger, "Validación Lazy: %s:%s tiene tamaño local 0. Delegando validación al Storage.", 
-                    tabla->file, tabla->tag);
+                    tabla->file, tabla->tag;
         return true; 
     }
     // -------------------------------------------
