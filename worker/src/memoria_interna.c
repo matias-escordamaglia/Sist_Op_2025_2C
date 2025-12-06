@@ -424,6 +424,7 @@ t_entrada_pagina* indico_entrada_presente(t_tabla_paginas* tabla, uint32_t nro_p
     e->bit_uso = true;      // Recién accedida
     tabla_global_marcos[marco] = e;
 
+
     if (strcmp(algoritmo_reemplazo, "LRU") == 0) {
         e->ultimo_acceso = (uint64_t)time(NULL);  // Timestamp para LRU
     }
