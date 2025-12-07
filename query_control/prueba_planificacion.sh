@@ -2,6 +2,7 @@
 
 BIN_QUERY="./bin/query_control"
 CONF_QUERY="query.config"
+DELAY=0.1 
 
 
 echo "~~~   INICIANDO FASE 1: PRUEBAS FIFO   ~~~"
@@ -9,12 +10,15 @@ echo "~~~   INICIANDO FASE 1: PRUEBAS FIFO   ~~~"
 
 $BIN_QUERY $CONF_QUERY "FIFO_1" 4 &
 echo "-> Lanzado FIFO_1 (Prioridad 4)"
+sleep $DELAY
 
 $BIN_QUERY $CONF_QUERY "FIFO_2" 3 &
 echo "-> Lanzado FIFO_2 (Prioridad 3)"
+sleep $DELAY
 
 $BIN_QUERY $CONF_QUERY "FIFO_3" 5 &
 echo "-> Lanzado FIFO_3 (Prioridad 5)"
+sleep $DELAY
 
 $BIN_QUERY $CONF_QUERY "FIFO_4" 1 &
 echo "-> Lanzado FIFO_4 (Prioridad 1)"
@@ -37,12 +41,15 @@ echo "~~~    INICIANDO FASE 2: PRUEBAS AGING    ~~~"
 
 $BIN_QUERY $CONF_QUERY "AGING_1" 4 &
 echo "-> Lanzado AGING_1 (Prioridad 4)"
+sleep $DELAY
 
 $BIN_QUERY $CONF_QUERY "AGING_2" 3 &
 echo "-> Lanzado AGING_2 (Prioridad 3)"
+sleep $DELAY
 
 $BIN_QUERY $CONF_QUERY "AGING_3" 5 &
 echo "-> Lanzado AGING_3 (Prioridad 5)"
+sleep $DELAY
 
 $BIN_QUERY $CONF_QUERY "AGING_4" 1 &
 echo "-> Lanzado AGING_4 (Prioridad 1)"

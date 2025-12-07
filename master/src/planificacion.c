@@ -487,6 +487,7 @@ void agregar_query_ordenada(t_list* lista, t_elemento_cola* elemento) {
     
     list_add_in_index(lista, posicion, elemento);
     elemento->tiempo_llegada = timestamp_actual_en_milisegundos();
+    elemento->ultimo_aging = elemento->tiempo_llegada;
 }
 
 //
