@@ -12,6 +12,7 @@ int puntero_clock_;
 // pthread_mutex_t mutex_mem = PTHREAD_MUTEX_INITIALIZER;
 t_list* lista_global_tablas;
 t_entrada_pagina** tabla_global_marcos;
+uint64_t contador_lru;
 
 void iniciar_memoria_interna(t_config *config) {
     lista_global_tablas = list_create();
@@ -37,6 +38,7 @@ void iniciar_memoria_interna(t_config *config) {
     algoritmo_reemplazo = strdup(config_get_string_value(config, "ALGORITMO_REEMPLAZO"));
     retardo_memoria = (uint32_t)config_get_int_value(config, "RETARDO_MEMORIA");
     puntero_clock_ = 0;
+    contador_lru = 0;
     // Mutex init ya static, o pthread_mutex_init si dynamic
 
     log_info(logger, "Memoria init OK");
@@ -458,7 +460,8 @@ t_entrada_pagina* indico_entrada_presente(t_tabla_paginas* tabla, uint32_t nro_p
 
 
     if (strcmp(algoritmo_reemplazo, "LRU") == 0) {
-        e->ultimo_acceso = (uint64_t)time(NULL);  // Timestamp para LRU
+        contador_lru++;
+        e->ultimo_acceso = contador_lru;
     }
     // Para CLOCK-M, no hace falta más inicialización acá (el puntero clock maneja el ciclo)
     log_info(logger, "Query %u: Se asigna el Marco: %u a la Página: %u perteneciente al - File: %s - Tag: %s", 
@@ -544,7 +547,8 @@ void actualizar_reemplazo(t_entrada_pagina* e) {
 
     e->bit_uso = true;
     if (algoritmo_reemplazo && (strcmp(algoritmo_reemplazo, "LRU") == 0)) {
-        e->ultimo_acceso = (uint64_t)time(NULL);
+        contador_lru++;
+        e->ultimo_acceso = contador_lru;    
     }
     // Para CLOCK-M no hace falta más aca : el bit de modificado ya lo setea marcar_modificada()
     // en caso de WRITE. Para READ no se toca modificado.

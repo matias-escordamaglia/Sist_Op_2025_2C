@@ -232,7 +232,7 @@ typedef struct {
     bool modificado;
     bool bit_uso;
     int nro_pagina;
-    time_t ultimo_acceso;
+    uint64_t ultimo_acceso;
 } t_entrada_pagina;
 
 // Struct para tabla de File:Tag
