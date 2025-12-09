@@ -67,6 +67,7 @@ void intentar_asignaciones_prioridades();
 t_elemento_cola* obtener_query_mas_prioritaria_mas_antigua();
 t_elemento_cola* obtener_victima_desalojo(uint32_t prioridad_desalojador);
 void agregar_query_ordenada(t_list* lista, t_elemento_cola* elemento);
+void agregar_query_ordenada_actualizando_llegada(t_list* lista, t_elemento_cola* elemento);
 void procesar_asignacion_query_a_worker(t_elemento_cola* query_candidata, t_worker_conectado* worker_libre);
 
 

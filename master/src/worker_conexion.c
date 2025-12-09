@@ -291,8 +291,8 @@ bool enviar_siguiente_pedido(t_worker_conectado* worker, t_pedido_master_worker*
     enviar_paquete(paquete, worker->fd_worker);
 
 
-    log_info(get_logger(), "[CONEXION] Enviado QID %u con PC %u a Worker %u (FD %d)", 
-             sig_pedido->query_id, sig_pedido->program_counter, worker->id_worker, worker->fd_worker);
+    //log_info(get_logger(), "[CONEXION] Enviado QID %u con PC %u a Worker %u (FD %d)", 
+    //         sig_pedido->query_id, sig_pedido->program_counter, worker->id_worker, worker->fd_worker);
 
     return true;
 }

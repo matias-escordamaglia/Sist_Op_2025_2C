@@ -330,7 +330,7 @@ void intentar_asignaciones_prioridades() {
                 query_victima->query->program_count = respuesta.pc;
                 
                 LOCK(&mutex_cola_ready);
-                agregar_query_ordenada(cola_ready, query_victima);
+                agregar_query_ordenada_actualizando_llegada(cola_ready, query_victima);
                 UNLOCK(&mutex_cola_ready);
 
                 log_info(get_logger(), 
@@ -383,8 +383,11 @@ void intentar_asignaciones_prioridades() {
                 
                 LOCK(&mutex_cola_ready);
                 agregar_query_ordenada(cola_ready, query_candidata);
-                agregar_query_ordenada(cola_ready, query_victima);
                 UNLOCK(&mutex_cola_ready);
+
+                LOCK(&mutex_cola_exit);
+                list_add(cola_exit, query_victima);
+                UNLOCK(&mutex_cola_exit);
 
                 continue;
 
@@ -486,6 +489,27 @@ void agregar_query_ordenada(t_list* lista, t_elemento_cola* elemento) {
     }
     
     list_add_in_index(lista, posicion, elemento);
+}
+
+void agregar_query_ordenada_actualizando_llegada(t_list* lista, t_elemento_cola* elemento) {
+    
+    int posicion = list_size(lista);
+    
+    for (int i = 0; i < list_size(lista); i++) {
+        t_elemento_cola* actual = list_get(lista, i);
+        
+        if (elemento->prioridad_efectiva < actual->prioridad_efectiva) {
+            posicion = i;
+            break;
+        }
+        else if (elemento->prioridad_efectiva == actual->prioridad_efectiva &&
+                 elemento->tiempo_llegada < actual->tiempo_llegada) {
+            posicion = i;
+            break;
+        }
+    }
+    
+    list_add_in_index(lista, posicion, elemento);
     elemento->tiempo_llegada = timestamp_actual_en_milisegundos();
     elemento->ultimo_aging = elemento->tiempo_llegada;
 }
@@ -516,6 +540,7 @@ void procesar_asignacion_query_a_worker(t_elemento_cola* query_candidata, t_work
 
         LOCK(&mutex_cola_exec);
             list_add(cola_exec, query_candidata);
+            query_candidata->tiempo_llegada = timestamp_actual_en_milisegundos();
         UNLOCK(&mutex_cola_exec);
     } else {
         log_error(get_logger(), "Asignación falló: Bloqueando sistema. Query id: %d - Worker ID: %d", 
@@ -576,16 +601,18 @@ bool aplicar_aging_inteligente() {
     LOCK(&mutex_estado_critico);
     
     // Obtener la MENOR prioridad (número mayor) en ejecución
-    uint32_t umbral_desalojo = UINT32_MAX;
+    uint32_t prioridad_menor_en_ejecucion = 0;
     
     LOCK(&mutex_cola_exec);
     if (!list_is_empty(cola_exec)) {
         for (int i = 0; i < list_size(cola_exec); i++) {
             t_elemento_cola* en_exec = list_get(cola_exec, i);
-            if (en_exec->prioridad_efectiva < umbral_desalojo) {
-                umbral_desalojo = en_exec->prioridad_efectiva;
+            if (en_exec->prioridad_efectiva > prioridad_menor_en_ejecucion) {
+                prioridad_menor_en_ejecucion = en_exec->prioridad_efectiva;
             }
         }
+    }else{
+        prioridad_menor_en_ejecucion = UINT32_MAX; 
     }
     UNLOCK(&mutex_cola_exec);
     
@@ -614,8 +641,8 @@ bool aplicar_aging_inteligente() {
                 elemento->ultimo_aging = ahora;
                 
                 // Verificar si CRUZÓ el umbral de desalojo
-                bool antes_no_podia = (prioridad_anterior >= umbral_desalojo);
-                bool ahora_si_puede = (nueva_prioridad < umbral_desalojo);
+                bool antes_no_podia = (prioridad_anterior >= prioridad_menor_en_ejecucion);
+                bool ahora_si_puede = (nueva_prioridad < prioridad_menor_en_ejecucion);
 
                 log_info(get_logger(),
                         "##%d Cambio de prioridad: %d - %d",
@@ -824,13 +851,29 @@ void manejar_worker_desconectado(uint32_t worker_id, uint32_t query_id_ejecutand
                     query_id_ejecutando);
 
                 } else {
-                    //TODO hay un error que a veces bisca un query id -1; revisar
-                    log_error(get_logger(), "ERROR FATAL; se esperaba que la query de id %d estuviese en EXEC pero no se encontró en ninguna lista", 
-                        query_id_ejecutando);
+                    
+                    int intentos=0;
+                    bool encontrado_desconexion = false;
+                    do{
+                        UNLOCK(&mutex_estado_critico);
+                        sleep(1);
+                        LOCK(&mutex_estado_critico);
+                        encontrado_desconexion = buscar_por_qid(cola_exit, query_id_ejecutando);
+                    }while(!encontrado_desconexion ||intentos < 4);
+                    
+                    if(!encontrado_desconexion){
 
-                    while(true) {
-                        printf("ERROR FATAL DE PLANIFICACION");
-                        sleep(5);
+                        log_error(get_logger(), "ERROR FATAL; se esperaba que la query de id %d estuviese en EXEC pero no se encontró en ninguna lista", 
+                            query_id_ejecutando);
+                            
+
+                        while(true) {
+                            printf("ERROR FATAL DE PLANIFICACION");
+                            sleep(5);
+                        }
+                    }else{
+                        log_warning(get_logger(), 
+                                    "DESINCRONIZACION DESALOJO; se estaba en proceso de desalojo cuando se realizó la desconexión. Continuando...");
                     }
                 }
                 
