@@ -580,7 +580,9 @@ int escritura_bloque(char* file, char* tag, int num_L_block, char* contenido,int
     else {
         log_info(logger, "WRITE: Bloque compartido (nlink==%d). Aplicando COW.", (int)st.st_nlink);
         int k=4; 
-        int bloque_fisico = encontrar_y_reservar_bloque(); 
+        int bloque_fisico = encontrar_y_reservar_bloque();
+        log_info(logger,"##%u - Bloque Físico Reservado - Número de Bloque: %u",g_query_id_actual, bloque_fisico);
+ 
         if (bloque_fisico == -1) {
             log_error(logger, "Espacio insuficiente en el bitmap");
 

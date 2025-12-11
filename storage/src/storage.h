@@ -113,7 +113,7 @@ int obtener_nro_bloque_fisico(char* file, char* tag, int num_L_block);
 void limpiar_y_terminar(); 
 void destruir_elemento_mutex(void* elemento); 
 void sighandler(int s);
-
+void limpiar_bloque_fisico(int nro_bloque) ;
 
 
 

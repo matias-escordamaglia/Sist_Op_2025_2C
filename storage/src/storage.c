@@ -801,6 +801,30 @@ void liberar_bloque_reservado(int nro_bloque) {
     
     pthread_mutex_unlock(&mutex_bitmap);
 }
+void limpiar_bloque_fisico(int nro_bloque) {
+    char* nombre_block = crear_nombre_block(nro_bloque, 4);
+    char* pre_ruta = add_seg_ruta("/physical_blocks", nombre_block);
+    char* ruta_F_block = add_seg_ruta(PUNTO_MONTAJE, pre_ruta);
+
+    // "wb" trunca el archivo a 0 y permite escribir
+    FILE* f = fopen(ruta_F_block, "wb");
+    if (f) {
+        // Creamos un buffer de ceros
+        char* ceros = calloc(1, BLOCK_SIZE);
+        
+        // Escribimos ceros en todo el bloque para borrar "fantasmas"
+        fwrite(ceros, 1, BLOCK_SIZE, f);
+        
+        free(ceros);
+        fclose(f);
+    } else {
+        log_error(logger, "No se pudo limpiar el bloque físico %d", nro_bloque);
+    }
+
+    free(nombre_block);
+    free(pre_ruta);
+    free(ruta_F_block);
+}
 void ocupar_bloque_reservar(int nro_bloque) {
     //solo si no hay mas enlaces existentes
     pthread_mutex_lock(&mutex_bitmap);
@@ -829,6 +853,7 @@ int encontrar_y_reservar_bloque() {
 
     if (bloque_libre > 0) {
         bitarray_set_bit(BA_bitmap, bloque_libre);
+        limpiar_bloque_fisico(bloque_libre);
     }
 
     pthread_mutex_unlock(&mutex_bitmap); 
