@@ -216,23 +216,53 @@ int incrementar(char*file,char*tag, int nuevo_valor, int valor_original, char* r
         return ERROR_DESCONOCIDO;
     }
 
-    int nuevo_bloque_f;
+    int bloque_fisico;
 
     for(int i = 0; i < cant_bloques_a_agregar; i++){
 
         int bloque_logico_a_crear = bloques_actuales + i;
+        ///////////////
+        int k = 4; 
+    bloque_fisico = 0;
 
-        nuevo_bloque_f = asignar_bloque_logico_especifico(ruta_logical_block,bloque_logico_a_crear);
-        log_info(logger,"##%u - %s:%s  Se agregó el hard link del bloque lógico %u al bloque físico %u",g_query_id_actual,file,tag,i,nuevo_bloque_f);
+    char* nombre_block = crear_nombre_block(bloque_fisico, k); 
+    char* pre_ruta = add_seg_ruta("/physical_blocks", nombre_block);
+    char* ruta_F_block = add_seg_ruta(PUNTO_MONTAJE, pre_ruta);
+
+    int Q = 6; 
+    char* nombre_block_logic = crear_nombre_block(bloque_logico_a_crear, Q); 
+    char* ruta_L_block_final = add_seg_ruta(ruta_logical_block, nombre_block_logic);
 
 
-        if(nuevo_bloque_f<0){
+    if (link(ruta_F_block, ruta_L_block_final) == -1) {
+        liberar_bloque_reservado(bloque_fisico); 
+        log_error(logger, "No se pudo crear Hard Link para %s. Error: %s", nombre_block_logic, strerror(errno));
+        free(nombre_block); free(pre_ruta); free(ruta_F_block); 
+        free(nombre_block_logic); free(ruta_L_block_final);
+        return ERROR_DESCONOCIDO; 
+    }
+    
+    log_info(logger, "Hard link creado: %s -> %s", nombre_block_logic, nombre_block);
+
+    free(nombre_block); free(pre_ruta); free(ruta_F_block); 
+    free(nombre_block_logic); free(ruta_L_block_final);
+
+        /////////////////
+
+        
+
+        //nuevo_bloque_f = asignar_bloque_logico_especifico(ruta_logical_block,bloque_logico_a_crear);
+
+        log_info(logger,"##%u - %s:%s  Se agregó el hard link del bloque lógico %u al bloque físico %u",g_query_id_actual,file,tag,i,bloque_fisico);
+
+
+        if(bloque_fisico<0){
             rollback_falla_incrementar(bloques_fisicos_nuevos,i); 
             free(bloques_fisicos_nuevos);
             return ERROR_ESPACIO_INSUFICIENTE; 
         }
 
-        bloques_fisicos_nuevos[i]=nuevo_bloque_f;
+        bloques_fisicos_nuevos[i]=bloque_fisico;
     }
     
     int estado_meta = actualizar_metadata_incremento(file, tag, bloques_fisicos_nuevos, cant_bloques_a_agregar);
