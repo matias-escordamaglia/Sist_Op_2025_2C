@@ -343,30 +343,59 @@ bool ejecutar_linea(char* linea, uint32_t queryid) {
 }
 
 
+char* formatear_lectura_con_huecos(void* contenido, uint32_t tamanio) {
+    t_list* fragmentos = list_create();
+    char* puntero = (char*)contenido;
+    uint32_t offset = 0;
+
+    while (offset < tamanio) {
+        if (puntero[offset] == '\0') {
+            offset++;
+            continue;
+        }
+
+        int inicio = offset;
+        while (offset < tamanio && puntero[offset] != '\0') {
+            offset++;
+        }
+        
+        int len_fragmento = offset - inicio;
+        char* fragmento = malloc(len_fragmento + 1);
+        memcpy(fragmento, puntero + inicio, len_fragmento);
+        fragmento[len_fragmento] = '\0';
+        
+        list_add(fragmentos, fragmento);
+    }
+
+
+    char* string_resultado = string_new();
+    int cantidad = list_size(fragmentos);
+
+    if (cantidad == 0) {
+    } 
+    else if (cantidad == 1) {
+        char* unico = list_get(fragmentos, 0);
+        string_append(&string_resultado, unico);
+    } 
+    else {
+        for (int i = 0; i < cantidad; i++) {
+            char* frag = list_get(fragmentos, i);
+            
+            if (i > 0) {
+                string_append(&string_resultado, "&&");
+            }
+            string_append_with_format(&string_resultado, "'%s'", frag);
+        }
+    }
+
+    list_destroy_and_destroy_elements(fragmentos, free);
+
+    return string_resultado;
+}
+
 void enviar_lectura_a_master(char* file, char* tag, void* contenido, uint32_t tamanio) {
+    
     /*
-    t_paquete* paquete = crear_paquete();
-    
-    // Opción recomendada (Protocolo custom):
-    insertar_uint32_a_paquete(paquete, NUEVA_LECTURA);
-    insertar_string_a_paquete(paquete, file);
-    insertar_string_a_paquete(paquete, tag);
-    
-    insertar_binario_a_paquete(paquete, contenido, tamanio);
-
-    enviar_paquete(paquete, conexion_master);
-
-
-    char* mensaje  = "PRUEBA:VERSION1.0 Lectura_de_prueba"; 
-    t_tipo_aviso_worker_master tipo_aviso = NUEVA_LECTURA;
-    t_paquete* paquete_resp = crear_paquete();
-
-    insertar_variable_a_paquete(paquete_resp, &(tipo_aviso), sizeof(t_tipo_aviso_worker_master));
-    insertar_string_a_paquete(paquete_resp, mensaje);
-    enviar_paquete(paquete_resp,conexion_master);
-    */
-
-
     size_t len_encabezado = strlen(file) + 1 + strlen(tag) + 1;
     size_t len_total = len_encabezado + tamanio + 1;
 
@@ -389,6 +418,25 @@ void enviar_lectura_a_master(char* file, char* tag, void* contenido, uint32_t ta
 
     enviar_paquete(paquete, conexion_master);
 
+    free(mensaje_unificado);
+    */
+
+    char* contenido_parseado = formatear_lectura_con_huecos(contenido, tamanio);
+    
+    log_info(logger, "[READ] Contenido formateado para Master: %s", contenido_parseado);
+
+    char* mensaje_unificado = string_from_format("%s:%s %s", file, tag, contenido_parseado);
+
+    t_paquete* paquete = crear_paquete();
+    t_tipo_aviso_worker_master tipo_aviso = NUEVA_LECTURA;
+
+    insertar_variable_a_paquete(paquete, &tipo_aviso, sizeof(t_tipo_aviso_worker_master));
+    
+    insertar_string_a_paquete(paquete, mensaje_unificado);
+
+    enviar_paquete(paquete, conexion_master);
+
+    free(contenido_parseado);
     free(mensaje_unificado);
 }
 
