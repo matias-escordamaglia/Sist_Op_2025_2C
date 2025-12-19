@@ -462,6 +462,26 @@ void inicializar_dir_logic_block( char* ruta){
 // dentro de esta carpeta creamos el hard link del B. Físico 0.
     char* ruta_F_block_Base = add_seg_ruta(PUNTO_MONTAJE, "/physical_blocks/block0000.dat");
     char* ruta_L_block_Base = add_seg_ruta(ruta_absoluta_dir_log_block, "/000000.dat");
+
+    FILE* F = fopen(ruta_F_block_Base, "wb");
+    if (!F) {
+        log_error(logger, "No se pudo abrir el bloque INICIAL: %s", ruta_F_block_Base);
+        free(ruta_initial_file);
+        exit(EXIT_FAILURE);
+    }
+
+    char* buffer = malloc(BLOCK_SIZE); 
+    if (!buffer) {
+        log_error(logger, "No se pudo reservar memoria para el bloque");
+        fclose(F);
+        exit(EXIT_FAILURE);
+    }
+    memset(buffer, '0', BLOCK_SIZE);
+    fwrite(buffer,1,BLOCK_SIZE,f);
+    free(buffer); 
+    fclose(F); 
+    log_info(logger, "Bloque Físico 0 relleno de ceros para Initial File");
+
 //creación de hard link 
     if (link(ruta_F_block_Base, ruta_L_block_Base) == -1) {
     log_error(logger, "No se pudo crear Hard Link BASE. Error: %s", strerror(errno));
