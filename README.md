@@ -1,6 +1,14 @@
-# Link TP
+# Links del TP
 
-[Master of Files](https://docs.google.com/document/d/1mEGwXjwtQzD0T6Pl8gEhgJcmQR_3nmVI6BxukAmumsM/edit?tab=t.0)
+[Enunciado: Master of Files](https://docs.google.com/document/d/1mEGwXjwtQzD0T6Pl8gEhgJcmQR_3nmVI6BxukAmumsM/edit?tab=t.0)
+
+[Documento de Pruebas](https://docs.google.com/document/d/1ZK_5ZxZA0PYuC1uaomcghz3bCzollkjo-vx7t6Kb6qI/edit?usp=sharing)
+
+[Repositorio con archivos de las pruebas](https://docs.google.com/document/d/1ZK_5ZxZA0PYuC1uaomcghz3bCzollkjo-vx7t6Kb6qI/edit?usp=sharing)
+
+# Notas importantes de la corrección
+
+Este TP está APROBADO; sin embargo no quiere decir que no hayan errores. Hay un error grave en la parte de Storage (el responsable de la parte de File System); no recuerdo exáctamente el error, pero sé que es grave y que de milagro está funcionando bien. Si, funciona bien, cumple con lo pedido y pasa las pruebas... pero técnicamente está mal.
 
 
 # tp-scaffold
